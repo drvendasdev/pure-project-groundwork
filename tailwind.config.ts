@@ -24,6 +24,29 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
+				
+				// Brand colors
+				brand: {
+					blue: 'hsl(var(--brand-blue))',
+					'blue-light': 'hsl(var(--brand-blue-light))',
+					yellow: 'hsl(var(--brand-yellow))',
+					'yellow-hover': 'hsl(var(--brand-yellow-hover))'
+				},
+				
+				// Status colors
+				success: {
+					DEFAULT: 'hsl(var(--success))',
+					foreground: 'hsl(var(--success-foreground))'
+				},
+				warning: {
+					DEFAULT: 'hsl(var(--warning))',
+					foreground: 'hsl(var(--warning-foreground))'
+				},
+				error: {
+					DEFAULT: 'hsl(var(--error))',
+					foreground: 'hsl(var(--error-foreground))'
+				},
+				
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
 					foreground: 'hsl(var(--primary-foreground))'
@@ -50,17 +73,29 @@ export default {
 				},
 				card: {
 					DEFAULT: 'hsl(var(--card))',
-					foreground: 'hsl(var(--card-foreground))'
+					foreground: 'hsl(var(--card-foreground))',
+					border: 'hsl(var(--card-border))'
 				},
 				sidebar: {
-					DEFAULT: 'hsl(var(--sidebar-background))',
+					DEFAULT: 'hsl(var(--sidebar))',
 					foreground: 'hsl(var(--sidebar-foreground))',
-					primary: 'hsl(var(--sidebar-primary))',
-					'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-					accent: 'hsl(var(--sidebar-accent))',
-					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-					border: 'hsl(var(--sidebar-border))',
-					ring: 'hsl(var(--sidebar-ring))'
+					active: 'hsl(var(--sidebar-active))',
+					'active-foreground': 'hsl(var(--sidebar-active-foreground))',
+					border: 'hsl(var(--sidebar-border))'
+				},
+				
+				// Metric cards
+				metric: {
+					card: 'hsl(var(--metric-card))',
+					foreground: 'hsl(var(--metric-card-foreground))'
+				},
+				
+				// Interactive states
+				hover: {
+					light: 'hsl(var(--hover-light))'
+				},
+				active: {
+					light: 'hsl(var(--active-light))'
 				}
 			},
 			borderRadius: {

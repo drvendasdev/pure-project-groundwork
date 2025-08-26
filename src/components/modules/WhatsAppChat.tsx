@@ -1,0 +1,800 @@
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MessageStatusIndicator } from "@/components/ui/message-status-indicator";
+import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
+import { useTags } from "@/hooks/useTags";
+import { useProfileImages } from "@/hooks/useProfileImages";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { MediaViewer } from "@/components/chat/MediaViewer";
+import { MediaUpload } from "@/components/chat/MediaUpload";
+import { 
+  Search, 
+  Send, 
+  Bot,
+  Phone,
+  MoreVertical,
+  Circle,
+  MessageCircle,
+  ArrowRight,
+  Settings,
+  Users,
+  Trash2,
+  ChevronDown,
+  Filter,
+  Eye,
+  RefreshCw,
+  Mic,
+  Square
+} from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+
+interface WhatsAppChatProps {
+  isDarkMode?: boolean;
+  selectedConversationId?: string | null;
+}
+
+export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: WhatsAppChatProps) {
+  const { 
+    conversations, 
+    loading, 
+    sendMessage, 
+    markAsRead, 
+    assumirAtendimento, 
+    reativarIA, 
+    clearAllConversations 
+  } = useWhatsAppConversations();
+  const { tags } = useTags();
+  const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
+  const { toast } = useToast();
+  
+  const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
+  const [messageText, setMessageText] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
+  const [showAllQueues, setShowAllQueues] = useState(true);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [selectedTag, setSelectedTag] = useState<string>("");
+  const [isUpdatingProfileImages, setIsUpdatingProfileImages] = useState(false);
+const messagesEndRef = useRef<HTMLDivElement>(null);
+const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+const audioChunksRef = useRef<Blob[]>([]);
+const [isRecording, setIsRecording] = useState(false);
+
+  // Filtrar conversas baseado no termo de busca
+  const filteredConversations = conversations.filter(conv =>
+    conv.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (conv.contact.phone && conv.contact.phone.includes(searchTerm))
+  );
+
+  // Função para enviar mensagem
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !selectedConversation) return;
+
+    try {
+      await sendMessage(
+        selectedConversation.id,
+        messageText,
+        selectedConversation.contact.phone || '',
+        'text'
+      );
+      setMessageText("");
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+    }
+  };
+
+  // Selecionar conversa e marcar como lida
+  const handleSelectConversation = (conversation: WhatsAppConversation) => {
+    setSelectedConversation(conversation);
+    if (conversation.unread_count > 0) {
+      markAsRead(conversation.id);
+    }
+  };
+
+  // Obter horário da última atividade
+  const getActivityTime = (conv: WhatsAppConversation) => {
+    const time = new Date(conv.last_activity_at);
+    return time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Obter última mensagem
+  const getLastMessage = (conv: WhatsAppConversation) => {
+    return conv.messages[conv.messages.length - 1];
+  };
+
+  // Obter iniciais do nome
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  // Obter cor do avatar baseada no nome
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      '#ef4444', '#3b82f6', '#10b981', '#f59e0b', 
+      '#8b5cf6', '#ec4899', '#6366f1', '#f97316'
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
+  // Gerenciar agente IA
+  const handleToggleAgent = () => {
+    if (selectedConversation) {
+      if (selectedConversation.agente_ativo) {
+        assumirAtendimento(selectedConversation.id);
+      } else {
+        reativarIA(selectedConversation.id);
+      }
+    }
+  };
+
+// Auto-scroll para última mensagem
+const scrollToBottom = () => {
+  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+};
+
+// Gravação de áudio (microfone)
+const startRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream);
+    mediaRecorderRef.current = mediaRecorder;
+    audioChunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (e: any) => {
+      if (e.data && e.data.size > 0) {
+        audioChunksRef.current.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      try {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const fileExt = 'webm';
+        const fileName = `audio_${Date.now()}.${fileExt}`;
+        const filePath = `messages/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('whatsapp-media')
+          .upload(filePath, audioBlob, { contentType: 'audio/webm' });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('whatsapp-media')
+          .getPublicUrl(filePath);
+
+        if (selectedConversation) {
+          await sendMessage(
+            selectedConversation.id,
+            messageText.trim() || '[AUDIO]',
+            selectedConversation.contact.phone || '',
+            'audio',
+            publicUrl,
+            fileName
+          );
+          setMessageText('');
+          toast({ title: 'Áudio enviado', description: 'Seu áudio foi enviado com sucesso.' });
+        }
+
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (err) {
+        console.error('Erro ao processar envio de áudio:', err);
+        toast({ title: 'Erro', description: 'Não foi possível enviar o áudio.', variant: 'destructive' });
+      }
+    };
+
+    mediaRecorder.start();
+    setIsRecording(true);
+  } catch (err) {
+    console.error('Erro ao iniciar gravação de áudio:', err);
+    toast({ title: 'Permissão necessária', description: 'Autorize o acesso ao microfone para gravar áudio.', variant: 'destructive' });
+    setIsRecording(false);
+  }
+};
+
+const stopRecording = () => {
+  const mr = mediaRecorderRef.current;
+  if (mr && isRecording) {
+    mr.stop();
+    setIsRecording(false);
+  }
+};
+
+  // Batch update profile images
+  const handleBatchUpdateProfileImages = async () => {
+    if (isUpdatingProfileImages) return
+    
+    setIsUpdatingProfileImages(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('batch-update-profile-images')
+      
+      if (error) throw error
+      
+      toast({
+        title: "Atualização iniciada",
+        description: `Atualizando fotos de perfil de ${data.totalProcessed} contatos`
+      })
+      
+      // Refresh conversations to show updated images
+      setTimeout(() => {
+        window.location.reload();
+      }, 5000)
+      
+    } catch (error) {
+      console.error('Error batch updating profile images:', error)
+      toast({
+        title: "Erro na atualização",
+        description: "Não foi possível atualizar as fotos de perfil",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUpdatingProfileImages(false)
+    }
+  }
+
+  // Refresh individual profile image
+  const handleRefreshProfileImage = async (phone: string) => {
+    if (!phone) return
+    
+    try {
+      await fetchProfileImage(phone)
+      toast({
+        title: "Foto atualizada",
+        description: "A foto do perfil foi atualizada com sucesso"
+      })
+      // Refresh conversations to show updated image
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000)
+    } catch (error) {
+      console.error('Error refreshing profile image:', error)
+    }
+  }
+
+  // Efeito para selecionar conversa via notificação
+  useEffect(() => {
+    if (selectedConversationId && conversations.length > 0) {
+      const conversation = conversations.find(conv => conv.id === selectedConversationId);
+      if (conversation) {
+        setSelectedConversation(conversation);
+        markAsRead(conversation.id);
+      }
+    }
+  }, [selectedConversationId, conversations, markAsRead]);
+
+  // Auto-scroll quando conversa é selecionada ou nova mensagem chega
+  useEffect(() => {
+    if (selectedConversation) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [selectedConversation, selectedConversation?.messages]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Carregando conversas do WhatsApp...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full bg-background overflow-hidden">
+      {/* Sidebar com lista de conversas */}
+      <div className="w-80 min-w-80 border-r border-border flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b border-border">
+          {/* Top row with toggle and connections */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Switch 
+                checked={showAllQueues}
+                onCheckedChange={setShowAllQueues}
+                className="data-[state=checked]:bg-brand-yellow"
+              />
+              <span className="text-sm font-medium text-foreground">Ver todas as filas</span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={handleBatchUpdateProfileImages}
+                variant="ghost" 
+                size="sm"
+                disabled={isUpdatingProfileImages}
+                className="text-blue-600 hover:bg-blue-50"
+                title="Atualizar todas as fotos de perfil"
+              >
+                {isUpdatingProfileImages ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                ) : (
+                 <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+              
+              
+              <Popover open={connectionsOpen} onOpenChange={setConnectionsOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" className="text-sm text-foreground">
+                    Conexões
+                    <ChevronDown className="w-4 h-4 ml-1" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2" align="end">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
+                      <svg className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z"/>
+                      </svg>
+                      <span className="text-sm">CDE Teste (21) 97318-3599</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
+                      <svg className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z"/>
+                      </svg>
+                      <span className="text-sm">CDE OFICIAL (21)99329-2365</span>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          
+          {/* Search bar with filter */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Buscar"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-10"
+            />
+            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+                >
+                  <Filter className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-4" align="end">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Filtre pelo agente</label>
+                    <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecionar agente" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vendas">Agente Vendas</SelectItem>
+                        <SelectItem value="suporte">Agente Suporte</SelectItem>
+                        <SelectItem value="comercial">Agente Comercial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Filtre pela tag</label>
+                    <Select value={selectedTag} onValueChange={setSelectedTag}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecionar tag" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tags.map((tag) => (
+                          <SelectItem key={tag.id} value={tag.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: tag.color }}
+                              ></div>
+                              {tag.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex gap-2 flex-wrap">
+                    {tags.map((tag) => (
+                      <div 
+                        key={tag.id}
+                        className="w-6 h-6 rounded cursor-pointer"
+                        style={{ backgroundColor: tag.color }}
+                        title={tag.name}
+                        onClick={() => setSelectedTag(tag.id)}
+                      ></div>
+                    ))}
+                  </div>
+                  
+                  <Button 
+                    className="w-full bg-yellow-400 hover:bg-yellow-500 text-black"
+                    onClick={() => {
+                      setSelectedAgent("");
+                      setSelectedTag("");
+                    }}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        {/* Lista de conversas */}
+        <ScrollArea className="flex-1">
+          <div className="space-y-0">
+            {filteredConversations.map((conversation) => {
+              const lastMessage = getLastMessage(conversation);
+              const lastActivity = getActivityTime(conversation);
+              const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
+              const avatarColor = getAvatarColor(conversation.contact?.name || conversation.contact?.phone || 'U');
+              
+              return (
+                <li key={conversation.id} className="list-none">
+                  <div 
+                    className={cn(
+                      "relative flex items-center px-4 py-2 cursor-pointer hover:bg-muted/50 transition-colors border-b border-border/50",
+                      selectedConversation?.id === conversation.id && "bg-muted"
+                    )}
+                    onClick={() => handleSelectConversation(conversation)}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    {/* Status indicator bar */}
+                    <span 
+                      className="absolute left-0 top-0 bottom-0 w-1 rounded-r"
+                      style={{ backgroundColor: conversation.agente_ativo ? 'rgb(83, 0, 235)' : 'rgb(76, 175, 80)' }}
+                      title={conversation.agente_ativo ? 'DS AGENTE' : 'ATIVO'}
+                    />
+                    
+                    {/* Avatar container */}
+                    <div className="flex-shrink-0 mr-3 ml-2">
+                      <div className="relative">
+                        <div className="relative w-10 h-10">
+                          <Avatar className="h-10 w-10">
+                            {conversation.contact?.profile_image_url && (
+                              <AvatarImage 
+                                src={conversation.contact.profile_image_url}
+                                alt={conversation.contact?.name || conversation.contact?.phone}
+                                className="object-cover"
+                              />
+                            )}
+                            <AvatarFallback 
+                              className="text-white font-medium text-sm"
+                              style={{ backgroundColor: avatarColor }}
+                            >
+                              {initials}
+                            </AvatarFallback>
+                          </Avatar>
+                          {/* WhatsApp status icon */}
+                          <svg 
+                            className="absolute -bottom-1 -right-1 w-5 h-5 text-green-500 bg-white rounded-full p-0.5" 
+                            viewBox="0 0 24 24" 
+                            fill="currentColor"
+                          >
+                            <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Main content */}
+                    <div className="flex-1 min-w-0">
+                      {/* First line: Name with eye icon */}
+                      <div className="flex items-center mb-0.5">
+                        <span 
+                          className="text-xs font-normal text-foreground tracking-tight truncate"
+                          style={{ fontWeight: 400, letterSpacing: '-0.2px', fontSize: '12px' }}
+                        >
+                          {conversation.contact?.name || conversation.contact?.phone}
+                        </span>
+                        <svg 
+                          className="ml-2 w-3 h-3 text-primary cursor-pointer" 
+                          viewBox="0 0 24 24" 
+                          fill="currentColor"
+                          style={{ fontSize: '12px' }}
+                        >
+                          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                        </svg>
+                      </div>
+                      
+                      {/* Second line: Message preview */}
+                      <div className="flex items-center">
+                        <span 
+                          className="text-foreground/87 truncate"
+                          style={{ fontSize: '11px', fontWeight: 400, letterSpacing: '0px' }}
+                        >
+                          {lastMessage && lastMessage.sender_type === 'agent' && 'Você: '}
+                          {lastMessage ? (
+                            lastMessage.message_type === 'text' 
+                              ? lastMessage.content 
+                              : `📎 ${lastMessage.message_type}`
+                          ) : 'Sem mensagens'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Secondary actions */}
+                    <div className="flex items-center gap-2 ml-2">
+                      {/* Tag/Label system */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center">
+                          <div 
+                            className="px-1.5 py-0.5 rounded text-xs flex items-center gap-1"
+                            title="TESTE INTERNO"
+                          >
+                            <svg 
+                              className="w-3 h-3" 
+                              viewBox="0 0 24 24" 
+                              fill="rgb(196, 0, 0)"
+                              style={{ stroke: 'white', strokeWidth: 1 }}
+                            >
+                              <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+                            </svg>
+                          </div>
+                        </div>
+                        
+                        {/* Small avatar */}
+                        <Avatar className="w-4 h-4 rounded-full">
+                          <AvatarImage 
+                            src="https://i.pinimg.com/236x/a8/da/22/a8da222be70a71e7858bf752065d5cc3.jpg"
+                            alt={conversation.contact?.name || conversation.contact?.phone}
+                          />
+                          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                        </Avatar>
+                      </div>
+                      
+                      {/* Timestamp */}
+                      <div className="text-right">
+                        <span className="text-xs text-muted-foreground">
+                          {lastActivity}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        {/* Campo para nova conversa */}
+        <div className="p-4 border-t border-border">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Input
+                placeholder="Digite o número do telefone"
+                value={newPhoneNumber}
+                onChange={(e) => setNewPhoneNumber(e.target.value)}
+                className="pr-10"
+              />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8"
+                disabled={!newPhoneNumber.trim()}
+              >
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Área principal de chat */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {selectedConversation ? (
+          <>
+            {/* Cabeçalho do chat */}
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                   <Avatar className="w-10 h-10">
+                    {selectedConversation.contact.profile_image_url && (
+                      <AvatarImage 
+                        src={selectedConversation.contact.profile_image_url} 
+                        alt={selectedConversation.contact.name}
+                        className="object-cover"
+                      />
+                    )}
+                    <AvatarFallback className={cn("text-white", getAvatarColor(selectedConversation.contact.name))}>
+                      {getInitials(selectedConversation.contact.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  <div>
+                    <h3 className="font-semibold text-foreground">
+                      {selectedConversation.contact.name}
+                    </h3>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                      <span>Online</span>
+                      {selectedConversation.agente_ativo && (
+                        <span className="text-yellow-600">• IA Ativa</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={handleToggleAgent}
+                    className={cn(
+                      "transition-colors",
+                      selectedConversation.agente_ativo 
+                        ? "text-yellow-600 hover:text-yellow-700" 
+                        : "text-gray-400 hover:text-gray-600"
+                    )}
+                    title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
+                  >
+                    <Bot className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <Phone className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Área de mensagens */}
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-4">
+                {selectedConversation.messages.map((message) => (
+                  <div 
+                    key={message.id}
+                    className={cn(
+                      "flex items-start gap-3 max-w-[80%]",
+                      message.sender_type === 'contact' ? "flex-row" : "flex-row-reverse ml-auto"
+                    )}
+                  >
+                    {message.sender_type === 'contact' && (
+                      <Avatar className="w-8 h-8 flex-shrink-0">
+                        {selectedConversation.contact.profile_image_url && (
+                          <AvatarImage 
+                            src={selectedConversation.contact.profile_image_url} 
+                            alt={selectedConversation.contact.name}
+                            className="object-cover"
+                          />
+                        )}
+                        <AvatarFallback 
+                          className={cn("text-white text-xs", getAvatarColor(selectedConversation.contact.name))}
+                        >
+                          {getInitials(selectedConversation.contact.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                    
+                    <div 
+                      className={cn(
+                        "rounded-lg p-3 max-w-full",
+                        message.sender_type === 'contact' 
+                          ? "bg-muted" 
+                          : "bg-primary text-primary-foreground"
+                      )}
+                    >
+                      {/* Renderizar conteúdo baseado no tipo */}
+                      {message.message_type !== 'text' && message.file_url ? (
+                        <MediaViewer
+                          fileUrl={message.file_url}
+                          fileName={message.file_name}
+                          messageType={message.message_type}
+                          className="max-w-xs"
+                        />
+                      ) : (
+                        <p className="text-sm break-words">{message.content}</p>
+                      )}
+                      
+                      {/* Status e horário */}
+                      <div className={cn(
+                        "flex items-center gap-1 mt-1 text-xs",
+                        message.sender_type === 'contact' 
+                          ? "text-muted-foreground" 
+                          : "text-primary-foreground/70"
+                      )}>
+                        <span>
+                          {new Date(message.created_at).toLocaleTimeString('pt-BR', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </span>
+                        {message.sender_type !== 'contact' && (
+                          <MessageStatusIndicator status={message.status} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
+
+            {/* Campo de entrada de mensagem */}
+            <div className="p-4 border-t border-border">
+              <div className="flex items-end gap-2">
+<MediaUpload 
+  onFileSelect={(file, mediaType, fileUrl) => {
+    const caption = messageText.trim();
+    sendMessage(
+      selectedConversation!.id,
+      caption,
+      selectedConversation!.contact.phone || '',
+      mediaType,
+      fileUrl,
+      file.name
+    );
+    if (caption) setMessageText('');
+  }}
+/>
+                <div className="flex-1">
+                  <Input
+                    placeholder="Digite sua mensagem..."
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    className="resize-none"
+                  />
+                </div>
+<Button 
+  onClick={isRecording ? stopRecording : startRecording}
+  size="icon"
+  variant={isRecording ? 'destructive' : 'secondary'}
+  title={isRecording ? 'Parar gravação' : 'Gravar áudio'}
+>
+  {isRecording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+</Button>
+<Button 
+  onClick={handleSendMessage}
+  disabled={!messageText.trim()}
+  size="icon"
+>
+  <Send className="w-4 h-4" />
+</Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <MessageCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                Selecione uma conversa
+              </h3>
+              <p className="text-muted-foreground">
+                Escolha uma conversa da lista para começar a conversar
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}

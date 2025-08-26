@@ -1,0 +1,96 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const url = new URL(req.url);
+    const conversationId = url.searchParams.get('conversation_id');
+    
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    if (conversationId) {
+      // Buscar mensagens de uma conversa específica
+      console.log(`📋 Buscando mensagens da conversa: ${conversationId}`);
+      
+      const { data: messages, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
+
+      if (messagesError) throw messagesError;
+
+      return new Response(JSON.stringify({
+        success: true,
+        messages: messages || []
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } else {
+      // Buscar todas as conversas com a última mensagem
+      console.log('📞 Buscando todas as conversas');
+      
+      const { data: conversations, error: conversationsError } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          messages!inner (
+            id,
+            content,
+            message_type,
+            sender_type,
+            created_at
+          )
+        `)
+        .order('updated_at', { ascending: false });
+
+      if (conversationsError) throw conversationsError;
+
+      // Processar conversas para incluir apenas a última mensagem
+      const processedConversations = (conversations || []).map(conv => {
+        // Encontrar a mensagem mais recente
+        const lastMessage = conv.messages.reduce((latest: any, current: any) => {
+          return new Date(current.created_at) > new Date(latest.created_at) ? current : latest;
+        });
+
+        return {
+          id: conv.id,
+          phone_number: conv.phone_number,
+          contact_name: conv.contact_name,
+          created_at: conv.created_at,
+          updated_at: conv.updated_at,
+          last_message: lastMessage
+        };
+      });
+
+      return new Response(JSON.stringify({
+        success: true,
+        conversations: processedConversations
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Erro ao buscar dados:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
