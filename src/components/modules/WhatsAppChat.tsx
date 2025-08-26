@@ -294,7 +294,7 @@ const stopRecording = () => {
   }
 
   return (
-    <div className="flex h-full bg-background overflow-hidden">
+    <div className="flex h-full bg-white overflow-hidden">
       {/* Sidebar com lista de conversas */}
       <div className="w-80 min-w-80 border-r border-border flex flex-col">
         {/* Header */}
