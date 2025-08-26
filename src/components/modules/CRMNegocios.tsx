@@ -6,7 +6,7 @@ import { MessageCircle, Phone, FileText, Settings, Plus, Filter, Search, MoreHor
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AddColumnModal } from "@/components/modals/AddColumnModal";
-import PipelineConfigModal from "../modals/PipelineConfigModal";
+import { PipelineConfigModal } from "../modals/PipelineConfigModal";
 import { FilterModal } from "@/components/modals/FilterModal";
 import { CriarPipelineModal } from "@/components/modals/CriarPipelineModal";
 import { DealDetailsModal } from "@/components/modals/DealDetailsModal";
