@@ -196,8 +196,8 @@ const CanaisDeAtendimentoPage = () => {
                       <div className="flex justify-center items-center gap-1">
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="text-[#ffc500] border-[#ffc500] px-[15px] py-[5px] h-[34px]"
+                          variant="outlineYellow"
+                          className="px-[15px] py-[5px] h-[34px]"
                         >
                           Desconectar
                         </Button>
@@ -235,8 +235,8 @@ const CanaisDeAtendimentoPage = () => {
                     <TableCell className="text-center py-3">
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="text-[#ffc500] border-[#ffc500] px-[15px] py-[5px] h-[34px] max-w-[100px]"
+                        variant="outlineYellow"
+                        className="px-[15px] py-[5px] h-[34px] max-w-[100px]"
                         onClick={() => setShowRegistrosSheet(true)}
                       >
                         <List className="w-4 h-4 mr-1" />
