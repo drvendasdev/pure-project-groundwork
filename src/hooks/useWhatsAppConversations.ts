@@ -180,9 +180,7 @@ export const useWhatsAppConversations = () => {
         return conv;
       }));
 
-      // Enviar via N8N
-      const currentConv = conversations.find(c => c.id === conversationId);
-      const evolutionInstance = currentConv?.evolution_instance;
+      // Enviar via N8N (não enviamos evolutionInstance para forçar uso da última mensagem inbound)
       const { error: apiError } = await supabase.functions.invoke('n8n-send-message', {
         body: {
           messageId: newMessage.id,
@@ -190,8 +188,7 @@ export const useWhatsAppConversations = () => {
           content,
           messageType,
           fileUrl,
-          fileName,
-          evolutionInstance
+          fileName
         }
       });
 

@@ -70,15 +70,12 @@ serve(async (req) => {
       console.warn('Não foi possível carregar a conversa da mensagem:', msgErr.message);
     }
 
-    // Resolver evolutionInstance (prioridade: body -> conversa -> última msg inbound)
-    let resolvedEvolutionInstance: string | null = evolutionInstanceFromBody ?? evolutionInstance ?? null;
+    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> body)
+    let resolvedEvolutionInstance: string | null = null;
     let instanceSource = 'not_found';
     
-    if (evolutionInstanceFromBody) {
-      instanceSource = 'body';
-    } else if (evolutionInstance) {
-      instanceSource = 'conversation';
-    } else if (conversationId) {
+    // Prioridade 1: última mensagem inbound (mais atual)
+    if (conversationId) {
       const { data: lastInbound } = await supabase
         .from('messages')
         .select('metadata, created_at')
@@ -92,6 +89,32 @@ serve(async (req) => {
         resolvedEvolutionInstance = String(metaInst);
         instanceSource = 'lastInbound';
       }
+    }
+    
+    // Prioridade 2: conversa (se não achou na última mensagem)
+    if (!resolvedEvolutionInstance && evolutionInstance) {
+      resolvedEvolutionInstance = evolutionInstance;
+      instanceSource = 'conversation';
+    }
+    
+    // Prioridade 3: body (fallback apenas se não tiver outro)
+    if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
+      resolvedEvolutionInstance = evolutionInstanceFromBody;
+      instanceSource = 'body';
+    }
+    
+    // Atualizar conversa se a instância resolvida for diferente da atual
+    if (resolvedEvolutionInstance && evolutionInstance && resolvedEvolutionInstance !== evolutionInstance && conversationId) {
+      console.log('🔄 Atualizando evolution_instance da conversa:', {
+        conversationId: conversationId.substring(0, 8) + '***',
+        old: evolutionInstance,
+        new: resolvedEvolutionInstance
+      });
+      
+      await supabase
+        .from('conversations')
+        .update({ evolution_instance: resolvedEvolutionInstance })
+        .eq('id', conversationId);
     }
     
     console.log('Resolved Evolution Instance:', { 
