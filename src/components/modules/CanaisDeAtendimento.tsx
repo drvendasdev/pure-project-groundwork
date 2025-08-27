@@ -145,32 +145,29 @@ const CanaisDeAtendimentoPage = () => {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-gradient-to-br from-[#F6F0FF] to-white">
-        <div className="max-w-6xl mx-auto p-6 pt-8">
-          {/* Tabela */}
-          <Card className="rounded-lg border border-slate-200 bg-white shadow-[0_0_10px_rgba(0,0,0,0.1)]" style={{ padding: '20px', borderRadius: '8px', margin: '0px' }}>
-            {/* Header dentro do card */}
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xl font-semibold text-slate-900">Canais de atendimento</h3>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => setShowAddDialog(true)}
-                  variant="default"
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  Adicionar Canal de Atendimento
-                </Button>
-                <Button
-                  onClick={() => setShowDeletedDialog(true)}
-                  variant="destructive"
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Deletadas
-                </Button>
-              </div>
-            </div>
-            
-            <Table>
+      <div className="h-full">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-semibold text-slate-900">Canais de atendimento</h3>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowAddDialog(true)}
+              variant="default"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Adicionar Canal de Atendimento
+            </Button>
+            <Button
+              onClick={() => setShowDeletedDialog(true)}
+              variant="destructive"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Deletadas
+            </Button>
+          </div>
+        </div>
+        
+        <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-center text-slate-700 font-medium py-3">Nome</TableHead>
@@ -203,10 +200,10 @@ const CanaisDeAtendimentoPage = () => {
                         </Button>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
+                             <Button
                               size="sm"
                               variant="ghost"
-                              className="p-[3px] text-[#ffc500]"
+                              className="p-[3px] text-[#ffc500] hover:bg-transparent hover:text-[#ffc500] active:bg-transparent focus:bg-transparent"
                               onClick={() => handleRefresh(canal.id)}
                               disabled={loadingRefresh === canal.id}
                               aria-label="Atualizar sessão"
@@ -289,8 +286,7 @@ const CanaisDeAtendimentoPage = () => {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          </Card>
+        </Table>
 
           {/* Dialog Adicionar Canal */}
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -450,7 +446,6 @@ const CanaisDeAtendimentoPage = () => {
               </div>
             </SheetContent>
           </Sheet>
-        </div>
       </div>
     </TooltipProvider>
   );
