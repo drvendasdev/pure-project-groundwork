@@ -62,6 +62,11 @@ serve(async (req) => {
       // Tentar extrair phoneNumber de várias fontes
       let phoneNumber = webhookData.phoneNumber || webhookData.sender;
       
+      // Limpar @s.whatsapp.net se presente
+      if (phoneNumber && phoneNumber.includes('@s.whatsapp.net')) {
+        phoneNumber = phoneNumber.replace('@s.whatsapp.net', '');
+      }
+      
       // Se não achou, tentar extrair de data.key.remoteJid
       if (!phoneNumber && webhookData.data?.key?.remoteJid) {
         phoneNumber = webhookData.data.key.remoteJid.replace('@s.whatsapp.net', '');
