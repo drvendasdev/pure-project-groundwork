@@ -72,7 +72,13 @@ serve(async (req) => {
 
     // Resolver evolutionInstance (prioridade: body -> conversa -> última msg inbound)
     let resolvedEvolutionInstance: string | null = evolutionInstanceFromBody ?? evolutionInstance ?? null;
-    if (!resolvedEvolutionInstance && conversationId) {
+    let instanceSource = 'not_found';
+    
+    if (evolutionInstanceFromBody) {
+      instanceSource = 'body';
+    } else if (evolutionInstance) {
+      instanceSource = 'conversation';
+    } else if (conversationId) {
       const { data: lastInbound } = await supabase
         .from('messages')
         .select('metadata, created_at')
@@ -82,7 +88,21 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
       const metaInst = (lastInbound as any)?.metadata?.evolution_instance;
-      if (metaInst) resolvedEvolutionInstance = String(metaInst);
+      if (metaInst) {
+        resolvedEvolutionInstance = String(metaInst);
+        instanceSource = 'lastInbound';
+      }
+    }
+    
+    console.log('Resolved Evolution Instance:', { 
+      resolvedEvolutionInstance: resolvedEvolutionInstance || 'EMPTY', 
+      source: instanceSource,
+      conversationId: conversationId?.substring(0, 8) + '***'
+    });
+    
+    // Alert se instância não resolvida
+    if (!resolvedEvolutionInstance) {
+      console.warn('ALERTA: Evolution instance não resolvida! Mensagem pode ser enviada para instância incorreta.');
     }
 
     // Resolver destino priorizando o contato da conversa
@@ -188,7 +208,7 @@ serve(async (req) => {
 
     const n8nPayload = {
       event: 'send.message',
-      instance: resolvedEvolutionInstance ?? undefined,
+      instance: resolvedEvolutionInstance || undefined,
       data: {
         key: {
           remoteJid,

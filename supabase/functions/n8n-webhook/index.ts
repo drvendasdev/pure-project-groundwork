@@ -59,6 +59,16 @@ serve(async (req) => {
 
     // Helper para extrair dados de múltiplas estruturas
     function extractFromPayload(webhookData: any) {
+      // Extrair evolution_instance de múltiplas fontes
+      const instance = webhookData.instance || 
+                      webhookData.instanceName || 
+                      webhookData.processed?.instanceName || 
+                      webhookData.original?.instance ||
+                      webhookData.original?.instanceName ||
+                      webhookData.data?.instance ||
+                      webhookData.instance_id ||
+                      webhookData.evolution_instance;
+      
       // Tentar extrair phoneNumber de várias fontes
       let phoneNumber = webhookData.phoneNumber || webhookData.sender;
       
@@ -208,20 +218,22 @@ serve(async (req) => {
         timestamp,
         external_id,
         extractionPath,
+        evolutionInstance: instance,
         evolutionData: webhookData.evolutionData || webhookData.data
       };
     }
 
     // Extrair dados do payload
     const extracted = extractFromPayload(webhookData);
-    const { phoneNumber, contactName, message, messageType, timestamp, external_id, extractionPath, evolutionData } = extracted;
+    const { phoneNumber, contactName, message, messageType, timestamp, external_id, extractionPath, evolutionInstance, evolutionData } = extracted;
     
     console.log('Extracted data:', { 
       phoneNumber: phoneNumber?.substring(0, 8) + '***', 
       hasMessage: !!message, 
       messageType, 
       hasTimestamp: !!timestamp,
-      hasExternalId: !!external_id 
+      hasExternalId: !!external_id,
+      evolutionInstance: evolutionInstance || 'not_found'
     });
 
     // Validação mais específica para requests vazias vs dados inválidos
@@ -318,6 +330,20 @@ serve(async (req) => {
 
     if (existingConversation) {
       conversation = existingConversation;
+      
+      // Atualizar evolution_instance se fornecido e diferente
+      if (evolutionInstance && evolutionInstance !== existingConversation.evolution_instance) {
+        console.log('Atualizando evolution_instance da conversa:', { 
+          conversationId: existingConversation.id, 
+          oldInstance: existingConversation.evolution_instance, 
+          newInstance: evolutionInstance 
+        });
+        await supabase
+          .from('conversations')
+          .update({ evolution_instance: evolutionInstance })
+          .eq('id', existingConversation.id);
+        conversation = { ...existingConversation, evolution_instance: evolutionInstance };
+      }
     } else {
       // Criar nova conversa - N8N gerencia a IA, não o sistema local
       const { data: newConversation, error: convError } = await supabase
@@ -326,7 +352,8 @@ serve(async (req) => {
           contact_id: contact.id,
           canal: 'whatsapp',
           agente_ativo: false, // N8N gerencia as respostas
-          status: 'open'
+          status: 'open',
+          evolution_instance: evolutionInstance || null
         })
         .select()
         .single();
@@ -335,6 +362,7 @@ serve(async (req) => {
         throw new Error(`Erro ao criar conversa: ${convError.message}`);
       }
       conversation = newConversation;
+      console.log('Nova conversa criada com evolution_instance:', evolutionInstance);
     }
 
     // Verificar modo debug (enviar payload completo como content)
@@ -349,6 +377,10 @@ serve(async (req) => {
     
     if (evolutionData) {
       metadata.evolution_data = evolutionData;
+    }
+    
+    if (evolutionInstance) {
+      metadata.evolution_instance = evolutionInstance;
     }
 
     // Determinar content - usar payload completo em modo debug ou message extraído

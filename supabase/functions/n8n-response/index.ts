@@ -73,6 +73,9 @@ serve(async (req) => {
       fileUrl,
       file_name,
       fileName,
+      evolution_instance,
+      evolutionInstance,
+      instance,
       metadata
     } = responseData;
 
@@ -82,6 +85,7 @@ serve(async (req) => {
     const finalPhoneNumber = phone_number || phoneNumber;
     const finalFileUrl = file_url || fileUrl;
     const finalFileName = file_name || fileName;
+    const finalEvolutionInstance = evolution_instance || evolutionInstance || instance;
 
     // Inferir tipo de mensagem pela extensão do arquivo se não especificado
     const inferMessageType = (fileUrl: string): string => {
@@ -200,6 +204,7 @@ serve(async (req) => {
               canal: 'whatsapp',
               status: 'open',
               agente_ativo: false,
+              evolution_instance: finalEvolutionInstance || null,
               last_activity_at: new Date().toISOString(),
               last_message_at: new Date().toISOString(),
               created_at: new Date().toISOString(),
@@ -218,7 +223,7 @@ serve(async (req) => {
       }
     }
 
-    // Verificar se a conversa existe
+    // Verificar se a conversa existe e atualizar evolution_instance se fornecido
     const { data: conversation } = await supabase
       .from('conversations')
       .select('*')
@@ -227,6 +232,19 @@ serve(async (req) => {
 
     if (!conversation) {
       throw new Error('Conversa não encontrada');
+    }
+
+    // Atualizar evolution_instance se fornecido e diferente
+    if (finalEvolutionInstance && finalEvolutionInstance !== conversation.evolution_instance) {
+      console.log('N8N Response: Atualizando evolution_instance da conversa:', { 
+        conversationId, 
+        oldInstance: conversation.evolution_instance, 
+        newInstance: finalEvolutionInstance 
+      });
+      await supabase
+        .from('conversations')
+        .update({ evolution_instance: finalEvolutionInstance })
+        .eq('id', conversationId);
     }
 
     // Preparar conteúdo final - usar placeholder se necessário
