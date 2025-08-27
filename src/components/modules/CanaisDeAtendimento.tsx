@@ -148,76 +148,70 @@ const CanaisDeAtendimentoPage = () => {
       <div className="min-h-screen bg-gradient-to-br from-[#F6F0FF] to-white">
         <div className="max-w-6xl mx-auto p-6 pt-8">
           {/* Tabela */}
-          <Card className="bg-white border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+          <Card className="rounded-lg border border-slate-200 bg-white shadow-[0_0_10px_rgba(0,0,0,0.1)]" style={{ padding: '20px', borderRadius: '8px', margin: '0px' }}>
             {/* Header dentro do card */}
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-semibold text-slate-800">Canais de atendimento</h1>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => setShowAddDialog(true)}
-                    variant="yellow"
-                    className="rounded-full px-6"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar Canal de Atendimento
-                  </Button>
-                  <Button
-                    onClick={() => setShowDeletedDialog(true)}
-                    variant="destructive"
-                    className="rounded-full px-6"
-                  >
-                    <Trash className="w-4 h-4 mr-2" />
-                    Deletadas
-                  </Button>
-                </div>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-xl font-semibold text-slate-900">Canais de atendimento</h3>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setShowAddDialog(true)}
+                  variant="default"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Adicionar Canal de Atendimento
+                </Button>
+                <Button
+                  onClick={() => setShowDeletedDialog(true)}
+                  variant="destructive"
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Deletadas
+                </Button>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <Table>
+            
+            <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50 border-b border-slate-200">
-                  <TableHead className="font-semibold text-slate-700 py-4 pl-8">Nome</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Status</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Sessão</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Número</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Atualizado em</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Padrão</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Registros</TableHead>
-                  <TableHead className="font-semibold text-slate-700 py-4">Ações</TableHead>
+                <TableRow>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Nome</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Status</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Sessão</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Número</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Atualizado em</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Padrão</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Registros</TableHead>
+                  <TableHead className="text-center text-slate-700 font-medium py-3">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {canais.map((canal) => (
-                  <TableRow key={canal.id} className="hover:bg-slate-50/50 border-b border-slate-100">
-                    <TableCell className="py-4 pl-8 font-medium text-slate-800">{canal.nome}</TableCell>
-                    <TableCell className="py-4">
-                      <Triangle className="w-4 h-4 fill-green-500 text-green-500" />
+                  <TableRow key={canal.id} className="hover:bg-slate-50/50">
+                    <TableCell className="text-center py-3 font-medium text-slate-800">{canal.nome}</TableCell>
+                    <TableCell className="text-center py-3">
+                      <div className="flex justify-center">
+                        <Triangle className="w-4 h-4 fill-green-500 text-green-500" />
+                      </div>
                     </TableCell>
-                    <TableCell className="py-4">
-                      <div className="flex items-center gap-2">
+                    <TableCell className="text-center py-3">
+                      <div className="flex justify-center items-center gap-1">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-yellow-400 text-yellow-600 hover:bg-yellow-50 rounded-full px-4 py-1 text-xs"
-                          onClick={() => {
-                            setSelectedCanal(canal);
-                            setShowDeleteDialog(true);
-                          }}
+                          className="h-8 px-3 text-xs"
                         >
                           Desconectar
                         </Button>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                           <Button
+                            <Button
                               size="sm"
-                              variant="ghost"
-                              className="p-2 h-8 w-8 rounded-full hover:bg-slate-100"
+                              variant="outline"
+                              className="h-8 w-8 p-0 rounded-full border border-slate-300 text-primary"
                               onClick={() => handleRefresh(canal.id)}
                               disabled={loadingRefresh === canal.id}
                               aria-label="Atualizar sessão"
                             >
-                              <RefreshCcw className={`w-4 h-4 text-slate-600 ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
+                              <RefreshCcw className={`w-4 h-4 ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
@@ -226,35 +220,37 @@ const CanaisDeAtendimentoPage = () => {
                         </Tooltip>
                       </div>
                     </TableCell>
-                    <TableCell className="py-4 text-slate-600">{canal.numero}</TableCell>
-                    <TableCell className="py-4 text-slate-600">{canal.atualizadoEm}</TableCell>
+                    <TableCell className="text-center py-3 text-slate-600">{canal.numero}</TableCell>
+                    <TableCell className="text-center py-3 text-slate-600">{canal.atualizadoEm}</TableCell>
                     <TableCell 
-                      className={`py-4 ${!canal.padrao ? 'cursor-pointer' : ''}`}
+                      className={`text-center py-3 ${!canal.padrao ? 'cursor-pointer' : ''}`}
                       onClick={() => !canal.padrao && handleSetPadrao(canal.id)}
                     >
-                      {canal.padrao && (
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      )}
+                      <div className="flex justify-center">
+                        {canal.padrao && (
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="py-4">
+                    <TableCell className="text-center py-3">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-yellow-400 text-yellow-600 hover:bg-yellow-50 rounded-full px-4 py-1 text-xs"
+                        className="h-9 max-w-[100px] text-xs"
                         onClick={() => setShowRegistrosSheet(true)}
                       >
-                        <List className="w-3 h-3 mr-1" />
+                        <List className="w-4 h-4 mr-1" />
                         Registros
                       </Button>
                     </TableCell>
-                    <TableCell className="py-4">
-                      <div className="flex items-center gap-2">
+                    <TableCell className="text-center py-3">
+                      <div className="flex justify-center items-center gap-1">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="p-1 h-8 w-8 hover:bg-slate-100"
+                              className="h-8 w-8 p-0 hover:bg-slate-100"
                               onClick={() => {
                                 setSelectedCanal(canal);
                                 setEditNome(canal.nome);
@@ -271,10 +267,10 @@ const CanaisDeAtendimentoPage = () => {
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                             <Button
+                            <Button
                               size="sm"
                               variant="ghost"
-                              className="p-1 h-8 w-8 hover:bg-red-50"
+                              className="h-8 w-8 p-0 hover:bg-red-50"
                               onClick={() => {
                                 setSelectedCanal(canal);
                                 setShowDeleteDialog(true);
@@ -294,7 +290,6 @@ const CanaisDeAtendimentoPage = () => {
                 ))}
               </TableBody>
             </Table>
-            </div>
           </Card>
 
           {/* Dialog Adicionar Canal */}
