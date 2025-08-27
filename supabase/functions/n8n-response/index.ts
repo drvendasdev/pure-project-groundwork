@@ -66,15 +66,22 @@ serve(async (req) => {
       text,
       caption,
       phone_number,
+      phoneNumber,
       message_type,
+      messageType,
       file_url,
+      fileUrl,
       file_name,
+      fileName,
       metadata
     } = responseData;
 
     // Usar aliases se disponíveis
     const finalConversationId = conversation_id || conversationId;
     const finalMessage = response_message || message || text || caption;
+    const finalPhoneNumber = phone_number || phoneNumber;
+    const finalFileUrl = file_url || fileUrl;
+    const finalFileName = file_name || fileName;
 
     // Inferir tipo de mensagem pela extensão do arquivo se não especificado
     const inferMessageType = (fileUrl: string): string => {
@@ -94,7 +101,7 @@ serve(async (req) => {
       }
     };
 
-    const finalMessageType = message_type || inferMessageType(file_url || '');
+    const finalMessageType = message_type || messageType || inferMessageType(finalFileUrl || '');
 
     // Gerar conteúdo placeholder para mídia sem texto
     const generateContentForMedia = (type: string, fileName?: string): string => {
@@ -119,9 +126,9 @@ serve(async (req) => {
     }
 
     // Validação mais flexível - permitir mídia sem texto
-    const hasValidContent = finalMessage || (file_url && finalMessageType !== 'text');
+    const hasValidContent = finalMessage || (finalFileUrl && finalMessageType !== 'text');
     
-    if (!finalConversationId && !phone_number) {
+    if (!finalConversationId && !finalPhoneNumber) {
       console.error('N8N Response: É necessário conversation_id ou phone_number');
       throw new Error('conversation_id ou phone_number são obrigatórios');
     }
@@ -129,7 +136,7 @@ serve(async (req) => {
     if (!hasValidContent) {
       console.error('N8N Response: Nenhum conteúdo válido encontrado:', { 
         has_message: !!finalMessage,
-        has_file: !!file_url,
+        has_file: !!finalFileUrl,
         message_type: finalMessageType,
         received_data: responseData
       });
@@ -139,9 +146,9 @@ serve(async (req) => {
     let conversationId = finalConversationId;
     
     // Fallback: buscar conversa por phone_number se conversation_id não fornecido
-    if (!conversationId && phone_number) {
+    if (!conversationId && finalPhoneNumber) {
       // Sanitizar número de telefone (apenas dígitos)
-      const sanitizedPhone = phone_number.replace(/\D/g, '');
+      const sanitizedPhone = finalPhoneNumber.replace(/\D/g, '');
       console.log('N8N Response: Buscando conversa por phone_number:', sanitizedPhone);
       
       // Buscar contato pelo telefone (usando a coluna correta: phone)
@@ -190,8 +197,6 @@ serve(async (req) => {
             .from('conversations')
             .insert({
               contact_id: contact.id,
-              phone_number: sanitizedPhone,
-              contact_name: contact.name,
               canal: 'whatsapp',
               status: 'open',
               agente_ativo: false,
@@ -225,7 +230,7 @@ serve(async (req) => {
     }
 
     // Preparar conteúdo final - usar placeholder se necessário
-    const finalContent = finalMessage || generateContentForMedia(finalMessageType, file_name);
+    const finalContent = finalMessage || generateContentForMedia(finalMessageType, finalFileName);
 
     // Inserir resposta do agente via N8N
     const { data: newMessage, error: messageError } = await supabase
@@ -235,8 +240,8 @@ serve(async (req) => {
         content: finalContent,
         sender_type: 'agent',
         message_type: finalMessageType,
-        file_url: file_url,
-        file_name: file_name,
+        file_url: finalFileUrl,
+        file_name: finalFileName,
         status: 'sent',
         origem_resposta: 'automatica',
         metadata: metadata ? { n8n_data: metadata, source: 'n8n' } : { source: 'n8n' }
@@ -249,8 +254,8 @@ serve(async (req) => {
       content: finalContent,
       sender_type: 'agent',
       message_type: finalMessageType,
-      has_file: !!file_url,
-      file_name: file_name
+      has_file: !!finalFileUrl,
+      file_name: finalFileName
     });
 
     if (messageError) {
