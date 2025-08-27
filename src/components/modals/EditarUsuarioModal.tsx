@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -8,10 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { User, Plus, Eye, X, Camera, EyeOff } from "lucide-react";
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { Plus, Eye, X, Camera, EyeOff } from "lucide-react";
 
 const userSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
@@ -27,15 +25,26 @@ const userSchema = z.object({
 
 type UserFormData = z.infer<typeof userSchema>;
 
-interface AdicionarUsuarioModalProps {
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  profile: "admin" | "user";
+  status: "active" | "inactive";
+  avatar?: string;
+}
+
+interface EditarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddUser: (user: {
+  onEditUser: (user: {
+    id: string;
     name: string;
     email: string;
     profile: "admin" | "user";
     status: "active" | "inactive";
   }) => void;
+  user?: User;
 }
 
 // Mock options para os selects
@@ -63,11 +72,9 @@ const mockPhones = [
   { value: "phone3", label: "+55 11 77777-7777" },
 ];
 
-export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarUsuarioModalProps) {
+export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: EditarUsuarioModalProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  
-  // Force refresh to clear any cached references
 
   const form = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
@@ -84,19 +91,41 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     },
   });
 
+  // Populate form when user changes
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        name: user.name,
+        email: user.email,
+        profile: user.profile,
+        password: "",
+        temporaryPassword: false,
+        queues: "",
+        roles: "",
+        defaultChannel: "",
+        defaultPhone: "",
+      });
+      // Set roles based on user (mock data)
+      if (user.profile === "admin") {
+        setSelectedRoles(["Gerente"]);
+      } else {
+        setSelectedRoles([]);
+      }
+    }
+  }, [user, form]);
+
   const handleSubmit = (data: UserFormData) => {
-    onAddUser({
+    if (!user) return;
+    
+    onEditUser({
+      id: user.id,
       name: data.name,
       email: data.email,
       profile: data.profile,
-      status: "active",
+      status: user.status,
     });
     
-    // Reset form
-    form.reset();
-    setShowPassword(false);
-    setSelectedRoles([]);
-    onClose();
+    handleCancel();
   };
 
   const handleCancel = () => {
@@ -128,7 +157,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
         {/* Fixed Header */}
         <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle className="text-lg font-semibold text-foreground">
-            Adicionar usuário
+            Editar usuário
           </DialogTitle>
         </DialogHeader>
 
@@ -148,10 +177,10 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     <input 
                       accept="image/*" 
                       className="hidden" 
-                      id="icon-button-file" 
+                      id="icon-button-file-edit" 
                       type="file"
                     />
-                    <label htmlFor="icon-button-file">
+                    <label htmlFor="icon-button-file-edit">
                       <Button
                         type="button"
                         size="sm"
@@ -431,7 +460,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
               onClick={form.handleSubmit(handleSubmit)}
               className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg"
             >
-              Adicionar
+              Salvar
             </Button>
           </div>
         </div>

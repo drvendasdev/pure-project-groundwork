@@ -5,6 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdicionarUsuarioModal } from "@/components/modals/AdicionarUsuarioModal";
+import { EditarUsuarioModal } from "@/components/modals/EditarUsuarioModal";
+import { PausarUsuarioModal } from "@/components/modals/PausarUsuarioModal";
+import { DeletarUsuarioModal } from "@/components/modals/DeletarUsuarioModal";
 import { AdministracaoCargos } from "./AdministracaoCargos";
 
 interface User {
@@ -59,6 +62,10 @@ export function AdministracaoUsuarios() {
   const [users, setUsers] = useState<User[]>(mockUsers);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [showCargos, setShowCargos] = useState(false);
 
   const filteredUsers = users.filter(user => 
@@ -67,18 +74,43 @@ export function AdministracaoUsuarios() {
   );
 
   const handleEditUser = (userId: string) => {
-    console.log("Editar usuário:", userId);
-    // TODO: Implementar edição
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setSelectedUser(user);
+      setIsEditModalOpen(true);
+    }
   };
 
   const handlePauseUser = (userId: string) => {
-    console.log("Pausar usuário:", userId);
-    // TODO: Implementar pause/unpause
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setSelectedUser(user);
+      setIsPauseModalOpen(true);
+    }
+  };
+
+  const handleConfirmPause = (pauseOptions: { pauseConversations: boolean; pauseCalls: boolean }) => {
+    console.log("Pausar usuário com opções:", pauseOptions, selectedUser?.id);
+    // TODO: Implementar lógica de pausa
+    setIsPauseModalOpen(false);
+    setSelectedUser(undefined);
   };
 
   const handleDeleteUser = (userId: string) => {
-    console.log("Excluir usuário:", userId);
-    // TODO: Implementar exclusão com confirmação
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setSelectedUser(user);
+      setIsDeleteModalOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (selectedUser) {
+      setUsers(users.filter(user => user.id !== selectedUser.id));
+      console.log("Usuário excluído:", selectedUser.id);
+    }
+    setIsDeleteModalOpen(false);
+    setSelectedUser(undefined);
   };
 
   const handleAddUser = (newUser: Omit<User, "id">) => {
@@ -87,6 +119,12 @@ export function AdministracaoUsuarios() {
       ...newUser,
     };
     setUsers([...users, user]);
+  };
+
+  const handleUpdateUser = (updatedUser: User) => {
+    setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+    setIsEditModalOpen(false);
+    setSelectedUser(undefined);
   };
 
   const handleGerenciarCargos = () => {
@@ -221,6 +259,39 @@ export function AdministracaoUsuarios() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAddUser={handleAddUser}
+      />
+
+      {/* Modal de editar usuário */}
+      <EditarUsuarioModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedUser(undefined);
+        }}
+        onEditUser={handleUpdateUser}
+        user={selectedUser}
+      />
+
+      {/* Modal de pausar usuário */}
+      <PausarUsuarioModal
+        isOpen={isPauseModalOpen}
+        onClose={() => {
+          setIsPauseModalOpen(false);
+          setSelectedUser(undefined);
+        }}
+        onPauseUser={handleConfirmPause}
+        userName={selectedUser?.name || ""}
+      />
+
+      {/* Modal de deletar usuário */}
+      <DeletarUsuarioModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setSelectedUser(undefined);
+        }}
+        onConfirm={handleConfirmDelete}
+        userName={selectedUser?.name || ""}
       />
     </div>
   );
