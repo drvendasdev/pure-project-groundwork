@@ -61,7 +61,7 @@ interface Canal {
   padrao: boolean;
 }
 
-const CanaisDeAtendimento = () => {
+const CanaisDeAtendimentoPage = () => {
   const [canais, setCanais] = useState<Canal[]>([
     {
       id: '1',
@@ -171,7 +171,8 @@ const CanaisDeAtendimento = () => {
 
           {/* Tabela */}
           <Card className="bg-white border-slate-200 shadow-sm rounded-2xl overflow-hidden">
-            <Table>
+            <div className="overflow-x-auto">
+              <Table>
               <TableHeader>
                 <TableRow className="bg-white border-b border-slate-200">
                   <TableHead className="font-semibold text-slate-700 py-4">Nome</TableHead>
@@ -205,12 +206,13 @@ const CanaisDeAtendimento = () => {
                         </Button>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
+                           <Button
                               size="sm"
                               variant="ghost"
                               className="p-1 h-8 w-8 rounded-full bg-yellow-100 hover:bg-yellow-200"
                               onClick={() => handleRefresh(canal.id)}
                               disabled={loadingRefresh === canal.id}
+                              aria-label="Atualizar sessão"
                             >
                               <RefreshCcw className={`w-4 h-4 text-yellow-600 ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
                             </Button>
@@ -253,7 +255,7 @@ const CanaisDeAtendimento = () => {
                       <div className="flex items-center gap-2">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
+                             <Button
                               size="sm"
                               variant="ghost"
                               className="p-1 h-8 w-8"
@@ -262,6 +264,7 @@ const CanaisDeAtendimento = () => {
                                 setEditNome(canal.nome);
                                 setShowEditDialog(true);
                               }}
+                              aria-label="Editar canal"
                             >
                               <Pencil className="w-4 h-4 text-slate-600" />
                             </Button>
@@ -272,7 +275,7 @@ const CanaisDeAtendimento = () => {
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
+                             <Button
                               size="sm"
                               variant="ghost"
                               className="p-1 h-8 w-8"
@@ -280,6 +283,7 @@ const CanaisDeAtendimento = () => {
                                 setSelectedCanal(canal);
                                 setShowDeleteDialog(true);
                               }}
+                              aria-label="Excluir canal"
                             >
                               <Trash2 className="w-4 h-4 text-slate-600" />
                             </Button>
@@ -294,6 +298,7 @@ const CanaisDeAtendimento = () => {
                 ))}
               </TableBody>
             </Table>
+            </div>
           </Card>
 
           {/* Dialog Adicionar Canal */}
@@ -460,4 +465,4 @@ const CanaisDeAtendimento = () => {
   );
 };
 
-export default CanaisDeAtendimento;
+export default CanaisDeAtendimentoPage;
