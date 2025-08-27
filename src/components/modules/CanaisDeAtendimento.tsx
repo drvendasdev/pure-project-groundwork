@@ -197,7 +197,7 @@ const CanaisDeAtendimentoPage = () => {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 px-3 text-xs"
+                          className="text-[#ffc500] border-[#ffc500] px-[15px] py-[5px] h-[34px]"
                         >
                           Desconectar
                         </Button>
@@ -236,7 +236,7 @@ const CanaisDeAtendimentoPage = () => {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-9 max-w-[100px] text-xs"
+                        className="text-[#ffc500] border-[#ffc500] px-[15px] py-[5px] h-[34px] max-w-[100px]"
                         onClick={() => setShowRegistrosSheet(true)}
                       >
                         <List className="w-4 h-4 mr-1" />
