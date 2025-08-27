@@ -57,16 +57,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Dados esperados do N8N
+    // Dados esperados do N8N (com aliases)
     const {
       conversation_id,
+      conversationId,
       response_message,
+      message,
+      text,
       phone_number,
       message_type = 'text',
       file_url,
       file_name,
       metadata
     } = responseData;
+
+    // Usar aliases se disponíveis
+    const finalConversationId = conversation_id || conversationId;
+    const finalMessage = response_message || message || text;
 
     // Validação mais específica para requests vazias vs dados inválidos
     if (Object.keys(responseData).length === 0) {
@@ -79,10 +86,11 @@ serve(async (req) => {
       });
     }
 
-    if (!conversation_id || !response_message) {
+    if (!finalConversationId || !finalMessage) {
       console.error('N8N Response dados obrigatórios faltando:', { 
-        conversation_id: !!conversation_id, 
-        response_message: !!response_message 
+        conversation_id: !!finalConversationId, 
+        response_message: !!finalMessage,
+        received_data: responseData
       });
       throw new Error('conversation_id e response_message são obrigatórios');
     }
@@ -91,20 +99,20 @@ serve(async (req) => {
     const { data: conversation } = await supabase
       .from('conversations')
       .select('*')
-      .eq('id', conversation_id)
+      .eq('id', finalConversationId)
       .single();
 
     if (!conversation) {
       throw new Error('Conversa não encontrada');
     }
 
-    // Inserir resposta da IA do N8N
+    // Inserir resposta do agente via N8N
     const { data: newMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
-        conversation_id: conversation_id,
-        content: response_message,
-        sender_type: 'ia',
+        conversation_id: finalConversationId,
+        content: finalMessage,
+        sender_type: 'agent',
         message_type: message_type,
         file_url: file_url,
         file_name: file_name,
@@ -114,6 +122,13 @@ serve(async (req) => {
       })
       .select()
       .single();
+
+    console.log('N8N Response - Tentativa de inserir mensagem:', {
+      conversation_id: finalConversationId,
+      content: finalMessage,
+      sender_type: 'agent',
+      message_type: message_type
+    });
 
     if (messageError) {
       throw new Error(`Erro ao inserir resposta: ${messageError.message}`);
@@ -125,9 +140,9 @@ serve(async (req) => {
       .update({ 
         last_activity_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
-        unread_count: 0 // Resetar contador pois é resposta da IA
+        unread_count: 0 // Resetar contador pois é resposta do agente
       })
-      .eq('id', conversation_id);
+      .eq('id', finalConversationId);
 
     console.log('Resposta do N8N registrada no CRM:', newMessage.id);
 
@@ -135,7 +150,7 @@ serve(async (req) => {
       success: true,
       data: {
         message_id: newMessage.id,
-        conversation_id: conversation_id,
+        conversation_id: finalConversationId,
         registered_at: newMessage.created_at
       }
     }), {
