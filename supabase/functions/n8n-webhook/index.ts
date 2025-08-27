@@ -72,34 +72,115 @@ serve(async (req) => {
         phoneNumber = webhookData.data.key.remoteJid.replace('@s.whatsapp.net', '');
       }
       
+      // Helper para desencapsular mensagens do WhatsApp
+      function unwrapMessage(msgData: any): any {
+        if (!msgData) return null;
+        
+        // Desencapsular mensagens especiais
+        if (msgData.ephemeralMessage?.message) {
+          console.log('Unwrapping ephemeralMessage');
+          return unwrapMessage(msgData.ephemeralMessage.message);
+        }
+        if (msgData.viewOnceMessage?.message) {
+          console.log('Unwrapping viewOnceMessage');
+          return unwrapMessage(msgData.viewOnceMessage.message);
+        }
+        if (msgData.deviceSentMessage?.message) {
+          console.log('Unwrapping deviceSentMessage');
+          return unwrapMessage(msgData.deviceSentMessage.message);
+        }
+        
+        return msgData;
+      }
+      
       // Tentar extrair message de várias fontes
       let message = webhookData.message;
       let messageType = webhookData.messageType || 'text';
+      let extractionPath = 'direct';
       
       if (!message && webhookData.data?.message) {
-        const msgData = webhookData.data.message;
+        let msgData = unwrapMessage(webhookData.data.message);
         
+        // Tentar extrair texto de múltiplas estruturas
         if (msgData.conversation) {
           message = msgData.conversation;
           messageType = 'text';
+          extractionPath = 'conversation';
         } else if (msgData.extendedTextMessage?.text) {
           message = msgData.extendedTextMessage.text;
           messageType = 'text';
-        } else if (msgData.imageMessage?.caption) {
+          extractionPath = 'extendedTextMessage.text';
+        } else if (msgData.text?.body) {
+          message = msgData.text.body;
+          messageType = 'text';
+          extractionPath = 'text.body';
+        } else if (msgData.body) {
+          message = msgData.body;
+          messageType = 'text';
+          extractionPath = 'body';
+        } else if (msgData.content) {
+          message = msgData.content;
+          messageType = 'text';
+          extractionPath = 'content';
+        } 
+        // Mensagens de botão
+        else if (msgData.buttonsResponseMessage?.selectedDisplayText) {
+          message = msgData.buttonsResponseMessage.selectedDisplayText;
+          messageType = 'button_response';
+          extractionPath = 'buttonsResponseMessage.selectedDisplayText';
+        } else if (msgData.templateButtonReplyMessage?.selectedDisplayText) {
+          message = msgData.templateButtonReplyMessage.selectedDisplayText;
+          messageType = 'template_button_reply';
+          extractionPath = 'templateButtonReplyMessage.selectedDisplayText';
+        } else if (msgData.listResponseMessage?.singleSelectReply?.selectedRowId) {
+          message = msgData.listResponseMessage.title || msgData.listResponseMessage.singleSelectReply.selectedRowId;
+          messageType = 'list_response';
+          extractionPath = 'listResponseMessage.selectedRowId';
+        }
+        // Mídia com caption
+        else if (msgData.imageMessage?.caption) {
           message = msgData.imageMessage.caption || '[Imagen]';
           messageType = 'image';
+          extractionPath = 'imageMessage.caption';
         } else if (msgData.videoMessage?.caption) {
           message = msgData.videoMessage.caption || '[Video]';
           messageType = 'video';
-        } else if (msgData.documentMessage?.title) {
-          message = msgData.documentMessage.title || '[Documento]';
+          extractionPath = 'videoMessage.caption';
+        } else if (msgData.documentMessage?.caption || msgData.documentMessage?.title || msgData.documentMessage?.fileName) {
+          message = msgData.documentMessage.caption || msgData.documentMessage.title || msgData.documentMessage.fileName || '[Documento]';
           messageType = 'document';
-        } else if (msgData.audioMessage) {
+          extractionPath = 'documentMessage.caption/title/fileName';
+        }
+        // Mídia sem texto
+        else if (msgData.audioMessage) {
           message = '[Audio]';
           messageType = 'audio';
+          extractionPath = 'audioMessage';
         } else if (msgData.stickerMessage) {
           message = '[Sticker]';
           messageType = 'sticker';
+          extractionPath = 'stickerMessage';
+        } else if (msgData.imageMessage) {
+          message = '[Imagen]';
+          messageType = 'image';
+          extractionPath = 'imageMessage';
+        } else if (msgData.videoMessage) {
+          message = '[Video]';
+          messageType = 'video';
+          extractionPath = 'videoMessage';
+        } else if (msgData.locationMessage) {
+          message = `[Localização] ${msgData.locationMessage.name || 'Localização compartilhada'}`;
+          messageType = 'location';
+          extractionPath = 'locationMessage';
+        } else if (msgData.contactMessage) {
+          message = `[Contato] ${msgData.contactMessage.displayName || 'Contato compartilhado'}`;
+          messageType = 'contact';
+          extractionPath = 'contactMessage';
+        }
+        
+        // Log das chaves disponíveis se não encontrou nada
+        if (!message && msgData) {
+          console.log('Message keys not recognized:', Object.keys(msgData));
         }
       }
       
@@ -112,6 +193,13 @@ serve(async (req) => {
       // Extrair external_id
       const external_id = webhookData.external_id || webhookData.data?.key?.id;
       
+      console.log('Message extraction:', { 
+        extractionPath, 
+        messageType, 
+        hasMessage: !!message,
+        messageLength: message?.length || 0
+      });
+      
       return {
         phoneNumber,
         contactName,
@@ -119,13 +207,14 @@ serve(async (req) => {
         messageType,
         timestamp,
         external_id,
+        extractionPath,
         evolutionData: webhookData.evolutionData || webhookData.data
       };
     }
 
     // Extrair dados do payload
     const extracted = extractFromPayload(webhookData);
-    const { phoneNumber, contactName, message, messageType, timestamp, external_id, evolutionData } = extracted;
+    const { phoneNumber, contactName, message, messageType, timestamp, external_id, extractionPath, evolutionData } = extracted;
     
     console.log('Extracted data:', { 
       phoneNumber: phoneNumber?.substring(0, 8) + '***', 
@@ -146,9 +235,20 @@ serve(async (req) => {
       });
     }
 
-    if (!phoneNumber || !message) {
+    // Validação relaxada para permitir mídia sem texto
+    if (!phoneNumber) {
       console.error('Dados obrigatórios faltando:', { phoneNumber: !!phoneNumber, message: !!message });
-      throw new Error('phoneNumber e message são obrigatórios');
+      throw new Error('phoneNumber é obrigatório');
+    }
+    
+    if (!message) {
+      console.error('Nenhuma mensagem extraída. Dados disponíveis:', { 
+        phoneNumber: !!phoneNumber, 
+        extractionPath,
+        dataKeys: webhookData.data ? Object.keys(webhookData.data) : 'no data',
+        messageKeys: webhookData.data?.message ? Object.keys(webhookData.data.message) : 'no message'
+      });
+      throw new Error('Não foi possível extrair o conteúdo da mensagem');
     }
 
     // Deduplicação por external_id (quando fornecido)
@@ -341,6 +441,7 @@ serve(async (req) => {
         message_data: {
           content: finalContent,
           extracted_message: message,
+          extraction_path: extractionPath,
           phone_number: phoneNumber,
           contact_name: contactName,
           timestamp: timestamp,
