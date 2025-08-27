@@ -205,13 +205,13 @@ const CanaisDeAtendimentoPage = () => {
                           <TooltipTrigger asChild>
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="h-8 w-8 p-0 rounded-full border border-slate-300 text-primary"
+                              variant="ghost"
+                              className="p-[3px] text-[#ffc500]"
                               onClick={() => handleRefresh(canal.id)}
                               disabled={loadingRefresh === canal.id}
                               aria-label="Atualizar sessão"
                             >
-                              <RefreshCcw className={`w-4 h-4 ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
+                              <RefreshCcw className={`w-[18px] h-[18px] ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
