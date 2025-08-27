@@ -1,317 +1,314 @@
+// deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const defaultCorsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Vary": "Origin",
 };
 
+function cors(req: Request, extra: Record<string, string> = {}) {
+  const reqHeaders =
+    req.headers.get("access-control-request-headers") ??
+    "authorization, x-client-info, apikey, content-type";
+  return {
+    ...defaultCorsHeaders,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": reqHeaders,
+    ...extra,
+  };
+}
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  // Preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: cors(req) });
   }
 
-  try {
-    // Verificar se há conteúdo no body antes de tentar fazer parse
-    const contentType = req.headers.get('content-type');
-    const contentLength = req.headers.get('content-length');
-    
-    console.log('N8N Response request info:', {
-      method: req.method,
-      contentType,
-      contentLength,
-      url: req.url
-    });
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ success: false, error: "Method not allowed" }),
+      { status: 405, headers: { ...cors(req), "Content-Type": "application/json" } },
+    );
+  }
 
-    let responseData = {};
-    
-    // Só tentar fazer parse se há conteúdo
-    if (contentLength && parseInt(contentLength) > 0) {
-      try {
-        const rawBody = await req.text();
-        console.log('N8N Response raw body received:', rawBody);
-        
-        if (rawBody.trim()) {
-          responseData = JSON.parse(rawBody);
-        } else {
-          console.log('N8N Response empty body received');
+  // ---------- Parse robusto do body ----------
+  let payload: any = {};
+  const ctype = req.headers.get("content-type")?.toLowerCase() ?? "";
+
+  try {
+    if (ctype.includes("application/json")) {
+      payload = await req.json();
+    } else if (
+      ctype.includes("application/x-www-form-urlencoded") ||
+      ctype.includes("multipart/form-data")
+    ) {
+      const form = await req.formData();
+      payload = Object.fromEntries(form.entries());
+      for (const k of Object.keys(payload)) {
+        const v = payload[k];
+        if (typeof v === "string" && v.trim().startsWith("{") && v.trim().endsWith("}")) {
+          try { payload[k] = JSON.parse(v); } catch { /* ignore */ }
         }
-      } catch (parseError) {
-        console.error('N8N Response JSON parse error:', parseError);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Invalid JSON format in request body'
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       }
     } else {
-      console.log('N8N Response no content received - using empty object');
+      const text = await req.text();
+      if (text?.trim()) {
+        try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
+      }
     }
-    
-    console.log('N8N Response received:', responseData);
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Invalid request body", details: String(e) }),
+      { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } },
     );
+  }
 
-    // Dados esperados do N8N (com aliases)
-    const {
-      conversation_id,
-      conversationId,
-      response_message,
-      message,
-      text,
-      caption,
-      phone_number,
-      phoneNumber,
-      message_type,
-      messageType,
-      file_url,
-      fileUrl,
-      file_name,
-      fileName,
-      evolution_instance,
-      evolutionInstance,
-      instance,
-      metadata
-    } = responseData;
+  // ---------- Aliases & normalização ----------
+  const convIdAlias =
+    payload.conversation_id ??
+    payload.conversationId ??
+    payload.conversationID ??
+    payload.conversation ??
+    null;
 
-    // Usar aliases se disponíveis
-    const finalConversationId = conversation_id || conversationId;
-    const finalMessage = response_message || message || text || caption;
-    const finalPhoneNumber = phone_number || phoneNumber;
-    const finalFileUrl = file_url || fileUrl;
-    const finalFileName = file_name || fileName;
-    const finalEvolutionInstance = evolution_instance || evolutionInstance || instance;
+  const response_message =
+    payload.response_message ??
+    payload.message ??
+    payload.text ??
+    payload.caption ??
+    payload.content ??
+    null;
 
-    // Inferir tipo de mensagem pela extensão do arquivo se não especificado
-    const inferMessageType = (fileUrl: string): string => {
-      if (!fileUrl) return 'text';
-      const extension = fileUrl.split('.').pop()?.toLowerCase();
-      switch (extension) {
-        case 'jpg': case 'jpeg': case 'png': case 'gif': case 'webp':
-          return 'image';
-        case 'mp4': case 'mov': case 'avi': case 'webm':
-          return 'video';
-        case 'mp3': case 'wav': case 'ogg': case 'm4a': case 'opus':
-          return 'audio';
-        case 'pdf': case 'doc': case 'docx': case 'txt':
-          return 'document';
-        default:
-          return 'document';
-      }
-    };
+  const phone_number =
+    payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
 
-    const finalMessageType = message_type || messageType || inferMessageType(finalFileUrl || '');
+  const message_type_raw = (payload.message_type ?? payload.messageType ?? payload.type ?? "text");
+  const file_url  = payload.file_url  ?? payload.fileUrl  ?? payload.url      ?? null;
+  const file_name = payload.file_name ?? payload.fileName ?? payload.filename ?? null;
 
-    // Gerar conteúdo placeholder para mídia sem texto
-    const generateContentForMedia = (type: string, fileName?: string): string => {
-      switch (type) {
-        case 'image': return `📷 Imagem${fileName ? `: ${fileName}` : ''}`;
-        case 'video': return `🎥 Vídeo${fileName ? `: ${fileName}` : ''}`;
-        case 'audio': return `🎵 Áudio${fileName ? `: ${fileName}` : ''}`;
-        case 'document': return `📄 Documento${fileName ? `: ${fileName}` : ''}`;
-        default: return fileName || 'Arquivo';
-      }
-    };
+  const evolution_instance =
+    payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
 
-    // Validação mais específica para requests vazias vs dados inválidos
-    if (Object.keys(responseData).length === 0) {
-      console.log('N8N Response request vazia recebida - possivelmente teste de webhook');
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'N8N Response webhook funcionando. Envie dados com conversation_id e response_message para processar.'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+  const metadata = payload.metadata ?? payload.meta ?? null;
+
+  const sender_type = (payload.sender_type ?? "agent").toString().toLowerCase();
+
+  const inferMessageType = (url?: string): string => {
+    if (!url) return "text";
+    const ext = url.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "jpg": case "jpeg": case "png": case "gif": case "webp": return "image";
+      case "mp4": case "mov": case "avi": case "webm": return "video";
+      case "mp3": case "wav": case "ogg": case "m4a": case "opus": return "audio";
+      case "pdf": case "doc": case "docx": case "txt": return "document";
+      default: return "document";
     }
+  };
 
-    // Validação mais flexível - permitir mídia sem texto
-    const hasValidContent = finalMessage || (finalFileUrl && finalMessageType !== 'text');
-    
-    if (!finalConversationId && !finalPhoneNumber) {
-      console.error('N8N Response: É necessário conversation_id ou phone_number');
-      throw new Error('conversation_id ou phone_number são obrigatórios');
-    }
+  const finalMessageType = (message_type_raw || "").toString().toLowerCase() ||
+    inferMessageType(file_url || "");
 
-    if (!hasValidContent) {
-      console.error('N8N Response: Nenhum conteúdo válido encontrado:', { 
-        has_message: !!finalMessage,
-        has_file: !!finalFileUrl,
-        message_type: finalMessageType,
-        received_data: responseData
-      });
-      throw new Error('É necessário message/text ou file_url com tipo válido');
-    }
+  const hasValidContent = !!(response_message || (file_url && finalMessageType !== "text"));
 
-    let conversationId = finalConversationId;
-    
-    // Fallback: buscar conversa por phone_number se conversation_id não fornecido
-    if (!conversationId && finalPhoneNumber) {
-      // Sanitizar número de telefone (apenas dígitos)
-      const sanitizedPhone = finalPhoneNumber.replace(/\D/g, '');
-      console.log('N8N Response: Buscando conversa por phone_number:', sanitizedPhone);
-      
-      // Buscar contato pelo telefone (usando a coluna correta: phone)
-      let { data: contact } = await supabase
-        .from('contacts')
-        .select('id, name')
-        .eq('phone', sanitizedPhone)
+  // Ping: nada relevante enviado
+  if (!convIdAlias && !phone_number && !response_message && !file_url) {
+    return new Response(JSON.stringify({
+      success: true,
+      message: "Webhook ativo. Envie { conversation_id ou phone_number, response_message ou file_url } para registrar.",
+    }), { headers: { ...cors(req), "Content-Type": "application/json" } });
+  }
+
+  // Regras mínimas
+  if (!convIdAlias && !phone_number) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "conversation_id ou phone_number são obrigatórios",
+    }), { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } });
+  }
+
+  if (!hasValidContent) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "É necessário response_message ou file_url com tipo válido",
+    }), { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } });
+  }
+
+  // ---- Env vars / Supabase ----
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_URL || !SERVICE_ROLE) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Configuração ausente: SUPABASE_URL e/ou SUPABASE_SERVICE_ROLE_KEY",
+    }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
+  }
+
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
+    auth: { persistSession: false },
+    global: { headers: { "X-Client-Info": "lovable-n8n-responder" } },
+  });
+
+  try {
+    // ---------- Resolver conversation_id (fallback por phone_number) ----------
+    let conversation_id: string | null = convIdAlias;
+
+    if (!conversation_id && phone_number) {
+      const sanitized = String(phone_number).replace(/\D/g, "");
+      // 1) Busca/Cria contato
+      let { data: contact, error: contactErr } = await supabase
+        .from("contacts")
+        .select("id, name")
+        .eq("phone", sanitized)
         .single();
 
-      // Se não encontrou, criar novo contato
-      if (!contact) {
-        console.log('N8N Response: Criando novo contato para telefone:', sanitizedPhone);
-        const { data: newContact, error: contactError } = await supabase
-          .from('contacts')
-          .insert({
-            phone: sanitizedPhone,
-            name: `Contato ${sanitizedPhone}`,
-            created_at: new Date().toISOString()
-          })
-          .select('id, name')
-          .single();
-
-        if (contactError) {
-          throw new Error(`Erro ao criar contato: ${contactError.message}`);
-        }
-        contact = newContact;
-        console.log('N8N Response: Novo contato criado:', contact.id);
+      if (contactErr && contactErr.code !== "PGRST116") {
+        throw new Error(`Erro ao buscar contato: ${contactErr.message}`);
       }
 
-      if (contact) {
-        // Buscar conversa existente para WhatsApp
-        const { data: existingConversation } = await supabase
-          .from('conversations')
-          .select('id')
-          .eq('contact_id', contact.id)
-          .eq('canal', 'whatsapp')
-          .eq('status', 'open')
+      if (!contact) {
+        const ins = await supabase
+          .from("contacts")
+          .insert({
+            phone: sanitized,
+            name: `Contato ${sanitized}`,
+            created_at: new Date().toISOString(),
+          })
+          .select("id, name")
           .single();
+        if (ins.error) throw new Error(`Erro ao criar contato: ${ins.error.message}`);
+        contact = ins.data;
+      }
 
-        if (existingConversation) {
-          conversationId = existingConversation.id;
-          console.log('N8N Response: Conversa WhatsApp encontrada:', conversationId);
-        } else {
-          // Criar nova conversa WhatsApp
-          const { data: newConversation, error: convError } = await supabase
-            .from('conversations')
-            .insert({
-              contact_id: contact.id,
-              canal: 'whatsapp',
-              status: 'open',
-              agente_ativo: false,
-              evolution_instance: finalEvolutionInstance || null,
-              last_activity_at: new Date().toISOString(),
-              last_message_at: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .select('id')
-            .single();
+      // 2) Busca conversa aberta no WhatsApp
+      const { data: existingConv, error: convSearchErr } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("contact_id", contact.id)
+        .eq("canal", "whatsapp")
+        .eq("status", "open")
+        .single();
 
-          if (convError) {
-            throw new Error(`Erro ao criar conversa WhatsApp: ${convError.message}`);
-          }
-          
-          conversationId = newConversation.id;
-          console.log('N8N Response: Nova conversa WhatsApp criada:', conversationId);
-        }
+      if (!existingConv) {
+        // Cria conversa
+        const insConv = await supabase
+          .from("conversations")
+          .insert({
+            contact_id: contact.id,
+            canal: "whatsapp",
+            status: "open",
+            agente_ativo: false,
+            evolution_instance: evolution_instance || null,
+            last_activity_at: new Date().toISOString(),
+            last_message_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+        if (insConv.error) throw new Error(`Erro ao criar conversa: ${insConv.error.message}`);
+        conversation_id = insConv.data.id;
+      } else {
+        conversation_id = existingConv.id;
       }
     }
 
-    // Verificar se a conversa existe e atualizar evolution_instance se fornecido
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('id', conversationId)
+    // ---------- Confirma conversa e opcionalmente atualiza evolution_instance ----------
+    const { data: conversation, error: convErr } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("id", conversation_id)
       .single();
 
+    if (convErr) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Erro ao buscar conversa",
+        details: convErr.message,
+        hint: (convErr as any).hint ?? (convErr as any).details ?? null,
+      }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
+    }
+
     if (!conversation) {
-      throw new Error('Conversa não encontrada');
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Conversa não encontrado",
+      }), { status: 404, headers: { ...cors(req), "Content-Type": "application/json" } });
     }
 
-    // Atualizar evolution_instance se fornecido e diferente
-    if (finalEvolutionInstance && finalEvolutionInstance !== conversation.evolution_instance) {
-      console.log('N8N Response: Atualizando evolution_instance da conversa:', { 
-        conversationId, 
-        oldInstance: conversation.evolution_instance, 
-        newInstance: finalEvolutionInstance 
-      });
+    if (evolution_instance && evolution_instance !== conversation.evolution_instance) {
       await supabase
-        .from('conversations')
-        .update({ evolution_instance: finalEvolutionInstance })
-        .eq('id', conversationId);
+        .from("conversations")
+        .update({ evolution_instance })
+        .eq("id", conversation_id);
     }
 
-    // Preparar conteúdo final - usar placeholder se necessário
-    const finalContent = finalMessage || generateContentForMedia(finalMessageType, finalFileName);
+    // ---------- Monta conteúdo (placeholder para mídia sem texto) ----------
+    const generateContentForMedia = (type: string, name?: string): string => {
+      switch (type) {
+        case "image": return `📷 Imagem${name ? `: ${name}` : ""}`;
+        case "video": return `🎥 Vídeo${name ? `: ${name}` : ""}`;
+        case "audio": return `🎵 Áudio${name ? `: ${name}` : ""}`;
+        case "document": return `📄 Documento${name ? `: ${name}` : ""}`;
+        default: return name || "Arquivo";
+      }
+    };
 
-    // Inserir resposta do agente via N8N
-    const { data: newMessage, error: messageError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        content: finalContent,
-        sender_type: 'agent',
-        message_type: finalMessageType,
-        file_url: finalFileUrl,
-        file_name: finalFileName,
-        status: 'sent',
-        origem_resposta: 'automatica',
-        metadata: metadata ? { n8n_data: metadata, source: 'n8n' } : { source: 'n8n' }
-      })
+    const finalContent = response_message || generateContentForMedia(finalMessageType, file_name);
+
+    // ---------- Insere mensagem ----------
+    const insertPayload: any = {
+      conversation_id,
+      content: finalContent,
+      sender_type,                  // ex.: 'agent' | 'ia'
+      message_type: finalMessageType, // 'text' | 'image' | 'video' | 'audio' | 'document'
+      file_url,
+      file_name,
+      status: "sent",
+      origem_resposta: "automatica",
+      metadata: metadata ? { n8n_data: metadata, source: "n8n" } : { source: "n8n" },
+    };
+
+    const { data: newMessage, error: msgErr } = await supabase
+      .from("messages")
+      .insert(insertPayload)
       .select()
       .single();
 
-    console.log('N8N Response - Inserindo mensagem:', {
-      conversation_id: conversationId,
-      content: finalContent,
-      sender_type: 'agent',
-      message_type: finalMessageType,
-      has_file: !!finalFileUrl,
-      file_name: finalFileName
-    });
-
-    if (messageError) {
-      throw new Error(`Erro ao inserir resposta: ${messageError.message}`);
+    if (msgErr) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Erro ao inserir resposta",
+        details: msgErr.message,
+        hint: (msgErr as any).hint ?? (msgErr as any).details ?? null,
+        payload: insertPayload,
+      }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
     }
 
-    // Atualizar última atividade da conversa
+    // ---------- Atualiza conversa ----------
     await supabase
-      .from('conversations')
-      .update({ 
+      .from("conversations")
+      .update({
         last_activity_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
-        unread_count: 0 // Resetar contador pois é resposta do agente
+        unread_count: 0,
       })
-      .eq('id', conversationId);
-
-    console.log('Resposta do N8N registrada no CRM:', newMessage.id);
+      .eq("id", conversation_id);
 
     return new Response(JSON.stringify({
       success: true,
       data: {
         message_id: newMessage.id,
-        conversation_id: conversationId,
-        registered_at: newMessage.created_at
-      }
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+        conversation_id,
+        registered_at: newMessage.created_at,
+      },
+    }), { headers: { ...cors(req), "Content-Type": "application/json" } });
 
-  } catch (error) {
-    console.error('Erro no webhook de resposta N8N:', error);
-    
+  } catch (err: any) {
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      error: "Falha inesperada",
+      details: String(err?.message ?? err),
+    }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
   }
 });
