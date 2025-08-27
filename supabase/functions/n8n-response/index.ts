@@ -1,156 +1,190 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const defaultCorsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Vary": "Origin",
 };
 
+function cors(req: Request, extra: Record<string, string> = {}) {
+  const reqHeaders = req.headers.get("access-control-request-headers") ?? "authorization, x-client-info, apikey, content-type";
+  return {
+    ...defaultCorsHeaders,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": reqHeaders,
+    ...extra,
+  };
+}
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  // Preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: cors(req) });
   }
 
-  try {
-    // Verificar se há conteúdo no body antes de tentar fazer parse
-    const contentType = req.headers.get('content-type');
-    const contentLength = req.headers.get('content-length');
-    
-    console.log('N8N Response request info:', {
-      method: req.method,
-      contentType,
-      contentLength,
-      url: req.url
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ success: false, error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...cors(req), "Content-Type": "application/json" },
     });
+  }
 
-    let responseData = {};
-    
-    // Só tentar fazer parse se há conteúdo
-    if (contentLength && parseInt(contentLength) > 0) {
-      try {
-        const rawBody = await req.text();
-        console.log('N8N Response raw body received:', rawBody);
-        
-        if (rawBody.trim()) {
-          responseData = JSON.parse(rawBody);
-        } else {
-          console.log('N8N Response empty body received');
+  // ---- Parse robusto do body ----
+  let payload: any = {};
+  const ctype = req.headers.get("content-type")?.toLowerCase() ?? "";
+
+  try {
+    if (ctype.includes("application/json")) {
+      payload = await req.json();
+    } else if (ctype.includes("application/x-www-form-urlencoded") || ctype.includes("multipart/form-data")) {
+      const form = await req.formData();
+      payload = Object.fromEntries(form.entries());
+      // se vier JSON stringado em algum campo (ex.: metadata), tenta parse:
+      for (const k of Object.keys(payload)) {
+        const v = payload[k];
+        if (typeof v === "string" && v.trim().startsWith("{") && v.trim().endsWith("}")) {
+          try { payload[k] = JSON.parse(v); } catch { /* ignore */ }
         }
-      } catch (parseError) {
-        console.error('N8N Response JSON parse error:', parseError);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Invalid JSON format in request body'
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       }
     } else {
-      console.log('N8N Response no content received - using empty object');
+      const text = await req.text();
+      if (text?.trim()) {
+        try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
+      }
     }
-    
-    console.log('N8N Response received:', responseData);
+  } catch (e) {
+    return new Response(JSON.stringify({ success: false, error: "Invalid request body", details: String(e) }), {
+      status: 400,
+      headers: { ...cors(req), "Content-Type": "application/json" },
+    });
+  }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+  // ---- Aliases de campos aceitos ----
+  const conversation_id =
+    payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
 
-    // Dados esperados do N8N
-    const {
-      conversation_id,
-      response_message,
-      phone_number,
-      message_type = 'text',
-      file_url,
-      file_name,
-      metadata
-    } = responseData;
+  const response_message =
+    payload.response_message ?? payload.message ?? payload.text ?? payload.content ?? null;
 
-    // Validação mais específica para requests vazias vs dados inválidos
-    if (Object.keys(responseData).length === 0) {
-      console.log('N8N Response request vazia recebida - possivelmente teste de webhook');
-      return new Response(JSON.stringify({
-        success: true,
-        message: 'N8N Response webhook funcionando. Envie dados com conversation_id e response_message para processar.'
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  const phone_number =
+    payload.phone_number ?? payload.phone ?? payload.to ?? null;
 
-    if (!conversation_id || !response_message) {
-      console.error('N8N Response dados obrigatórios faltando:', { 
-        conversation_id: !!conversation_id, 
-        response_message: !!response_message 
-      });
-      throw new Error('conversation_id e response_message são obrigatórios');
-    }
+  const message_type =
+    (payload.message_type ?? payload.type ?? "text").toString().toLowerCase();
 
-    // Verificar se a conversa existe
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('id', conversation_id)
+  const file_url  = payload.file_url  ?? payload.url      ?? null;
+  const file_name = payload.file_name ?? payload.filename ?? null;
+  const metadata  = payload.metadata  ?? payload.meta     ?? null;
+
+  // Request vazio (ping)
+  if (!conversation_id && !response_message && !phone_number) {
+    return new Response(JSON.stringify({
+      success: true,
+      message: "Webhook ativo. Envie { conversation_id, response_message } para registrar."
+    }), { headers: { ...cors(req), "Content-Type": "application/json" }});
+  }
+
+  // Valida obrigatórios
+  if (!conversation_id || !response_message) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "conversation_id e response_message são obrigatórios"
+    }), { status: 400, headers: { ...cors(req), "Content-Type": "application/json" }});
+  }
+
+  // ---- Env vars ----
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!SUPABASE_URL || !SERVICE_ROLE) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: "Configuração do servidor ausente: SUPABASE_URL e/ou SUPABASE_SERVICE_ROLE_KEY não definidos"
+    }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" }});
+  }
+
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
+    auth: { persistSession: false },
+    global: { headers: { "X-Client-Info": "lovable-n8n-responder" } },
+  });
+
+  try {
+    // Confirma existência da conversa
+    const { data: conversation, error: convErr } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("id", conversation_id)
       .single();
 
-    if (!conversation) {
-      throw new Error('Conversa não encontrada');
+    if (convErr) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Erro ao buscar conversa",
+        details: convErr.message,
+        hint: convErr.hint ?? convErr.details ?? null
+      }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" }});
     }
 
-    // Inserir resposta da IA do N8N
-    const { data: newMessage, error: messageError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversation_id,
-        content: response_message,
-        sender_type: 'ia',
-        message_type: message_type,
-        file_url: file_url,
-        file_name: file_name,
-        status: 'sent',
-        origem_resposta: 'automatica',
-        metadata: metadata ? { n8n_data: metadata, source: 'n8n' } : { source: 'n8n' }
-      })
+    if (!conversation) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Conversa não encontrada"
+      }), { status: 404, headers: { ...cors(req), "Content-Type": "application/json" }});
+    }
+
+    // Insere a mensagem
+    const insertPayload = {
+      conversation_id,
+      content: response_message,
+      sender_type: "ia",          // verifique se seu enum permite 'ia'
+      message_type,               // verifique valores aceitos (ex.: 'text', 'image'…)
+      file_url,
+      file_name,
+      status: "sent",
+      origem_resposta: "automatica", // remova se a coluna não existir
+      metadata: metadata ? { n8n_data: metadata, source: "n8n" } : { source: "n8n" },
+      phone_number,               // opcional: só se existir coluna
+    };
+
+    const { data: newMessage, error: msgErr } = await supabase
+      .from("messages")
+      .insert(insertPayload)
       .select()
       .single();
 
-    if (messageError) {
-      throw new Error(`Erro ao inserir resposta: ${messageError.message}`);
+    if (msgErr) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Erro ao inserir resposta",
+        details: msgErr.message,
+        hint: msgErr.hint ?? msgErr.details ?? null,
+        payload: insertPayload
+      }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" }});
     }
 
-    // Atualizar última atividade da conversa
+    // Atualiza conversa (mute erros não-críticos)
     await supabase
-      .from('conversations')
-      .update({ 
+      .from("conversations")
+      .update({
         last_activity_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
-        unread_count: 0 // Resetar contador pois é resposta da IA
+        unread_count: 0,
       })
-      .eq('id', conversation_id);
-
-    console.log('Resposta do N8N registrada no CRM:', newMessage.id);
+      .eq("id", conversation_id);
 
     return new Response(JSON.stringify({
       success: true,
       data: {
         message_id: newMessage.id,
-        conversation_id: conversation_id,
-        registered_at: newMessage.created_at
+        conversation_id,
+        registered_at: newMessage.created_at,
       }
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    }), { headers: { ...cors(req), "Content-Type": "application/json" }});
 
-  } catch (error) {
-    console.error('Erro no webhook de resposta N8N:', error);
-    
+  } catch (err: any) {
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      error: "Falha inesperada",
+      details: String(err?.message ?? err)
+    }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" }});
   }
 });
