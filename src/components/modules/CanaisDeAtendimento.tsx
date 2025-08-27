@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Triangle, 
+  Signal, 
   RefreshCcw, 
   List, 
   CheckCircle2, 
@@ -185,7 +185,7 @@ const CanaisDeAtendimentoPage = () => {
                     <TableCell className="text-center py-3 font-medium text-slate-800">{canal.nome}</TableCell>
                     <TableCell className="text-center py-3">
                       <div className="flex justify-center">
-                        <Triangle className="w-4 h-4 fill-green-500 text-green-500" />
+                        <Signal className="w-4 h-4 fill-green-500 text-green-500" />
                       </div>
                     </TableCell>
                     <TableCell className="text-center py-3">
