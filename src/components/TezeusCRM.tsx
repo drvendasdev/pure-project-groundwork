@@ -172,7 +172,7 @@ export function TezeusCRM() {
         }}
       />
       <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'p-4' : ''}`}>
-        <main className={`flex-1 overflow-y-auto ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'bg-white text-card-foreground shadow-lg rounded-lg border' : ''}`}>
+        <main className={`flex-1 overflow-y-auto ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'bg-white text-card-foreground shadow-lg rounded-lg border p-5' : ''}`}>
           {renderModule()}
         </main>
       </div>

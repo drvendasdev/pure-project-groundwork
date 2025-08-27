@@ -152,8 +152,7 @@ const CanaisDeAtendimentoPage = () => {
           <div className="flex gap-2">
             <Button
               onClick={() => setShowAddDialog(true)}
-              variant="default"
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              variant="yellow"
             >
               Adicionar Canal de Atendimento
             </Button>
@@ -203,7 +202,7 @@ const CanaisDeAtendimentoPage = () => {
                              <Button
                               size="sm"
                               variant="ghost"
-                              className="p-[3px] text-[#ffc500] hover:bg-transparent hover:text-[#ffc500] active:bg-transparent focus:bg-transparent"
+                              className="p-[3px] text-[#ffc500] hover:bg-transparent hover:text-[#ffc500] active:bg-transparent focus:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 transition-none"
                               onClick={() => handleRefresh(canal.id)}
                               disabled={loadingRefresh === canal.id}
                               aria-label="Atualizar sessão"
