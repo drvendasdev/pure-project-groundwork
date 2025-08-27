@@ -50,23 +50,191 @@ serve(async (req) => {
       console.log('No content received - using empty object');
     }
     
-    console.log('N8N Webhook received:', webhookData);
+    console.log('N8N Webhook received:', JSON.stringify(webhookData).substring(0, 500) + (JSON.stringify(webhookData).length > 500 ? '...' : ''));
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Processar dados do webhook n8n + Evolution API
-    const {
-      phoneNumber,
-      contactName,
-      message,
-      messageType = 'text',
-      timestamp,
-      // Campos específicos da Evolution API
-      evolutionData
-    } = webhookData;
+    // Helper para extrair dados de múltiplas estruturas
+    function extractFromPayload(webhookData: any) {
+      // Extrair evolution_instance de múltiplas fontes
+      const instance = webhookData.instance || 
+                      webhookData.instanceName || 
+                      webhookData.processed?.instanceName || 
+                      webhookData.original?.instance ||
+                      webhookData.original?.instanceName ||
+                      webhookData.data?.instance ||
+                      webhookData.instance_id ||
+                      webhookData.evolution_instance;
+      
+      // Tentar extrair phoneNumber de várias fontes
+      let phoneNumber = webhookData.phoneNumber || webhookData.sender;
+      
+      // Limpar @s.whatsapp.net se presente
+      if (phoneNumber && phoneNumber.includes('@s.whatsapp.net')) {
+        phoneNumber = phoneNumber.replace('@s.whatsapp.net', '');
+      }
+      
+      // Se não achou, tentar extrair de data.key.remoteJid
+      if (!phoneNumber && webhookData.data?.key?.remoteJid) {
+        phoneNumber = webhookData.data.key.remoteJid.replace('@s.whatsapp.net', '');
+      }
+      
+      // Helper para desencapsular mensagens do WhatsApp
+      function unwrapMessage(msgData: any): any {
+        if (!msgData) return null;
+        
+        // Desencapsular mensagens especiais
+        if (msgData.ephemeralMessage?.message) {
+          console.log('Unwrapping ephemeralMessage');
+          return unwrapMessage(msgData.ephemeralMessage.message);
+        }
+        if (msgData.viewOnceMessage?.message) {
+          console.log('Unwrapping viewOnceMessage');
+          return unwrapMessage(msgData.viewOnceMessage.message);
+        }
+        if (msgData.deviceSentMessage?.message) {
+          console.log('Unwrapping deviceSentMessage');
+          return unwrapMessage(msgData.deviceSentMessage.message);
+        }
+        
+        return msgData;
+      }
+      
+      // Tentar extrair message de várias fontes
+      let message = webhookData.message;
+      let messageType = webhookData.messageType || 'text';
+      let extractionPath = 'direct';
+      
+      if (!message && webhookData.data?.message) {
+        let msgData = unwrapMessage(webhookData.data.message);
+        
+        // Tentar extrair texto de múltiplas estruturas
+        if (msgData.conversation) {
+          message = msgData.conversation;
+          messageType = 'text';
+          extractionPath = 'conversation';
+        } else if (msgData.extendedTextMessage?.text) {
+          message = msgData.extendedTextMessage.text;
+          messageType = 'text';
+          extractionPath = 'extendedTextMessage.text';
+        } else if (msgData.text?.body) {
+          message = msgData.text.body;
+          messageType = 'text';
+          extractionPath = 'text.body';
+        } else if (msgData.body) {
+          message = msgData.body;
+          messageType = 'text';
+          extractionPath = 'body';
+        } else if (msgData.content) {
+          message = msgData.content;
+          messageType = 'text';
+          extractionPath = 'content';
+        } 
+        // Mensagens de botão
+        else if (msgData.buttonsResponseMessage?.selectedDisplayText) {
+          message = msgData.buttonsResponseMessage.selectedDisplayText;
+          messageType = 'button_response';
+          extractionPath = 'buttonsResponseMessage.selectedDisplayText';
+        } else if (msgData.templateButtonReplyMessage?.selectedDisplayText) {
+          message = msgData.templateButtonReplyMessage.selectedDisplayText;
+          messageType = 'template_button_reply';
+          extractionPath = 'templateButtonReplyMessage.selectedDisplayText';
+        } else if (msgData.listResponseMessage?.singleSelectReply?.selectedRowId) {
+          message = msgData.listResponseMessage.title || msgData.listResponseMessage.singleSelectReply.selectedRowId;
+          messageType = 'list_response';
+          extractionPath = 'listResponseMessage.selectedRowId';
+        }
+        // Mídia com caption
+        else if (msgData.imageMessage?.caption) {
+          message = msgData.imageMessage.caption || '[Imagen]';
+          messageType = 'image';
+          extractionPath = 'imageMessage.caption';
+        } else if (msgData.videoMessage?.caption) {
+          message = msgData.videoMessage.caption || '[Video]';
+          messageType = 'video';
+          extractionPath = 'videoMessage.caption';
+        } else if (msgData.documentMessage?.caption || msgData.documentMessage?.title || msgData.documentMessage?.fileName) {
+          message = msgData.documentMessage.caption || msgData.documentMessage.title || msgData.documentMessage.fileName || '[Documento]';
+          messageType = 'document';
+          extractionPath = 'documentMessage.caption/title/fileName';
+        }
+        // Mídia sem texto
+        else if (msgData.audioMessage) {
+          message = '[Audio]';
+          messageType = 'audio';
+          extractionPath = 'audioMessage';
+        } else if (msgData.stickerMessage) {
+          message = '[Sticker]';
+          messageType = 'sticker';
+          extractionPath = 'stickerMessage';
+        } else if (msgData.imageMessage) {
+          message = '[Imagen]';
+          messageType = 'image';
+          extractionPath = 'imageMessage';
+        } else if (msgData.videoMessage) {
+          message = '[Video]';
+          messageType = 'video';
+          extractionPath = 'videoMessage';
+        } else if (msgData.locationMessage) {
+          message = `[Localização] ${msgData.locationMessage.name || 'Localização compartilhada'}`;
+          messageType = 'location';
+          extractionPath = 'locationMessage';
+        } else if (msgData.contactMessage) {
+          message = `[Contato] ${msgData.contactMessage.displayName || 'Contato compartilhado'}`;
+          messageType = 'contact';
+          extractionPath = 'contactMessage';
+        }
+        
+        // Log das chaves disponíveis se não encontrou nada
+        if (!message && msgData) {
+          console.log('Message keys not recognized:', Object.keys(msgData));
+        }
+      }
+      
+      // Extrair contactName
+      const contactName = webhookData.contactName || webhookData.data?.pushName || phoneNumber;
+      
+      // Extrair timestamp
+      const timestamp = webhookData.timestamp || webhookData.data?.messageTimestamp;
+      
+      // Extrair external_id
+      const external_id = webhookData.external_id || webhookData.data?.key?.id;
+      
+      console.log('Message extraction:', { 
+        extractionPath, 
+        messageType, 
+        hasMessage: !!message,
+        messageLength: message?.length || 0
+      });
+      
+      return {
+        phoneNumber,
+        contactName,
+        message,
+        messageType,
+        timestamp,
+        external_id,
+        extractionPath,
+        evolutionInstance: instance,
+        evolutionData: webhookData.evolutionData || webhookData.data
+      };
+    }
+
+    // Extrair dados do payload
+    const extracted = extractFromPayload(webhookData);
+    const { phoneNumber, contactName, message, messageType, timestamp, external_id, extractionPath, evolutionInstance, evolutionData } = extracted;
+    
+    console.log('Extracted data:', { 
+      phoneNumber: phoneNumber?.substring(0, 8) + '***', 
+      hasMessage: !!message, 
+      messageType, 
+      hasTimestamp: !!timestamp,
+      hasExternalId: !!external_id,
+      evolutionInstance: evolutionInstance || 'not_found'
+    });
 
     // Validação mais específica para requests vazias vs dados inválidos
     if (Object.keys(webhookData).length === 0) {
@@ -79,13 +247,24 @@ serve(async (req) => {
       });
     }
 
-    if (!phoneNumber || !message) {
+    // Validação relaxada para permitir mídia sem texto
+    if (!phoneNumber) {
       console.error('Dados obrigatórios faltando:', { phoneNumber: !!phoneNumber, message: !!message });
-      throw new Error('phoneNumber e message são obrigatórios');
+      throw new Error('phoneNumber é obrigatório');
+    }
+    
+    if (!message) {
+      console.error('Nenhuma mensagem extraída. Dados disponíveis:', { 
+        phoneNumber: !!phoneNumber, 
+        extractionPath,
+        dataKeys: webhookData.data ? Object.keys(webhookData.data) : 'no data',
+        messageKeys: webhookData.data?.message ? Object.keys(webhookData.data.message) : 'no message'
+      });
+      throw new Error('Não foi possível extrair o conteúdo da mensagem');
     }
 
     // Deduplicação por external_id (quando fornecido)
-    const externalId = (webhookData as any).external_id ?? (webhookData as any)?.evolutionData?.key?.id ?? null;
+    const externalId = external_id;
     if (externalId) {
       const { data: existingMsg } = await supabase
         .from('messages')
@@ -151,6 +330,20 @@ serve(async (req) => {
 
     if (existingConversation) {
       conversation = existingConversation;
+      
+      // Atualizar evolution_instance se fornecido e diferente
+      if (evolutionInstance && evolutionInstance !== existingConversation.evolution_instance) {
+        console.log('Atualizando evolution_instance da conversa:', { 
+          conversationId: existingConversation.id, 
+          oldInstance: existingConversation.evolution_instance, 
+          newInstance: evolutionInstance 
+        });
+        await supabase
+          .from('conversations')
+          .update({ evolution_instance: evolutionInstance })
+          .eq('id', existingConversation.id);
+        conversation = { ...existingConversation, evolution_instance: evolutionInstance };
+      }
     } else {
       // Criar nova conversa - N8N gerencia a IA, não o sistema local
       const { data: newConversation, error: convError } = await supabase
@@ -159,7 +352,8 @@ serve(async (req) => {
           contact_id: contact.id,
           canal: 'whatsapp',
           agente_ativo: false, // N8N gerencia as respostas
-          status: 'open'
+          status: 'open',
+          evolution_instance: evolutionInstance || null
         })
         .select()
         .single();
@@ -168,20 +362,42 @@ serve(async (req) => {
         throw new Error(`Erro ao criar conversa: ${convError.message}`);
       }
       conversation = newConversation;
+      console.log('Nova conversa criada com evolution_instance:', evolutionInstance);
     }
+
+    // Verificar modo debug (enviar payload completo como content)
+    const url = new URL(req.url);
+    const debugRawAsMessage = url.searchParams.get('rawAsMessage') === '1' || 
+                             req.headers.get('x-debug-raw-as-message') === '1';
+    
+    // Preparar metadata completo
+    const metadata: any = {
+      raw: webhookData, // Payload completo sempre salvo aqui
+    };
+    
+    if (evolutionData) {
+      metadata.evolution_data = evolutionData;
+    }
+    
+    if (evolutionInstance) {
+      metadata.evolution_instance = evolutionInstance;
+    }
+
+    // Determinar content - usar payload completo em modo debug ou message extraído
+    const finalContent = debugRawAsMessage ? JSON.stringify(webhookData, null, 2) : message;
 
     // 3. Inserir mensagem
     const { data: newMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversation.id,
-        content: message,
+        content: finalContent,
         sender_type: 'contact',
         message_type: messageType,
         status: 'delivered',
         origem_resposta: 'manual',
         created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
-        metadata: evolutionData ? { evolution_data: evolutionData } : null,
+        metadata: metadata,
         external_id: externalId || null
       })
       .select()
@@ -255,11 +471,17 @@ serve(async (req) => {
         source: 'n8n',
         agent_config: agentConfig,
         message_data: {
-          content: message,
+          content: finalContent,
+          extracted_message: message,
+          extraction_path: extractionPath,
           phone_number: phoneNumber,
           contact_name: contactName,
-          timestamp: timestamp
-        }
+          timestamp: timestamp,
+          message_type: messageType,
+          external_id: externalId
+        },
+        debug_mode: debugRawAsMessage,
+        payload_size: JSON.stringify(webhookData).length
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
