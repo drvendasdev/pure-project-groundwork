@@ -64,12 +64,14 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   
   const { markAsRead } = useWhatsAppConversations();
 
-  // Fechar popover automaticamente quando não há notificações
+  // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
-    if (totalUnread === 0 && isNotificationOpen) {
-      setIsNotificationOpen(false);
+    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes") {
+      setExpandedGroups(prev => 
+        prev.includes("administracao") ? prev : [...prev, "administracao"]
+      );
     }
-  }, [totalUnread, isNotificationOpen]);
+  }, [activeModule]);
 
   const menuItems: (MenuItem & { group?: string })[] = [
     {
@@ -211,8 +213,8 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3",
           item.group && !isCollapsed && "pl-8",
           isActive 
-            ? "bg-sidebar-active text-sidebar-active-foreground hover:bg-sidebar-active"
-            : "hover:bg-hover-light text-muted-foreground"
+            ? "bg-yellow-100 text-gray-900 hover:bg-yellow-100"
+            : "hover:bg-gray-50 text-gray-700"
         )}
       >
         {item.icon}
@@ -254,7 +256,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       <div key={groupName}>
         <button
           onClick={() => toggleGroup(groupName)}
-          className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium hover:bg-accent rounded-md text-muted-foreground"
+          className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium hover:bg-gray-50 rounded-md text-gray-700"
         >
           {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           <span>{label}</span>
@@ -310,7 +312,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       >
         <h1 
           className={cn(
-            "font-bold transition-all duration-300 text-foreground",
+            "font-bold transition-all duration-300 text-black",
             isCollapsed ? "text-lg" : "text-2xl"
           )}
         >
