@@ -24,5 +24,3 @@ export const PipelineConfigModal: React.FC<PipelineConfigModalProps> = ({
     </Dialog>
   );
 };
-
-export default PipelineConfigModal;
