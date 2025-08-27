@@ -64,8 +64,9 @@ serve(async (req) => {
       response_message,
       message,
       text,
+      caption,
       phone_number,
-      message_type = 'text',
+      message_type,
       file_url,
       file_name,
       metadata
@@ -73,7 +74,38 @@ serve(async (req) => {
 
     // Usar aliases se disponíveis
     const finalConversationId = conversation_id || conversationId;
-    const finalMessage = response_message || message || text;
+    const finalMessage = response_message || message || text || caption;
+
+    // Inferir tipo de mensagem pela extensão do arquivo se não especificado
+    const inferMessageType = (fileUrl: string): string => {
+      if (!fileUrl) return 'text';
+      const extension = fileUrl.split('.').pop()?.toLowerCase();
+      switch (extension) {
+        case 'jpg': case 'jpeg': case 'png': case 'gif': case 'webp':
+          return 'image';
+        case 'mp4': case 'mov': case 'avi': case 'webm':
+          return 'video';
+        case 'mp3': case 'wav': case 'ogg': case 'm4a': case 'opus':
+          return 'audio';
+        case 'pdf': case 'doc': case 'docx': case 'txt':
+          return 'document';
+        default:
+          return 'document';
+      }
+    };
+
+    const finalMessageType = message_type || inferMessageType(file_url || '');
+
+    // Gerar conteúdo placeholder para mídia sem texto
+    const generateContentForMedia = (type: string, fileName?: string): string => {
+      switch (type) {
+        case 'image': return `📷 Imagem${fileName ? `: ${fileName}` : ''}`;
+        case 'video': return `🎥 Vídeo${fileName ? `: ${fileName}` : ''}`;
+        case 'audio': return `🎵 Áudio${fileName ? `: ${fileName}` : ''}`;
+        case 'document': return `📄 Documento${fileName ? `: ${fileName}` : ''}`;
+        default: return fileName || 'Arquivo';
+      }
+    };
 
     // Validação mais específica para requests vazias vs dados inválidos
     if (Object.keys(responseData).length === 0) {
@@ -86,34 +118,95 @@ serve(async (req) => {
       });
     }
 
-    if (!finalConversationId || !finalMessage) {
-      console.error('N8N Response dados obrigatórios faltando:', { 
-        conversation_id: !!finalConversationId, 
-        response_message: !!finalMessage,
+    // Validação mais flexível - permitir mídia sem texto
+    const hasValidContent = finalMessage || (file_url && finalMessageType !== 'text');
+    
+    if (!finalConversationId && !phone_number) {
+      console.error('N8N Response: É necessário conversation_id ou phone_number');
+      throw new Error('conversation_id ou phone_number são obrigatórios');
+    }
+
+    if (!hasValidContent) {
+      console.error('N8N Response: Nenhum conteúdo válido encontrado:', { 
+        has_message: !!finalMessage,
+        has_file: !!file_url,
+        message_type: finalMessageType,
         received_data: responseData
       });
-      throw new Error('conversation_id e response_message são obrigatórios');
+      throw new Error('É necessário message/text ou file_url com tipo válido');
+    }
+
+    let conversationId = finalConversationId;
+    
+    // Fallback: buscar conversa por phone_number se conversation_id não fornecido
+    if (!conversationId && phone_number) {
+      console.log('N8N Response: Buscando conversa por phone_number:', phone_number);
+      
+      // Buscar contato pelo telefone
+      const { data: contact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('phone_number', phone_number)
+        .single();
+
+      if (contact) {
+        // Buscar conversa existente
+        const { data: existingConversation } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('contact_id', contact.id)
+          .single();
+
+        if (existingConversation) {
+          conversationId = existingConversation.id;
+          console.log('N8N Response: Conversa encontrada pelo telefone:', conversationId);
+        } else {
+          // Criar nova conversa
+          const { data: newConversation, error: convError } = await supabase
+            .from('conversations')
+            .insert({
+              contact_id: contact.id,
+              status: 'open',
+              last_activity_at: new Date().toISOString(),
+              last_message_at: new Date().toISOString()
+            })
+            .select('id')
+            .single();
+
+          if (convError) {
+            throw new Error(`Erro ao criar conversa: ${convError.message}`);
+          }
+          
+          conversationId = newConversation.id;
+          console.log('N8N Response: Nova conversa criada:', conversationId);
+        }
+      } else {
+        throw new Error(`Contato não encontrado para o telefone: ${phone_number}`);
+      }
     }
 
     // Verificar se a conversa existe
     const { data: conversation } = await supabase
       .from('conversations')
       .select('*')
-      .eq('id', finalConversationId)
+      .eq('id', conversationId)
       .single();
 
     if (!conversation) {
       throw new Error('Conversa não encontrada');
     }
 
+    // Preparar conteúdo final - usar placeholder se necessário
+    const finalContent = finalMessage || generateContentForMedia(finalMessageType, file_name);
+
     // Inserir resposta do agente via N8N
     const { data: newMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
-        conversation_id: finalConversationId,
-        content: finalMessage,
+        conversation_id: conversationId,
+        content: finalContent,
         sender_type: 'agent',
-        message_type: message_type,
+        message_type: finalMessageType,
         file_url: file_url,
         file_name: file_name,
         status: 'sent',
@@ -123,11 +216,13 @@ serve(async (req) => {
       .select()
       .single();
 
-    console.log('N8N Response - Tentativa de inserir mensagem:', {
-      conversation_id: finalConversationId,
-      content: finalMessage,
+    console.log('N8N Response - Inserindo mensagem:', {
+      conversation_id: conversationId,
+      content: finalContent,
       sender_type: 'agent',
-      message_type: message_type
+      message_type: finalMessageType,
+      has_file: !!file_url,
+      file_name: file_name
     });
 
     if (messageError) {
@@ -142,7 +237,7 @@ serve(async (req) => {
         last_message_at: new Date().toISOString(),
         unread_count: 0 // Resetar contador pois é resposta do agente
       })
-      .eq('id', finalConversationId);
+      .eq('id', conversationId);
 
     console.log('Resposta do N8N registrada no CRM:', newMessage.id);
 
@@ -150,7 +245,7 @@ serve(async (req) => {
       success: true,
       data: {
         message_id: newMessage.id,
-        conversation_id: finalConversationId,
+        conversation_id: conversationId,
         registered_at: newMessage.created_at
       }
     }), {
