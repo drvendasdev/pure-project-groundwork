@@ -50,23 +50,85 @@ serve(async (req) => {
       console.log('No content received - using empty object');
     }
     
-    console.log('N8N Webhook received:', webhookData);
+    console.log('N8N Webhook received:', JSON.stringify(webhookData).substring(0, 500) + (JSON.stringify(webhookData).length > 500 ? '...' : ''));
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Processar dados do webhook n8n + Evolution API
-    const {
-      phoneNumber,
-      contactName,
-      message,
-      messageType = 'text',
-      timestamp,
-      // Campos específicos da Evolution API
-      evolutionData
-    } = webhookData;
+    // Helper para extrair dados de múltiplas estruturas
+    function extractFromPayload(webhookData: any) {
+      // Tentar extrair phoneNumber de várias fontes
+      let phoneNumber = webhookData.phoneNumber || webhookData.sender;
+      
+      // Se não achou, tentar extrair de data.key.remoteJid
+      if (!phoneNumber && webhookData.data?.key?.remoteJid) {
+        phoneNumber = webhookData.data.key.remoteJid.replace('@s.whatsapp.net', '');
+      }
+      
+      // Tentar extrair message de várias fontes
+      let message = webhookData.message;
+      let messageType = webhookData.messageType || 'text';
+      
+      if (!message && webhookData.data?.message) {
+        const msgData = webhookData.data.message;
+        
+        if (msgData.conversation) {
+          message = msgData.conversation;
+          messageType = 'text';
+        } else if (msgData.extendedTextMessage?.text) {
+          message = msgData.extendedTextMessage.text;
+          messageType = 'text';
+        } else if (msgData.imageMessage?.caption) {
+          message = msgData.imageMessage.caption || '[Imagen]';
+          messageType = 'image';
+        } else if (msgData.videoMessage?.caption) {
+          message = msgData.videoMessage.caption || '[Video]';
+          messageType = 'video';
+        } else if (msgData.documentMessage?.title) {
+          message = msgData.documentMessage.title || '[Documento]';
+          messageType = 'document';
+        } else if (msgData.audioMessage) {
+          message = '[Audio]';
+          messageType = 'audio';
+        } else if (msgData.stickerMessage) {
+          message = '[Sticker]';
+          messageType = 'sticker';
+        }
+      }
+      
+      // Extrair contactName
+      const contactName = webhookData.contactName || webhookData.data?.pushName || phoneNumber;
+      
+      // Extrair timestamp
+      const timestamp = webhookData.timestamp || webhookData.data?.messageTimestamp;
+      
+      // Extrair external_id
+      const external_id = webhookData.external_id || webhookData.data?.key?.id;
+      
+      return {
+        phoneNumber,
+        contactName,
+        message,
+        messageType,
+        timestamp,
+        external_id,
+        evolutionData: webhookData.evolutionData || webhookData.data
+      };
+    }
+
+    // Extrair dados do payload
+    const extracted = extractFromPayload(webhookData);
+    const { phoneNumber, contactName, message, messageType, timestamp, external_id, evolutionData } = extracted;
+    
+    console.log('Extracted data:', { 
+      phoneNumber: phoneNumber?.substring(0, 8) + '***', 
+      hasMessage: !!message, 
+      messageType, 
+      hasTimestamp: !!timestamp,
+      hasExternalId: !!external_id 
+    });
 
     // Validação mais específica para requests vazias vs dados inválidos
     if (Object.keys(webhookData).length === 0) {
@@ -85,7 +147,7 @@ serve(async (req) => {
     }
 
     // Deduplicação por external_id (quando fornecido)
-    const externalId = (webhookData as any).external_id ?? (webhookData as any)?.evolutionData?.key?.id ?? null;
+    const externalId = external_id;
     if (externalId) {
       const { data: existingMsg } = await supabase
         .from('messages')
@@ -170,18 +232,35 @@ serve(async (req) => {
       conversation = newConversation;
     }
 
+    // Verificar modo debug (enviar payload completo como content)
+    const url = new URL(req.url);
+    const debugRawAsMessage = url.searchParams.get('rawAsMessage') === '1' || 
+                             req.headers.get('x-debug-raw-as-message') === '1';
+    
+    // Preparar metadata completo
+    const metadata: any = {
+      raw: webhookData, // Payload completo sempre salvo aqui
+    };
+    
+    if (evolutionData) {
+      metadata.evolution_data = evolutionData;
+    }
+
+    // Determinar content - usar payload completo em modo debug ou message extraído
+    const finalContent = debugRawAsMessage ? JSON.stringify(webhookData, null, 2) : message;
+
     // 3. Inserir mensagem
     const { data: newMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversation.id,
-        content: message,
+        content: finalContent,
         sender_type: 'contact',
         message_type: messageType,
         status: 'delivered',
         origem_resposta: 'manual',
         created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
-        metadata: evolutionData ? { evolution_data: evolutionData } : null,
+        metadata: metadata,
         external_id: externalId || null
       })
       .select()
@@ -255,11 +334,16 @@ serve(async (req) => {
         source: 'n8n',
         agent_config: agentConfig,
         message_data: {
-          content: message,
+          content: finalContent,
+          extracted_message: message,
           phone_number: phoneNumber,
           contact_name: contactName,
-          timestamp: timestamp
-        }
+          timestamp: timestamp,
+          message_type: messageType,
+          external_id: externalId
+        },
+        debug_mode: debugRawAsMessage,
+        payload_size: JSON.stringify(webhookData).length
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
