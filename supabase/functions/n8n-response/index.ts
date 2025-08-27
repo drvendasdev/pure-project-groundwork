@@ -140,48 +140,76 @@ serve(async (req) => {
     
     // Fallback: buscar conversa por phone_number se conversation_id não fornecido
     if (!conversationId && phone_number) {
-      console.log('N8N Response: Buscando conversa por phone_number:', phone_number);
+      // Sanitizar número de telefone (apenas dígitos)
+      const sanitizedPhone = phone_number.replace(/\D/g, '');
+      console.log('N8N Response: Buscando conversa por phone_number:', sanitizedPhone);
       
-      // Buscar contato pelo telefone
-      const { data: contact } = await supabase
+      // Buscar contato pelo telefone (usando a coluna correta: phone)
+      let { data: contact } = await supabase
         .from('contacts')
-        .select('id')
-        .eq('phone_number', phone_number)
+        .select('id, name')
+        .eq('phone', sanitizedPhone)
         .single();
 
+      // Se não encontrou, criar novo contato
+      if (!contact) {
+        console.log('N8N Response: Criando novo contato para telefone:', sanitizedPhone);
+        const { data: newContact, error: contactError } = await supabase
+          .from('contacts')
+          .insert({
+            phone: sanitizedPhone,
+            name: `Contato ${sanitizedPhone}`,
+            created_at: new Date().toISOString()
+          })
+          .select('id, name')
+          .single();
+
+        if (contactError) {
+          throw new Error(`Erro ao criar contato: ${contactError.message}`);
+        }
+        contact = newContact;
+        console.log('N8N Response: Novo contato criado:', contact.id);
+      }
+
       if (contact) {
-        // Buscar conversa existente
+        // Buscar conversa existente para WhatsApp
         const { data: existingConversation } = await supabase
           .from('conversations')
           .select('id')
           .eq('contact_id', contact.id)
+          .eq('canal', 'whatsapp')
+          .eq('status', 'open')
           .single();
 
         if (existingConversation) {
           conversationId = existingConversation.id;
-          console.log('N8N Response: Conversa encontrada pelo telefone:', conversationId);
+          console.log('N8N Response: Conversa WhatsApp encontrada:', conversationId);
         } else {
-          // Criar nova conversa
+          // Criar nova conversa WhatsApp
           const { data: newConversation, error: convError } = await supabase
             .from('conversations')
             .insert({
               contact_id: contact.id,
+              phone_number: sanitizedPhone,
+              contact_name: contact.name,
+              canal: 'whatsapp',
               status: 'open',
+              agente_ativo: false,
               last_activity_at: new Date().toISOString(),
-              last_message_at: new Date().toISOString()
+              last_message_at: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
             })
             .select('id')
             .single();
 
           if (convError) {
-            throw new Error(`Erro ao criar conversa: ${convError.message}`);
+            throw new Error(`Erro ao criar conversa WhatsApp: ${convError.message}`);
           }
           
           conversationId = newConversation.id;
-          console.log('N8N Response: Nova conversa criada:', conversationId);
+          console.log('N8N Response: Nova conversa WhatsApp criada:', conversationId);
         }
-      } else {
-        throw new Error(`Contato não encontrado para o telefone: ${phone_number}`);
       }
     }
 
