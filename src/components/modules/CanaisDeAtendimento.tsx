@@ -338,16 +338,8 @@ const CanaisDeAtendimentoPage = () => {
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="flex items-center justify-between">
+                <DialogTitle>
                   <span>Adicionar Canal de Atendimento</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowAddDialog(false)}
-                    className="h-6 w-6 rounded-sm opacity-70 hover:opacity-100"
-                  >
-                    <Plus className="h-4 w-4 rotate-45" />
-                  </Button>
                 </DialogTitle>
                 
                 {/* Stepper */}
