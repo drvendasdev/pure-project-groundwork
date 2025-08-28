@@ -7,7 +7,9 @@ import {
   Pencil, 
   Trash2, 
   Plus,
-  Trash
+  Trash,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -52,6 +54,20 @@ import {
 } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface Canal {
   id: string;
@@ -87,20 +103,51 @@ const CanaisDeAtendimentoPage = () => {
   const [showDeletedDialog, setShowDeletedDialog] = useState(false);
   const [selectedCanal, setSelectedCanal] = useState<Canal | null>(null);
   const [loadingRefresh, setLoadingRefresh] = useState<string | null>(null);
-  const [novoCanal, setNovoCanal] = useState({ nome: '', numero: '' });
+  const [novoCanal, setNovoCanal] = useState({ 
+    nome: '', 
+    numero: '',
+    recoverFromInDays: '0',
+    recoverMessages: false,
+    isDefault: false,
+    groupMessages: true,
+    syncContacts: true,
+    autoTransformToCommercialOrder: true,
+    allowReceiveCalls: false,
+    showTicketsWithoutQueue: true,
+    pipelineId: '',
+    filas: [] as string[],
+    promptId: '',
+    token: ''
+  });
   const [editNome, setEditNome] = useState('');
 
   const handleAddCanal = () => {
     if (novoCanal.nome && novoCanal.numero) {
+      console.log('Dados do novo canal:', novoCanal);
       const newCanal: Canal = {
         id: Date.now().toString(),
         nome: novoCanal.nome,
         numero: novoCanal.numero,
         atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        padrao: false
+        padrao: novoCanal.isDefault
       };
       setCanais([...canais, newCanal]);
-      setNovoCanal({ nome: '', numero: '' });
+      setNovoCanal({ 
+        nome: '', 
+        numero: '',
+        recoverFromInDays: '0',
+        recoverMessages: false,
+        isDefault: false,
+        groupMessages: true,
+        syncContacts: true,
+        autoTransformToCommercialOrder: true,
+        allowReceiveCalls: false,
+        showTicketsWithoutQueue: true,
+        pipelineId: '',
+        filas: [],
+        promptId: '',
+        token: ''
+      });
       setShowAddDialog(false);
     }
   };
@@ -289,40 +336,245 @@ const CanaisDeAtendimentoPage = () => {
 
           {/* Dialog Adicionar Canal */}
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Adicionar Canal de Atendimento</DialogTitle>
-                <DialogDescription>
-                  Preencha as informações do novo canal de atendimento.
-                </DialogDescription>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>Adicionar Canal de Atendimento</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowAddDialog(false)}
+                    className="h-6 w-6 rounded-sm opacity-70 hover:opacity-100"
+                  >
+                    <Plus className="h-4 w-4 rotate-45" />
+                  </Button>
+                </DialogTitle>
+                
+                {/* Stepper */}
+                <div className="flex items-center justify-center py-4">
+                  <div className="flex items-center">
+                    <div className="flex items-center">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ffc500] text-white text-sm font-medium">
+                        <Check className="h-4 w-4" />
+                      </div>
+                      <span className="ml-2 text-sm font-medium text-[#ffc500]">Selecionar Canal de Atendimento</span>
+                    </div>
+                    <div className="w-16 h-0.5 bg-[#ffc500] mx-4"></div>
+                    <div className="flex items-center">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ffc500] text-white text-sm font-medium">
+                        2
+                      </div>
+                      <span className="ml-2 text-sm font-medium text-[#ffc500]">Configurar WhatsApp</span>
+                    </div>
+                  </div>
+                </div>
               </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="nome">Nome</Label>
+              
+              <div className="space-y-6 py-4">
+                {/* Nome Field */}
+                <div className="space-y-2">
+                  <Label htmlFor="nome" className="text-sm font-medium">Nome *</Label>
                   <Input
                     id="nome"
                     value={novoCanal.nome}
                     onChange={(e) => setNovoCanal({...novoCanal, nome: e.target.value})}
-                    placeholder="Ex: CDE OFICIAL (21)99999-9999"
+                    placeholder="Nome do canal"
+                    className={`${!novoCanal.nome ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
                   />
+                  {!novoCanal.nome && <p className="text-xs text-red-500">Nome é obrigatório</p>}
                 </div>
-                <div>
-                  <Label htmlFor="numero">Número</Label>
+
+                {/* Recovery Settings */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Recuperar mensagens a partir de</Label>
+                    <Select 
+                      value={novoCanal.recoverFromInDays} 
+                      onValueChange={(value) => setNovoCanal({...novoCanal, recoverFromInDays: value})}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione o período" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50">
+                        <SelectItem value="0">Nenhuma</SelectItem>
+                        <SelectItem value="1">1 dia</SelectItem>
+                        <SelectItem value="7">7 dias</SelectItem>
+                        <SelectItem value="30">30 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="recoverMessages"
+                      checked={novoCanal.recoverMessages}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, recoverMessages: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="recoverMessages" className="text-sm">Recuperar mensagens antigas</Label>
+                  </div>
+                </div>
+
+                {/* Switch Options Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="isDefault"
+                      checked={novoCanal.isDefault}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, isDefault: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="isDefault" className="text-sm">Canal de atendimento padrão</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="groupMessages"
+                      checked={novoCanal.groupMessages}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, groupMessages: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="groupMessages" className="text-sm">Receber mensagens de grupos</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="syncContacts"
+                      checked={novoCanal.syncContacts}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, syncContacts: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="syncContacts" className="text-sm">Sincronizar contatos</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="autoTransformToCommercialOrder"
+                      checked={novoCanal.autoTransformToCommercialOrder}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, autoTransformToCommercialOrder: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="autoTransformToCommercialOrder" className="text-sm">Criar card no CRM automaticamente</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="allowReceiveCalls"
+                      checked={novoCanal.allowReceiveCalls}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, allowReceiveCalls: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="allowReceiveCalls" className="text-sm">Enviar mensagem de recusa de ligação</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="showTicketsWithoutQueue"
+                      checked={novoCanal.showTicketsWithoutQueue}
+                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, showTicketsWithoutQueue: checked})}
+                      className="data-[state=checked]:bg-[#ffc500]"
+                    />
+                    <Label htmlFor="showTicketsWithoutQueue" className="text-sm">Mostrar conversas sem fila para usuários</Label>
+                  </div>
+                </div>
+
+                {/* Pipeline Selection */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Selecionar Pipeline</Label>
+                  <Select 
+                    value={novoCanal.pipelineId} 
+                    onValueChange={(value) => setNovoCanal({...novoCanal, pipelineId: value})}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione um pipeline" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="vendas">Pipeline de Vendas</SelectItem>
+                      <SelectItem value="suporte">Pipeline de Suporte</SelectItem>
+                      <SelectItem value="leads">Pipeline de Leads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filas Selection */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Filas</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between"
+                      >
+                        {novoCanal.filas.length > 0 
+                          ? `${novoCanal.filas.length} fila(s) selecionada(s)`
+                          : "Selecione as filas"
+                        }
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 bg-popover z-50" align="start">
+                      <div className="p-4 space-y-3">
+                        {['Vendas', 'Suporte', 'Financeiro', 'Geral'].map((fila) => (
+                          <div key={fila} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`fila-${fila}`}
+                              checked={novoCanal.filas.includes(fila)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setNovoCanal({...novoCanal, filas: [...novoCanal.filas, fila]});
+                                } else {
+                                  setNovoCanal({...novoCanal, filas: novoCanal.filas.filter(f => f !== fila)});
+                                }
+                              }}
+                            />
+                            <Label htmlFor={`fila-${fila}`} className="text-sm">{fila}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* DS Agente Selection */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">DS Agente</Label>
+                  <Select 
+                    value={novoCanal.promptId} 
+                    onValueChange={(value) => setNovoCanal({...novoCanal, promptId: value})}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione um agente" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="agente1">Agente de Vendas</SelectItem>
+                      <SelectItem value="agente2">Agente de Suporte</SelectItem>
+                      <SelectItem value="agente3">Agente Geral</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Token Field */}
+                <div className="space-y-2">
+                  <Label htmlFor="token" className="text-sm font-medium">Token</Label>
                   <Input
-                    id="numero"
-                    value={novoCanal.numero}
-                    onChange={(e) => setNovoCanal({...novoCanal, numero: e.target.value})}
-                    placeholder="Ex: 5521999999999"
+                    id="token"
+                    type="password"
+                    value={novoCanal.token}
+                    onChange={(e) => setNovoCanal({...novoCanal, token: e.target.value})}
+                    placeholder="Token de acesso"
+                    className="focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]"
                   />
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-                  Cancelar
+
+              <DialogFooter className="gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowAddDialog(false)}
+                  className="px-6"
+                >
+                  Voltar
                 </Button>
                 <Button 
                   onClick={handleAddCanal}
                   variant="yellow"
+                  className="px-6"
+                  disabled={!novoCanal.nome}
                 >
                   Adicionar
                 </Button>
