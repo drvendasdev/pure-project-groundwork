@@ -3,21 +3,15 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface DeletarUsuarioModalProps {
+interface DeletarCargoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  userName: string;
+  cargoName: string;
   isDarkMode?: boolean;
 }
 
-export function DeletarUsuarioModal({ 
-  isOpen, 
-  onClose, 
-  onConfirm,
-  userName,
-  isDarkMode = false 
-}: DeletarUsuarioModalProps) {
+export function DeletarCargoModal({ isOpen, onClose, onConfirm, cargoName, isDarkMode = false }: DeletarCargoModalProps) {
   const handleConfirm = () => {
     onConfirm();
     onClose();
@@ -37,7 +31,7 @@ export function DeletarUsuarioModal({
             isDarkMode ? "text-white" : "text-gray-900"
           )}>
             <AlertTriangle className="w-5 h-5 text-red-500" />
-            Excluir {userName}?
+            Deletar {cargoName}?
           </DialogTitle>
         </DialogHeader>
 
@@ -46,7 +40,7 @@ export function DeletarUsuarioModal({
             "text-sm",
             isDarkMode ? "text-gray-300" : "text-gray-600"
           )}>
-            <strong>Atenção!</strong> Todos os dados do usuário serão perdidos. Os atendimentos abertos deste usuário serão movidos para a fila.
+            <strong>Atenção!</strong> Todos os dados do cargo serão perdidos. Os usuários com este cargo serão desvinculados.
           </p>
         </div>
 
