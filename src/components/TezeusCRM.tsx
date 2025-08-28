@@ -171,8 +171,8 @@ export function TezeusCRM() {
           navigate(`/conversas?id=${conversationId}`);
         }}
       />
-      <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' ? 'p-4' : ''}`}>
-        <main className={`flex-1 overflow-y-auto ${activeModule === 'conversas' ? 'bg-white text-card-foreground shadow-lg rounded-lg border' : ''}`}>
+      <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'p-4' : ''}`}>
+        <main className={`flex-1 overflow-y-auto ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'bg-white text-card-foreground shadow-lg rounded-lg border p-5' : ''}`}>
           {renderModule()}
         </main>
       </div>

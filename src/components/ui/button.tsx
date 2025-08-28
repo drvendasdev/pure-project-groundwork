@@ -20,6 +20,7 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // Tezeus custom variants
         yellow: "bg-brand-yellow text-black hover:bg-brand-yellow-hover font-medium",
+        outlineYellow: "bg-white text-[#ffc500] border border-[#ffc500] hover:bg-gray-100 hover:text-[#ffc500] focus-visible:ring-[#ffc500]/40",
         success: "bg-success text-success-foreground hover:bg-success/90",
         warning: "bg-warning text-warning-foreground hover:bg-warning/90",
       },
