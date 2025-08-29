@@ -148,6 +148,8 @@ const CanaisDeAtendimentoPage = () => {
     promptId: '',
     token: ''
   });
+  const [showQrDialog, setShowQrDialog] = useState(false);
+  const [qrCanal, setQrCanal] = useState<Canal | null>(null);
   
 
   const handleSaveCanal = () => {
@@ -296,6 +298,11 @@ const CanaisDeAtendimentoPage = () => {
     ));
   };
 
+  const handleOpenQrDialog = (canal: Canal) => {
+    setQrCanal(canal);
+    setShowQrDialog(true);
+  };
+
   return (
     <TooltipProvider>
       <div className="h-full">
@@ -413,14 +420,24 @@ const CanaisDeAtendimentoPage = () => {
                       </Button>
                     </>
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleToggleConexao(canal.id)}
-                      className="flex-1 h-8 text-xs"
-                    >
-                      Conectar
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="yellow"
+                        onClick={() => handleToggleConexao(canal.id)}
+                        className="flex-1 h-8 text-xs"
+                      >
+                        Conectar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenQrDialog(canal)}
+                        className="flex-1 h-8 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
+                      >
+                        Novo QR CODE
+                      </Button>
+                    </>
                   )}
                   <Button
                     size="sm"
@@ -756,6 +773,46 @@ const CanaisDeAtendimentoPage = () => {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowDeletedDialog(false)}>
                   Fechar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Dialog QR Code */}
+          <Dialog open={showQrDialog} onOpenChange={setShowQrDialog}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Novo QR CODE</DialogTitle>
+                <DialogDescription>
+                  Gerar novo QR Code para conectar o WhatsApp - {qrCanal?.nome}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="flex flex-col items-center space-y-4 py-6">
+                <div className="w-48 h-48 bg-slate-100 rounded-lg flex items-center justify-center border-2 border-dashed border-slate-300">
+                  <div className="text-center text-slate-500">
+                    <MessageCircle className="w-12 h-12 mx-auto mb-2" />
+                    <p className="text-sm">QR Code será gerado aqui</p>
+                    <p className="text-xs mt-1">Via Evolution API</p>
+                  </div>
+                </div>
+                
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-slate-600">
+                    Escaneie o QR Code com seu WhatsApp para conectar o canal
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Este recurso será integrado com a Evolution API em breve
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowQrDialog(false)}>
+                  Fechar
+                </Button>
+                <Button variant="yellow" disabled>
+                  Gerar QR Code
                 </Button>
               </DialogFooter>
             </DialogContent>
