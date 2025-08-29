@@ -90,6 +90,17 @@ interface Canal {
   atualizadoEm: string;
   padrao: boolean;
   conectado?: boolean;
+  recoverFromInDays?: string;
+  recoverMessages?: boolean;
+  groupMessages?: boolean;
+  syncContacts?: boolean;
+  autoTransformToCommercialOrder?: boolean;
+  allowReceiveCalls?: boolean;
+  showTicketsWithoutQueue?: boolean;
+  pipelineId?: string;
+  filas?: string[];
+  promptId?: string;
+  token?: string;
 }
 
 const CanaisDeAtendimentoPage = () => {
@@ -115,11 +126,12 @@ const CanaisDeAtendimentoPage = () => {
   const [canaisDeletados, setCanaisDeletados] = useState<Canal[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showRegistrosSheet, setShowRegistrosSheet] = useState(false);
   const [showDeletedDialog, setShowDeletedDialog] = useState(false);
   const [selectedCanal, setSelectedCanal] = useState<Canal | null>(null);
   const [loadingRefresh, setLoadingRefresh] = useState<string | null>(null);
+  const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [novoCanal, setNovoCanal] = useState({ 
     nome: '', 
     numero: '',
@@ -136,37 +148,75 @@ const CanaisDeAtendimentoPage = () => {
     promptId: '',
     token: ''
   });
-  const [editNome, setEditNome] = useState('');
+  
 
-  const handleAddCanal = () => {
-    if (novoCanal.nome && novoCanal.numero) {
-      console.log('Dados do novo canal:', novoCanal);
+  const handleSaveCanal = () => {
+    if (!novoCanal.nome || !novoCanal.numero) return;
+
+    const canalData = {
+      nome: novoCanal.nome,
+      numero: novoCanal.numero,
+      atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      padrao: novoCanal.isDefault,
+      recoverFromInDays: novoCanal.recoverFromInDays,
+      recoverMessages: novoCanal.recoverMessages,
+      groupMessages: novoCanal.groupMessages,
+      syncContacts: novoCanal.syncContacts,
+      autoTransformToCommercialOrder: novoCanal.autoTransformToCommercialOrder,
+      allowReceiveCalls: novoCanal.allowReceiveCalls,
+      showTicketsWithoutQueue: novoCanal.showTicketsWithoutQueue,
+      pipelineId: novoCanal.pipelineId,
+      filas: novoCanal.filas,
+      promptId: novoCanal.promptId,
+      token: novoCanal.token
+    };
+
+    if (formMode === 'add') {
       const newCanal: Canal = {
         id: Date.now().toString(),
-        nome: novoCanal.nome,
-        numero: novoCanal.numero,
-        atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        padrao: novoCanal.isDefault
+        conectado: false,
+        ...canalData
       };
-      setCanais([...canais, newCanal]);
-      setNovoCanal({ 
-        nome: '', 
-        numero: '',
-        recoverFromInDays: '0',
-        recoverMessages: false,
-        isDefault: false,
-        groupMessages: true,
-        syncContacts: true,
-        autoTransformToCommercialOrder: true,
-        allowReceiveCalls: false,
-        showTicketsWithoutQueue: true,
-        pipelineId: '',
-        filas: [],
-        promptId: '',
-        token: ''
-      });
-      setShowAddDialog(false);
+      
+      // Se este canal for padrão, remover padrão dos outros
+      if (novoCanal.isDefault) {
+        setCanais(prev => prev.map(c => ({ ...c, padrao: false })));
+      }
+      
+      setCanais(prev => [...prev, newCanal]);
+    } else if (formMode === 'edit' && editingId) {
+      // Se este canal for padrão, remover padrão dos outros
+      if (novoCanal.isDefault) {
+        setCanais(prev => prev.map(c => ({ ...c, padrao: c.id === editingId })));
+      }
+      
+      setCanais(prev => prev.map(c => 
+        c.id === editingId 
+          ? { ...c, ...canalData }
+          : c
+      ));
     }
+
+    // Reset form
+    setNovoCanal({ 
+      nome: '', 
+      numero: '',
+      recoverFromInDays: '0',
+      recoverMessages: false,
+      isDefault: false,
+      groupMessages: true,
+      syncContacts: true,
+      autoTransformToCommercialOrder: true,
+      allowReceiveCalls: false,
+      showTicketsWithoutQueue: true,
+      pipelineId: '',
+      filas: [],
+      promptId: '',
+      token: ''
+    });
+    setShowAddDialog(false);
+    setFormMode('add');
+    setEditingId(null);
   };
 
   const handleDeleteCanal = (canal: Canal) => {
@@ -176,17 +226,48 @@ const CanaisDeAtendimentoPage = () => {
     setSelectedCanal(null);
   };
 
-  const handleEditCanal = () => {
-    if (selectedCanal && editNome) {
-      setCanais(canais.map(c => 
-        c.id === selectedCanal.id 
-          ? { ...c, nome: editNome }
-          : c
-      ));
-      setShowEditDialog(false);
-      setSelectedCanal(null);
-      setEditNome('');
-    }
+  const handleOpenAddModal = () => {
+    setFormMode('add');
+    setEditingId(null);
+    setNovoCanal({ 
+      nome: '', 
+      numero: '',
+      recoverFromInDays: '0',
+      recoverMessages: false,
+      isDefault: false,
+      groupMessages: true,
+      syncContacts: true,
+      autoTransformToCommercialOrder: true,
+      allowReceiveCalls: false,
+      showTicketsWithoutQueue: true,
+      pipelineId: '',
+      filas: [],
+      promptId: '',
+      token: ''
+    });
+    setShowAddDialog(true);
+  };
+
+  const handleOpenEditModal = (canal: Canal) => {
+    setFormMode('edit');
+    setEditingId(canal.id);
+    setNovoCanal({
+      nome: canal.nome,
+      numero: canal.numero,
+      recoverFromInDays: canal.recoverFromInDays || '0',
+      recoverMessages: canal.recoverMessages || false,
+      isDefault: canal.padrao,
+      groupMessages: canal.groupMessages !== undefined ? canal.groupMessages : true,
+      syncContacts: canal.syncContacts !== undefined ? canal.syncContacts : true,
+      autoTransformToCommercialOrder: canal.autoTransformToCommercialOrder !== undefined ? canal.autoTransformToCommercialOrder : true,
+      allowReceiveCalls: canal.allowReceiveCalls || false,
+      showTicketsWithoutQueue: canal.showTicketsWithoutQueue !== undefined ? canal.showTicketsWithoutQueue : true,
+      pipelineId: canal.pipelineId || '',
+      filas: canal.filas || [],
+      promptId: canal.promptId || '',
+      token: canal.token || ''
+    });
+    setShowAddDialog(true);
   };
 
   const handleSetPadrao = (canalId: string) => {
@@ -223,7 +304,7 @@ const CanaisDeAtendimentoPage = () => {
           <h3 className="text-xl font-semibold text-slate-900">Canais de atendimento</h3>
           <div className="flex gap-2">
             <Button
-              onClick={() => setShowAddDialog(true)}
+              onClick={handleOpenAddModal}
               variant="yellow"
             >
               Adicionar Canal de Atendimento
@@ -267,11 +348,7 @@ const CanaisDeAtendimentoPage = () => {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-white dark:bg-white border border-slate-200 shadow-lg z-50">
                       <DropdownMenuItem 
-                        onClick={() => {
-                          setSelectedCanal(canal);
-                          setEditNome(canal.nome);
-                          setShowEditDialog(true);
-                        }}
+                        onClick={() => handleOpenEditModal(canal)}
                         className="cursor-pointer hover:bg-slate-50"
                       >
                         <Pencil className="w-4 h-4 mr-2" />
@@ -374,7 +451,7 @@ const CanaisDeAtendimentoPage = () => {
             <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
-                  <span>Adicionar Canal de Atendimento</span>
+                  <span>{formMode === 'add' ? 'Adicionar Canal de Atendimento' : 'Editar Canal de Atendimento'}</span>
                 </DialogTitle>
                 
                 {/* Stepper */}
@@ -409,6 +486,21 @@ const CanaisDeAtendimentoPage = () => {
                     className={`${!novoCanal.nome ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
                   />
                   {!novoCanal.nome && <p className="text-xs text-red-500">Nome é obrigatório</p>}
+                </div>
+
+                {/* Número Field */}
+                <div className="space-y-2">
+                  <Label htmlFor="numero" className="text-sm font-medium">Número *</Label>
+                  <Input
+                    id="numero"
+                    value={novoCanal.numero}
+                    onChange={(e) => setNovoCanal({...novoCanal, numero: e.target.value})}
+                    placeholder="Ex: 5521993292365"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    className={`${!novoCanal.numero ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
+                  />
+                  {!novoCanal.numero && <p className="text-xs text-red-500">Número é obrigatório</p>}
                 </div>
 
                 {/* Recovery Settings */}
@@ -598,48 +690,17 @@ const CanaisDeAtendimentoPage = () => {
                   Voltar
                 </Button>
                 <Button 
-                  onClick={handleAddCanal}
+                  onClick={handleSaveCanal}
                   variant="yellow"
                   className="px-6"
-                  disabled={!novoCanal.nome}
+                  disabled={!novoCanal.nome || !novoCanal.numero}
                 >
-                  Adicionar
+                  {formMode === 'add' ? 'Adicionar' : 'Salvar'}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
-          {/* Dialog Editar Nome */}
-          <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Editar Canal</DialogTitle>
-                <DialogDescription>
-                  Altere o nome do canal de atendimento.
-                </DialogDescription>
-              </DialogHeader>
-              <div>
-                <Label htmlFor="editNome">Nome</Label>
-                <Input
-                  id="editNome"
-                  value={editNome}
-                  onChange={(e) => setEditNome(e.target.value)}
-                  placeholder="Nome do canal"
-                />
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={handleEditCanal}
-                  variant="yellow"
-                >
-                  Salvar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
           {/* AlertDialog Confirmação Delete/Desconectar */}
           <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
