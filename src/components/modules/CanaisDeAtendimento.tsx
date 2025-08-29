@@ -9,18 +9,18 @@ import {
   Plus,
   Trash,
   Check,
-  ChevronDown
+  ChevronDown,
+  MoreVertical,
+  MessageCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
@@ -75,6 +75,7 @@ interface Canal {
   numero: string;
   atualizadoEm: string;
   padrao: boolean;
+  conectado?: boolean;
 }
 
 const CanaisDeAtendimentoPage = () => {
@@ -84,14 +85,16 @@ const CanaisDeAtendimentoPage = () => {
       nome: 'CDE OFICIAL (21)99329-2365',
       numero: '5521993292365',
       atualizadoEm: '18/07/25 14:34',
-      padrao: true
+      padrao: true,
+      conectado: true
     },
     {
       id: '2',
       nome: 'CDE Teste (21) 97318-3599',
       numero: '5521973183599',
       atualizadoEm: '12/08/25 14:28',
-      padrao: false
+      padrao: false,
+      conectado: false
     }
   ]);
 
@@ -190,6 +193,14 @@ const CanaisDeAtendimentoPage = () => {
     setCanais([...canais, canal]);
   };
 
+  const handleToggleConexao = (canalId: string) => {
+    setCanais(canais.map(c => 
+      c.id === canalId 
+        ? { ...c, conectado: !c.conectado }
+        : c
+    ));
+  };
+
   return (
     <TooltipProvider>
       <div className="h-full">
@@ -213,126 +224,136 @@ const CanaisDeAtendimentoPage = () => {
           </div>
         </div>
         
-        <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Nome</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Status</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Sessão</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Número</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Atualizado em</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Padrão</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Registros</TableHead>
-                  <TableHead className="text-center text-slate-700 font-medium py-3">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {canais.map((canal) => (
-                  <TableRow key={canal.id} className="hover:bg-slate-50/50">
-                    <TableCell className="text-center py-3 font-medium text-slate-800">{canal.nome}</TableCell>
-                    <TableCell className="text-center py-3">
-                      <div className="flex justify-center">
-                        <Signal className="w-4 h-4 fill-green-500 text-green-500" />
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center py-3">
-                      <div className="flex justify-center items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="outlineYellow"
-                          className="px-[15px] py-[5px] h-[34px]"
-                        >
-                          Desconectar
-                        </Button>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                             <Button
-                              size="sm"
-                              variant="ghost"
-                              className="p-[3px] text-[#ffc500] hover:bg-transparent hover:text-[#ffc500] active:bg-transparent focus:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 transition-none"
-                              onClick={() => handleRefresh(canal.id)}
-                              disabled={loadingRefresh === canal.id}
-                              aria-label="Atualizar sessão"
-                            >
-                              <RefreshCcw className={`w-[18px] h-[18px] ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Atualizar sessão</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center py-3 text-slate-600">{canal.numero}</TableCell>
-                    <TableCell className="text-center py-3 text-slate-600">{canal.atualizadoEm}</TableCell>
-                    <TableCell 
-                      className={`text-center py-3 ${!canal.padrao ? 'cursor-pointer' : ''}`}
-                      onClick={() => !canal.padrao && handleSetPadrao(canal.id)}
-                    >
-                      <div className="flex justify-center">
-                        {canal.padrao && (
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center py-3">
+        {/* Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {canais.map((canal) => (
+            <Card key={canal.id} className="bg-gradient-to-br from-white to-emerald-50/30 border border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-200">
+              <div className="p-6">
+                {/* Header with icon and menu */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                      <MessageCircle className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-slate-800 text-sm leading-tight">{canal.nome}</h4>
+                      {canal.padrao && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span className="text-xs text-green-600 font-medium">Padrão</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-slate-100">
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-white dark:bg-white border border-slate-200 shadow-lg z-50">
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          setSelectedCanal(canal);
+                          setEditNome(canal.nome);
+                          setShowEditDialog(true);
+                        }}
+                        className="cursor-pointer hover:bg-slate-50"
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          setSelectedCanal(canal);
+                          setShowDeleteDialog(true);
+                        }}
+                        className="cursor-pointer hover:bg-red-50 text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* WhatsApp subtitle */}
+                <p className="text-xs text-slate-500 mb-3">WhatsApp não oficial</p>
+
+                {/* Status */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Signal className={`w-4 h-4 ${canal.conectado ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'}`} />
+                  <span className={`text-sm font-medium ${canal.conectado ? 'text-green-600' : 'text-red-600'}`}>
+                    {canal.conectado ? 'Conectado' : 'Desconectado'}
+                  </span>
+                </div>
+
+                {/* Number */}
+                <div className="mb-4">
+                  <label className="text-xs text-slate-500 block mb-1">Número</label>
+                  <div className="bg-slate-100 rounded-full px-3 py-1 text-sm text-slate-700 inline-block">
+                    {canal.numero}
+                  </div>
+                </div>
+
+                {/* Last updated */}
+                <p className="text-xs text-slate-500 mb-4">Atualizado em {canal.atualizadoEm}</p>
+
+                {/* Action buttons */}
+                <div className="flex gap-2 pt-2 border-t border-slate-100">
+                  {canal.conectado ? (
+                    <>
                       <Button
                         size="sm"
-                        variant="outlineYellow"
-                        className="px-[15px] py-[5px] h-[34px] max-w-[100px]"
-                        onClick={() => setShowRegistrosSheet(true)}
+                        variant="yellow"
+                        onClick={() => handleToggleConexao(canal.id)}
+                        className="flex-1 h-8 text-xs"
                       >
-                        <List className="w-4 h-4 mr-1" />
-                        Registros
+                        Desconectar
                       </Button>
-                    </TableCell>
-                    <TableCell className="text-center py-3">
-                      <div className="flex justify-center items-center gap-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-slate-100"
-                              onClick={() => {
-                                setSelectedCanal(canal);
-                                setEditNome(canal.nome);
-                                setShowEditDialog(true);
-                              }}
-                              aria-label="Editar canal"
-                            >
-                              <Pencil className="w-4 h-4 text-slate-600" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Editar</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-red-50"
-                              onClick={() => {
-                                setSelectedCanal(canal);
-                                setShowDeleteDialog(true);
-                              }}
-                              aria-label="Excluir canal"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Excluir</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-        </Table>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRefresh(canal.id)}
+                        disabled={loadingRefresh === canal.id}
+                        className="p-2 hover:bg-slate-100"
+                      >
+                        <RefreshCcw className={`w-4 h-4 ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleToggleConexao(canal.id)}
+                      className="flex-1 h-8 text-xs"
+                    >
+                      Conectar
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowRegistrosSheet(true)}
+                    className="p-2 hover:bg-slate-100"
+                  >
+                    <List className="w-4 h-4" />
+                  </Button>
+                  {!canal.padrao && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleSetPadrao(canal.id)}
+                      className="p-2 hover:bg-slate-100"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
 
           {/* Dialog Adicionar Canal */}
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
