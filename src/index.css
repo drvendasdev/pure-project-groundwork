@@ -37,8 +37,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 18%;
 
-    --primary: 220 100% 25%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 45 100% 65%; /* Yellow primary for calendar */
+    --primary-foreground: 0 0% 0%;
 
     --secondary: 220 13% 96%;
     --secondary-foreground: 220 13% 18%;
@@ -65,6 +65,14 @@
     /* Interactive states */
     --hover-light: 220 13% 95%;
     --active-light: 220 100% 96%;
+
+    /* Calendar specific colors */
+    --header: 273 100% 91%; /* Light purple header */
+    --header-foreground: 220 13% 18%;
+    --surface: 0 0% 100%; /* White background */
+    --surface-foreground: 220 13% 18%;
+    --surface-border: 220 13% 91%;
+    --text-secondary: 220 9% 46%;
 
     --sidebar-background: 0 0% 98%;
 

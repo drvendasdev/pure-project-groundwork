@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
+import { useCargos } from "@/hooks/useCargos";
 
 
 interface AdicionarUsuarioModalProps {
@@ -10,9 +11,12 @@ interface AdicionarUsuarioModalProps {
   onClose: () => void;
   onAddUser: (user: {
     name: string;
-    email: string;
-    profile: "admin" | "user";
-    status: "active" | "inactive";
+    email?: string;
+    profile: string;
+    status?: string;
+    avatar?: string;
+    cargo_id?: string;
+    senha?: string;
   }) => void;
 }
 
@@ -42,8 +46,10 @@ const mockPhones = [
 ];
 
 export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarUsuarioModalProps) {
+  const { cargos } = useCargos();
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -66,12 +72,44 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     defaultPhone: false,
   });
 
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowRoleDropdown(false);
+      }
+    };
+
+    if (showRoleDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRoleDropdown]);
+
+  // Reset dropdown when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowRoleDropdown(false);
+    }
+  }, [isOpen]);
+
   const handleSubmit = () => {
+    const selectedCargo = selectedRoles.length > 0 
+      ? cargos.find(cargo => cargo.nome === selectedRoles[0])
+      : undefined;
+
     onAddUser({
       name: formData.name,
-      email: formData.email,
-      profile: formData.profile as "admin" | "user",
+      email: formData.email || undefined,
+      profile: formData.profile,
       status: "active",
+      cargo_id: selectedCargo?.id,
+      senha: formData.password || undefined
     });
     
     // Reset form
@@ -121,10 +159,9 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     // TODO: Implementar vinculação com Google
   };
 
-  const addRole = (roleValue: string) => {
-    const role = mockRoles.find(r => r.value === roleValue);
-    if (role && !selectedRoles.some(r => r === role.label)) {
-      setSelectedRoles([...selectedRoles, role.label]);
+  const addRole = (roleName: string) => {
+    if (!selectedRoles.includes(roleName)) {
+      setSelectedRoles([...selectedRoles, roleName]);
     }
   };
 
@@ -298,7 +335,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('queues', e.target.value)}
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                disabled={true}
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -321,32 +359,52 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             </div>
 
             {/* Cargos with Adicionar button */}
-            <div>
+            <div className="relative">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-700">Cargos</span>
-                <Button
+                <p className="text-base font-normal text-gray-900">Cargos</p>
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // Add first available role for demonstration
-                    const availableRole = mockRoles.find(role => 
-                      !selectedRoles.includes(role.label)
-                    );
-                    if (availableRole) {
-                      addRole(availableRole.value);
-                    }
-                  }}
-                  className="flex items-center gap-1 text-gray-700 hover:bg-gray-100 p-1 h-auto"
+                  onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                  className="inline-flex items-center justify-center p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
                 >
-                  <Plus className="h-4 w-4" />
-                  <span className="text-xs">Adicionar</span>
-                </Button>
+                  <span className="inline-flex items-center gap-1">
+                    <Plus className="h-4 w-4 text-gray-600" />
+                    <span className="text-sm text-gray-600">Adicionar</span>
+                  </span>
+                </button>
               </div>
+
+              {/* Dropdown with role options */}
+              {showRoleDropdown && (
+                <div ref={dropdownRef} className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
+                  <div className="py-1">
+                    {cargos
+                      .filter(cargo => !selectedRoles.includes(cargo.nome))
+                      .map((cargo) => (
+                        <button
+                          key={cargo.id}
+                          type="button"
+                          onClick={() => {
+                            addRole(cargo.nome);
+                            setShowRoleDropdown(false);
+                          }}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                        >
+                          {cargo.nome}
+                        </button>
+                      ))}
+                    {cargos.filter(cargo => !selectedRoles.includes(cargo.nome)).length === 0 && (
+                      <div className="px-4 py-2 text-sm text-gray-500">
+                        Todos os cargos já foram adicionados
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               
               {/* Selected roles as pill tags */}
               {selectedRoles.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mt-2">
                   {selectedRoles.map((role, index) => (
                     <div 
                       key={index} 
@@ -370,7 +428,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                disabled={true}
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -399,7 +458,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultPhone', e.target.value)}
                 onFocus={() => updateFocus('defaultPhone', true)}
                 onBlur={() => updateFocus('defaultPhone', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                disabled={true}
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
