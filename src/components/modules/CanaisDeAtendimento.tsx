@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Signal, 
   RefreshCcw, 
@@ -11,8 +11,12 @@ import {
   Check,
   ChevronDown,
   MoreVertical,
-  MessageCircle
+  MessageCircle,
+  Loader2
 } from 'lucide-react';
+import { QRModal } from '@/components/modals/QRModal';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // WhatsApp Icon Component
 const WhatsAppIcon = ({ size = 24, className = "" }: { size?: number; className?: string }) => (
@@ -85,44 +89,35 @@ import { Checkbox } from '@/components/ui/checkbox';
 
 interface Canal {
   id: string;
+  name: string;
+  number: string;
+  instance: string;
+  status: 'connected' | 'disconnected' | 'connecting';
+  last_state_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface NovoCanal {
   nome: string;
   numero: string;
-  atualizadoEm: string;
-  padrao: boolean;
-  conectado?: boolean;
-  recoverFromInDays?: string;
-  recoverMessages?: boolean;
-  groupMessages?: boolean;
-  syncContacts?: boolean;
-  autoTransformToCommercialOrder?: boolean;
-  allowReceiveCalls?: boolean;
-  showTicketsWithoutQueue?: boolean;
-  pipelineId?: string;
-  filas?: string[];
-  promptId?: string;
-  token?: string;
+  recoverFromInDays: string;
+  recoverMessages: boolean;
+  isDefault: boolean;
+  groupMessages: boolean;
+  syncContacts: boolean;
+  autoTransformToCommercialOrder: boolean;
+  allowReceiveCalls: boolean;
+  showTicketsWithoutQueue: boolean;
+  pipelineId: string;
+  filas: string[];
+  promptId: string;
+  token: string;
 }
 
 const CanaisDeAtendimentoPage = () => {
-  const [canais, setCanais] = useState<Canal[]>([
-    {
-      id: '1',
-      nome: 'CDE OFICIAL (21)99329-2365',
-      numero: '5521993292365',
-      atualizadoEm: '18/07/25 14:34',
-      padrao: true,
-      conectado: true
-    },
-    {
-      id: '2',
-      nome: 'CDE Teste (21) 97318-3599',
-      numero: '5521973183599',
-      atualizadoEm: '12/08/25 14:28',
-      padrao: false,
-      conectado: false
-    }
-  ]);
-
+  const [canais, setCanais] = useState<Canal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [canaisDeletados, setCanaisDeletados] = useState<Canal[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -132,7 +127,7 @@ const CanaisDeAtendimentoPage = () => {
   const [loadingRefresh, setLoadingRefresh] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [novoCanal, setNovoCanal] = useState({ 
+  const [novoCanal, setNovoCanal] = useState<NovoCanal>({ 
     nome: '', 
     numero: '',
     recoverFromInDays: '0',
@@ -144,88 +139,109 @@ const CanaisDeAtendimentoPage = () => {
     allowReceiveCalls: false,
     showTicketsWithoutQueue: true,
     pipelineId: '',
-    filas: [] as string[],
+    filas: [],
     promptId: '',
     token: ''
   });
-  const [showQrDialog, setShowQrDialog] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [qrCanal, setQrCanal] = useState<Canal | null>(null);
-  
+  const [connectingChannels, setConnectingChannels] = useState<Set<string>>(new Set());
 
-  const handleSaveCanal = () => {
-    if (!novoCanal.nome || !novoCanal.numero) return;
+  // Load channels from database
+  const loadChannels = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('channels_view')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    const canalData = {
-      nome: novoCanal.nome,
-      numero: novoCanal.numero,
-      atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      padrao: novoCanal.isDefault,
-      recoverFromInDays: novoCanal.recoverFromInDays,
-      recoverMessages: novoCanal.recoverMessages,
-      groupMessages: novoCanal.groupMessages,
-      syncContacts: novoCanal.syncContacts,
-      autoTransformToCommercialOrder: novoCanal.autoTransformToCommercialOrder,
-      allowReceiveCalls: novoCanal.allowReceiveCalls,
-      showTicketsWithoutQueue: novoCanal.showTicketsWithoutQueue,
-      pipelineId: novoCanal.pipelineId,
-      filas: novoCanal.filas,
-      promptId: novoCanal.promptId,
-      token: novoCanal.token
-    };
+      if (error) throw error;
 
-    if (formMode === 'add') {
-      const newCanal: Canal = {
-        id: Date.now().toString(),
-        conectado: false,
-        ...canalData
-      };
-      
-      // Se este canal for padrão, remover padrão dos outros
-      if (novoCanal.isDefault) {
-        setCanais(prev => prev.map(c => ({ ...c, padrao: false })));
-      }
-      
-      setCanais(prev => [...prev, newCanal]);
-    } else if (formMode === 'edit' && editingId) {
-      // Se este canal for padrão, remover padrão dos outros
-      if (novoCanal.isDefault) {
-        setCanais(prev => prev.map(c => ({ ...c, padrao: c.id === editingId })));
-      }
-      
-      setCanais(prev => prev.map(c => 
-        c.id === editingId 
-          ? { ...c, ...canalData }
-          : c
-      ));
+      const formattedChannels = data?.map(channel => ({
+        ...channel,
+        name: channel.name || '',
+        number: channel.number || '',
+        instance: channel.instance || '',
+        status: (channel.status as 'connected' | 'disconnected' | 'connecting') || 'disconnected',
+        created_at: channel.created_at || '',
+        updated_at: channel.updated_at || ''
+      })) || [];
+
+      setCanais(formattedChannels);
+    } catch (error) {
+      console.error('Error loading channels:', error);
+      toast.error('Erro ao carregar canais');
+    } finally {
+      setLoading(false);
     }
-
-    // Reset form
-    setNovoCanal({ 
-      nome: '', 
-      numero: '',
-      recoverFromInDays: '0',
-      recoverMessages: false,
-      isDefault: false,
-      groupMessages: true,
-      syncContacts: true,
-      autoTransformToCommercialOrder: true,
-      allowReceiveCalls: false,
-      showTicketsWithoutQueue: true,
-      pipelineId: '',
-      filas: [],
-      promptId: '',
-      token: ''
-    });
-    setShowAddDialog(false);
-    setFormMode('add');
-    setEditingId(null);
   };
 
-  const handleDeleteCanal = (canal: Canal) => {
-    setCanais(canais.filter(c => c.id !== canal.id));
-    setCanaisDeletados([...canaisDeletados, canal]);
-    setShowDeleteDialog(false);
-    setSelectedCanal(null);
+  useEffect(() => {
+    loadChannels();
+  }, []);
+
+  const handleSaveCanal = async () => {
+    if (!novoCanal.nome || !novoCanal.numero) return;
+
+    try {
+      const response = await supabase.functions.invoke('evo-channel', {
+        body: {
+          name: novoCanal.nome,
+          number: novoCanal.numero
+        }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      toast.success('Canal criado com sucesso!');
+      
+      // Reset form
+      setNovoCanal({ 
+        nome: '', 
+        numero: '',
+        recoverFromInDays: '0',
+        recoverMessages: false,
+        isDefault: false,
+        groupMessages: true,
+        syncContacts: true,
+        autoTransformToCommercialOrder: true,
+        allowReceiveCalls: false,
+        showTicketsWithoutQueue: true,
+        pipelineId: '',
+        filas: [],
+        promptId: '',
+        token: ''
+      });
+      setShowAddDialog(false);
+      
+      // Reload channels
+      loadChannels();
+    } catch (error) {
+      console.error('Error saving channel:', error);
+      toast.error('Erro ao criar canal');
+    }
+  };
+
+  const handleDeleteCanal = async (canal: Canal) => {
+    try {
+      const { error } = await supabase
+        .from('channels')
+        .delete()
+        .eq('id', canal.id);
+
+      if (error) throw error;
+
+      toast.success('Canal excluído com sucesso');
+      setShowDeleteDialog(false);
+      setSelectedCanal(null);
+      loadChannels();
+    } catch (error) {
+      console.error('Error deleting channel:', error);
+      toast.error('Erro ao excluir canal');
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -250,66 +266,77 @@ const CanaisDeAtendimentoPage = () => {
     setShowAddDialog(true);
   };
 
-  const handleOpenEditModal = (canal: Canal) => {
-    setFormMode('edit');
-    setEditingId(canal.id);
-    setNovoCanal({
-      nome: canal.nome,
-      numero: canal.numero,
-      recoverFromInDays: canal.recoverFromInDays || '0',
-      recoverMessages: canal.recoverMessages || false,
-      isDefault: canal.padrao,
-      groupMessages: canal.groupMessages !== undefined ? canal.groupMessages : true,
-      syncContacts: canal.syncContacts !== undefined ? canal.syncContacts : true,
-      autoTransformToCommercialOrder: canal.autoTransformToCommercialOrder !== undefined ? canal.autoTransformToCommercialOrder : true,
-      allowReceiveCalls: canal.allowReceiveCalls || false,
-      showTicketsWithoutQueue: canal.showTicketsWithoutQueue !== undefined ? canal.showTicketsWithoutQueue : true,
-      pipelineId: canal.pipelineId || '',
-      filas: canal.filas || [],
-      promptId: canal.promptId || '',
-      token: canal.token || ''
-    });
-    setShowAddDialog(true);
-  };
+  const handleConnectChannel = async (canal: Canal) => {
+    if (canal.status === 'connected') {
+      // Disconnect logic would go here
+      toast.info('Funcionalidade de desconectar em desenvolvimento');
+      return;
+    }
 
-  const handleSetPadrao = (canalId: string) => {
-    setCanais(canais.map(c => ({
-      ...c,
-      padrao: c.id === canalId
-    })));
-  };
-
-  const handleRefresh = async (canalId: string) => {
-    setLoadingRefresh(canalId);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoadingRefresh(null);
-  };
-
-  const handleRestoreCanal = (canal: Canal) => {
-    setCanaisDeletados(canaisDeletados.filter(c => c.id !== canal.id));
-    setCanais([...canais, canal]);
-  };
-
-  const handleToggleConexao = (canalId: string) => {
-    setCanais(canais.map(c => 
-      c.id === canalId 
-        ? { ...c, conectado: !c.conectado }
-        : c
-    ));
-  };
-
-  const handleOpenQrDialog = (canal: Canal) => {
+    // For disconnected or connecting channels, open QR modal
     setQrCanal(canal);
-    setShowQrDialog(true);
+    setShowQrModal(true);
   };
+
+  const handleRefreshQR = async (canal: Canal) => {
+    setQrCanal(canal);
+    setShowQrModal(true);
+  };
+
+  const handleConnectionSuccess = () => {
+    // Reload channels when connection is successful
+    loadChannels();
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return 'text-green-600';
+      case 'connecting':
+        return 'text-yellow-600';
+      default:
+        return 'text-red-600';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return 'Conectado';
+      case 'connecting':
+        return 'Conectando';
+      default:
+        return 'Desconectado';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return 'fill-green-500 text-green-500';
+      case 'connecting':
+        return 'fill-yellow-500 text-yellow-500';
+      default:
+        return 'fill-red-500 text-red-500';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Carregando canais...</span>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
       <div className="h-full">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4 px-4 sm:px-6 lg:px-8 pt-4">
           <h3 className="text-xl font-semibold text-slate-900">Canais de atendimento</h3>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <Button
               onClick={handleOpenAddModal}
               variant="yellow"
@@ -327,7 +354,7 @@ const CanaisDeAtendimentoPage = () => {
         </div>
         
         {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4 sm:px-6 lg:px-8">
           {canais.map((canal) => (
             <Card key={canal.id} className="bg-gradient-to-br from-white to-emerald-50/30 border border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-200">
               <div className="p-6">
@@ -338,13 +365,7 @@ const CanaisDeAtendimentoPage = () => {
                       <WhatsAppIcon size={24} className="text-white" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-semibold text-slate-800 text-sm leading-tight">{canal.nome}</h4>
-                      {canal.padrao && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          <span className="text-xs text-green-600 font-medium">Padrão</span>
-                        </div>
-                      )}
+                      <h4 className="font-semibold text-slate-800 text-sm leading-tight">{canal.name}</h4>
                     </div>
                   </div>
                   <DropdownMenu>
@@ -353,14 +374,7 @@ const CanaisDeAtendimentoPage = () => {
                         <MoreVertical className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-white dark:bg-white border border-slate-200 shadow-lg z-50">
-                      <DropdownMenuItem 
-                        onClick={() => handleOpenEditModal(canal)}
-                        className="cursor-pointer hover:bg-slate-50"
-                      >
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Editar
-                      </DropdownMenuItem>
+                    <DropdownMenuContent align="end" className="bg-white border border-slate-200 shadow-lg z-50">
                       <DropdownMenuItem 
                         onClick={() => {
                           setSelectedCanal(canal);
@@ -380,9 +394,14 @@ const CanaisDeAtendimentoPage = () => {
 
                 {/* Status */}
                 <div className="flex items-center gap-2 mb-3">
-                  <Signal className={`w-4 h-4 ${canal.conectado ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'}`} />
-                  <span className={`text-sm font-medium ${canal.conectado ? 'text-green-600' : 'text-red-600'}`}>
-                    {canal.conectado ? 'Conectado' : 'Desconectado'}
+                  {canal.status === 'connecting' && (
+                    <Loader2 className="w-4 h-4 animate-spin text-yellow-500" />
+                  )}
+                  {canal.status !== 'connecting' && (
+                    <Signal className={`w-4 h-4 ${getStatusIcon(canal.status)}`} />
+                  )}
+                  <span className={`text-sm font-medium ${getStatusColor(canal.status)}`}>
+                    {getStatusText(canal.status)}
                   </span>
                 </div>
 
@@ -390,55 +409,37 @@ const CanaisDeAtendimentoPage = () => {
                 <div className="mb-4">
                   <label className="text-xs text-slate-500 block mb-1">Número</label>
                   <div className="bg-slate-100 rounded-full px-3 py-1 text-sm text-slate-700 inline-block">
-                    {canal.numero}
+                    {canal.number}
                   </div>
                 </div>
 
                 {/* Last updated */}
-                <p className="text-xs text-slate-500 mb-4">Atualizado em {canal.atualizadoEm}</p>
+                <p className="text-xs text-slate-500 mb-4">
+                  Atualizado em {new Date(canal.updated_at).toLocaleString('pt-BR')}
+                </p>
 
                 {/* Action buttons */}
                 <div className="flex gap-2 pt-2 border-t border-slate-100">
-                  {canal.conectado ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="yellow"
-                        onClick={() => handleToggleConexao(canal.id)}
-                        className="flex-1 h-8 text-xs"
-                      >
-                        Desconectar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRefresh(canal.id)}
-                        disabled={loadingRefresh === canal.id}
-                        className="p-2 hover:bg-slate-100"
-                      >
-                        <RefreshCcw className={`w-4 h-4 ${loadingRefresh === canal.id ? 'animate-spin' : ''}`} />
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="yellow"
-                        onClick={() => handleToggleConexao(canal.id)}
-                        className="flex-1 h-8 text-xs"
-                      >
-                        Conectar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenQrDialog(canal)}
-                        className="flex-1 h-8 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
-                      >
-                        Novo QR CODE
-                      </Button>
-                    </>
+                  <Button
+                    size="sm"
+                    variant={canal.status === 'connected' ? 'destructive' : 'yellow'}
+                    onClick={() => handleConnectChannel(canal)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    {canal.status === 'connected' ? 'Desconectar' : 'Conectar'}
+                  </Button>
+                  
+                  {canal.status !== 'connected' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRefreshQR(canal)}
+                      className="flex-1 h-8 text-xs border-primary text-primary hover:bg-primary hover:text-white"
+                    >
+                      Novo QR CODE
+                    </Button>
                   )}
+                  
                   <Button
                     size="sm"
                     variant="ghost"
@@ -447,401 +448,151 @@ const CanaisDeAtendimentoPage = () => {
                   >
                     <List className="w-4 h-4" />
                   </Button>
-                  {!canal.padrao && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleSetPadrao(canal.id)}
-                      className="p-2 hover:bg-slate-100"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                    </Button>
-                  )}
                 </div>
               </div>
             </Card>
           ))}
         </div>
 
-          {/* Dialog Adicionar Canal */}
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  <span>{formMode === 'add' ? 'Adicionar Canal de Atendimento' : 'Editar Canal de Atendimento'}</span>
-                </DialogTitle>
-                
-                {/* Stepper */}
-                <div className="flex items-center justify-center py-4">
-                  <div className="flex items-center">
-                    <div className="flex items-center">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ffc500] text-white text-sm font-medium">
-                        <Check className="h-4 w-4" />
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-[#ffc500]">Selecionar Canal de Atendimento</span>
+        {/* Dialog Adicionar Canal */}
+        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Adicionar Canal de Atendimento</DialogTitle>
+              <DialogDescription>
+                Configure um novo canal WhatsApp para atendimento
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              {/* Nome Field */}
+              <div className="space-y-2">
+                <Label htmlFor="nome" className="text-sm font-medium">Nome *</Label>
+                <Input
+                  id="nome"
+                  value={novoCanal.nome}
+                  onChange={(e) => setNovoCanal({...novoCanal, nome: e.target.value})}
+                  placeholder="Nome do canal"
+                  className={`${!novoCanal.nome ? 'border-red-500' : ''}`}
+                />
+                {!novoCanal.nome && <p className="text-xs text-red-500">Nome é obrigatório</p>}
+              </div>
+
+              {/* Número Field */}
+              <div className="space-y-2">
+                <Label htmlFor="numero" className="text-sm font-medium">Número *</Label>
+                <Input
+                  id="numero"
+                  value={novoCanal.numero}
+                  onChange={(e) => setNovoCanal({...novoCanal, numero: e.target.value})}
+                  placeholder="Ex: 5521993292365"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  className={`${!novoCanal.numero ? 'border-red-500' : ''}`}
+                />
+                {!novoCanal.numero && <p className="text-xs text-red-500">Número é obrigatório</p>}
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowAddDialog(false)}
+                className="px-6"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleSaveCanal}
+                variant="yellow"
+                className="px-6"
+                disabled={!novoCanal.nome || !novoCanal.numero}
+              >
+                Adicionar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* AlertDialog Confirmação Delete */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir este canal de atendimento? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => selectedCanal && handleDeleteCanal(selectedCanal)}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Dialog Canais Deletados */}
+        <Dialog open={showDeletedDialog} onOpenChange={setShowDeletedDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Canais Deletados</DialogTitle>
+              <DialogDescription>
+                Lista de canais de atendimento excluídos.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {canaisDeletados.length === 0 ? (
+                <p className="text-slate-500 text-center py-4">Nenhum canal deletado</p>
+              ) : (
+                canaisDeletados.map((canal) => (
+                  <div key={canal.id} className="flex items-center justify-between p-3 border rounded">
+                    <div>
+                      <p className="font-medium">{canal.name}</p>
+                      <p className="text-sm text-slate-500">{canal.number}</p>
                     </div>
-                    <div className="w-16 h-0.5 bg-[#ffc500] mx-4"></div>
-                    <div className="flex items-center">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ffc500] text-white text-sm font-medium">
-                        2
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-[#ffc500]">Configurar WhatsApp</span>
-                    </div>
                   </div>
-                </div>
-              </DialogHeader>
-              
-              <div className="space-y-6 py-4">
-                {/* Nome Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="nome" className="text-sm font-medium">Nome *</Label>
-                  <Input
-                    id="nome"
-                    value={novoCanal.nome}
-                    onChange={(e) => setNovoCanal({...novoCanal, nome: e.target.value})}
-                    placeholder="Nome do canal"
-                    className={`${!novoCanal.nome ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
-                  />
-                  {!novoCanal.nome && <p className="text-xs text-red-500">Nome é obrigatório</p>}
-                </div>
+                ))
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeletedDialog(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-                {/* Número Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="numero" className="text-sm font-medium">Número *</Label>
-                  <Input
-                    id="numero"
-                    value={novoCanal.numero}
-                    onChange={(e) => setNovoCanal({...novoCanal, numero: e.target.value})}
-                    placeholder="Ex: 5521993292365"
-                    inputMode="numeric"
-                    pattern="\d*"
-                    className={`${!novoCanal.numero ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
-                  />
-                  {!novoCanal.numero && <p className="text-xs text-red-500">Número é obrigatório</p>}
-                </div>
+        {/* QR Modal */}
+        {qrCanal && (
+          <QRModal
+            isOpen={showQrModal}
+            onClose={() => setShowQrModal(false)}
+            channelName={qrCanal.name}
+            instance={qrCanal.instance}
+            onConnectionSuccess={handleConnectionSuccess}
+          />
+        )}
 
-                {/* Recovery Settings */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Recuperar mensagens a partir de</Label>
-                    <Select 
-                      value={novoCanal.recoverFromInDays} 
-                      onValueChange={(value) => setNovoCanal({...novoCanal, recoverFromInDays: value})}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione o período" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover z-50">
-                        <SelectItem value="0">Nenhuma</SelectItem>
-                        <SelectItem value="1">1 dia</SelectItem>
-                        <SelectItem value="7">7 dias</SelectItem>
-                        <SelectItem value="30">30 dias</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="recoverMessages"
-                      checked={novoCanal.recoverMessages}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, recoverMessages: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="recoverMessages" className="text-sm">Recuperar mensagens antigas</Label>
-                  </div>
-                </div>
-
-                {/* Switch Options Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="isDefault"
-                      checked={novoCanal.isDefault}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, isDefault: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="isDefault" className="text-sm">Canal de atendimento padrão</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="groupMessages"
-                      checked={novoCanal.groupMessages}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, groupMessages: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="groupMessages" className="text-sm">Receber mensagens de grupos</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="syncContacts"
-                      checked={novoCanal.syncContacts}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, syncContacts: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="syncContacts" className="text-sm">Sincronizar contatos</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="autoTransformToCommercialOrder"
-                      checked={novoCanal.autoTransformToCommercialOrder}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, autoTransformToCommercialOrder: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="autoTransformToCommercialOrder" className="text-sm">Criar card no CRM automaticamente</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="allowReceiveCalls"
-                      checked={novoCanal.allowReceiveCalls}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, allowReceiveCalls: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="allowReceiveCalls" className="text-sm">Enviar mensagem de recusa de ligação</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="showTicketsWithoutQueue"
-                      checked={novoCanal.showTicketsWithoutQueue}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, showTicketsWithoutQueue: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="showTicketsWithoutQueue" className="text-sm">Mostrar conversas sem fila para usuários</Label>
-                  </div>
-                </div>
-
-                {/* Pipeline Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Selecionar Pipeline</Label>
-                  <Select 
-                    value={novoCanal.pipelineId} 
-                    onValueChange={(value) => setNovoCanal({...novoCanal, pipelineId: value})}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecione um pipeline" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="vendas">Pipeline de Vendas</SelectItem>
-                      <SelectItem value="suporte">Pipeline de Suporte</SelectItem>
-                      <SelectItem value="leads">Pipeline de Leads</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Filas Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Filas</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className="w-full justify-between"
-                      >
-                        {novoCanal.filas.length > 0 
-                          ? `${novoCanal.filas.length} fila(s) selecionada(s)`
-                          : "Selecione as filas"
-                        }
-                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0 bg-popover z-50" align="start">
-                      <div className="p-4 space-y-3">
-                        {['Vendas', 'Suporte', 'Financeiro', 'Geral'].map((fila) => (
-                          <div key={fila} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`fila-${fila}`}
-                              checked={novoCanal.filas.includes(fila)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setNovoCanal({...novoCanal, filas: [...novoCanal.filas, fila]});
-                                } else {
-                                  setNovoCanal({...novoCanal, filas: novoCanal.filas.filter(f => f !== fila)});
-                                }
-                              }}
-                            />
-                            <Label htmlFor={`fila-${fila}`} className="text-sm">{fila}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* DS Agente Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">DS Agente</Label>
-                  <Select 
-                    value={novoCanal.promptId} 
-                    onValueChange={(value) => setNovoCanal({...novoCanal, promptId: value})}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecione um agente" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="agente1">Agente de Vendas</SelectItem>
-                      <SelectItem value="agente2">Agente de Suporte</SelectItem>
-                      <SelectItem value="agente3">Agente Geral</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Token Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="token" className="text-sm font-medium">Token</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    value={novoCanal.token}
-                    onChange={(e) => setNovoCanal({...novoCanal, token: e.target.value})}
-                    placeholder="Token de acesso"
-                    className="focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowAddDialog(false)}
-                  className="px-6"
-                >
-                  Voltar
-                </Button>
-                <Button 
-                  onClick={handleSaveCanal}
-                  variant="yellow"
-                  className="px-6"
-                  disabled={!novoCanal.nome || !novoCanal.numero}
-                >
-                  {formMode === 'add' ? 'Adicionar' : 'Salvar'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-
-          {/* AlertDialog Confirmação Delete/Desconectar */}
-          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Confirmar ação</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Tem certeza que deseja excluir este canal de atendimento? Esta ação pode ser desfeita na seção "Deletadas".
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={() => selectedCanal && handleDeleteCanal(selectedCanal)}
-                  className="bg-red-500 hover:bg-red-600"
-                >
-                  Confirmar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          {/* Dialog Canais Deletados */}
-          <Dialog open={showDeletedDialog} onOpenChange={setShowDeletedDialog}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Canais Deletados</DialogTitle>
-                <DialogDescription>
-                  Lista de canais de atendimento excluídos. Você pode restaurá-los se necessário.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {canaisDeletados.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4">Nenhum canal deletado</p>
-                ) : (
-                  canaisDeletados.map((canal) => (
-                    <div key={canal.id} className="flex items-center justify-between p-3 border rounded">
-                      <div>
-                        <p className="font-medium">{canal.nome}</p>
-                        <p className="text-sm text-slate-500">{canal.numero}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleRestoreCanal(canal)}
-                        className="bg-green-500 hover:bg-green-600 text-white"
-                      >
-                        Restaurar
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowDeletedDialog(false)}>
-                  Fechar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Dialog QR Code */}
-          <Dialog open={showQrDialog} onOpenChange={setShowQrDialog}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Novo QR CODE</DialogTitle>
-                <DialogDescription>
-                  Gerar novo QR Code para conectar o WhatsApp - {qrCanal?.nome}
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="flex flex-col items-center space-y-4 py-6">
-                <div className="w-48 h-48 bg-slate-100 rounded-lg flex items-center justify-center border-2 border-dashed border-slate-300">
-                  <div className="text-center text-slate-500">
-                    <MessageCircle className="w-12 h-12 mx-auto mb-2" />
-                    <p className="text-sm">QR Code será gerado aqui</p>
-                    <p className="text-xs mt-1">Via Evolution API</p>
-                  </div>
-                </div>
-                
-                <div className="text-center space-y-2">
-                  <p className="text-sm text-slate-600">
-                    Escaneie o QR Code com seu WhatsApp para conectar o canal
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Este recurso será integrado com a Evolution API em breve
-                  </p>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowQrDialog(false)}>
-                  Fechar
-                </Button>
-                <Button variant="yellow" disabled>
-                  Gerar QR Code
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Sheet Registros */}
-          <Sheet open={showRegistrosSheet} onOpenChange={setShowRegistrosSheet}>
-            <SheetContent className="w-[400px] sm:w-[540px]">
-              <SheetHeader>
-                <SheetTitle>Registros do Canal</SheetTitle>
-                <SheetDescription>
-                  Histórico de atividades e logs do canal de atendimento.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-6 space-y-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="border-l-2 border-slate-200 pl-4 py-2">
-                    <p className="text-sm font-medium">Evento de exemplo {i}</p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(Date.now() - i * 3600000).toLocaleString('pt-BR')}
-                    </p>
-                    <p className="text-sm text-slate-600 mt-1">
-                      Descrição do evento que aconteceu no sistema...
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </SheetContent>
-          </Sheet>
+        {/* Sheet Registros */}
+        <Sheet open={showRegistrosSheet} onOpenChange={setShowRegistrosSheet}>
+          <SheetContent className="w-[400px] sm:w-[540px]">
+            <SheetHeader>
+              <SheetTitle>Registros do Canal</SheetTitle>
+              <SheetDescription>
+                Histórico de atividades e logs do canal de atendimento.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-6 space-y-4">
+              <p className="text-slate-500 text-center py-4">
+                Funcionalidade de registros em desenvolvimento
+              </p>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </TooltipProvider>
   );
