@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ModuleType } from "./TezeusCRM";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { NotificationTooltip } from "@/components/NotificationTooltip";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   LayoutDashboard, 
   MessageCircle, 
@@ -52,6 +55,9 @@ interface MenuItem {
 export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDarkMode, isCollapsed, onToggleCollapse, onNavigateToConversation }: SidebarProps) {
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [systemUser, setSystemUser] = useState<any>(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Hooks para notificações
   const { 
@@ -63,6 +69,34 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   } = useNotifications();
   
   const { markAsRead } = useWhatsAppConversations();
+
+  // Load system user data
+  useEffect(() => {
+    const loadSystemUser = async () => {
+      const storedUser = localStorage.getItem('systemUser');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        setSystemUser(user);
+        
+        // Optionally refresh user data from Supabase
+        try {
+          const { data: userData } = await supabase
+            .from('system_users')
+            .select('name, email')
+            .eq('email', user.email)
+            .single();
+          
+          if (userData) {
+            setSystemUser(prev => ({ ...prev, ...userData }));
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+        }
+      }
+    };
+
+    loadSystemUser();
+  }, []);
 
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
@@ -295,6 +329,18 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
     markAsRead(conversationId);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('systemUser');
+    navigate('/login');
+  };
+
+  const getUserInitial = () => {
+    if (systemUser?.name) {
+      return systemUser.name.charAt(0).toUpperCase();
+    }
+    return 'U';
+  };
+
   return (
     <div 
       data-sidebar
@@ -310,14 +356,14 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           isCollapsed ? "p-3" : "p-6"
         )}
       >
-        <h1 
+        <img 
+          src="/lovable-uploads/9dbd9439-214a-4ea4-8a4b-8602b345ca06.png"
+          alt="TEZEUS"
           className={cn(
-            "font-bold transition-all duration-300 text-black",
-            isCollapsed ? "text-lg" : "text-2xl"
+            "transition-all duration-300",
+            isCollapsed ? "h-8 w-8" : "h-10 w-auto"
           )}
-        >
-          {isCollapsed ? "T" : "TEZEUS"}
-        </h1>
+        />
         
         {/* Botão de colapso */}
         <button
@@ -356,7 +402,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
                   <PopoverTrigger asChild>
                     <TooltipTrigger asChild>
                       <button className="p-2 hover:bg-accent rounded-md relative">
-                        <Bell className="w-50 h-50 text-muted-foreground" />
+                        <Bell className="w-5 h-5 text-muted-foreground" />
                         <Badge 
                           variant="secondary" 
                           className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs bg-red-500 text-white border-0"
@@ -446,13 +492,13 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-medium text-primary">
-                  L
+                  {getUserInitial()}
                 </div>
               </TooltipTrigger>
               {isCollapsed && (
                 <TooltipContent side="right">
-                  <p>Luciano</p>
-                  <p className="text-xs">luciano@drivendastre.com.br</p>
+                  <p>{systemUser?.name || 'Usuário'}</p>
+                  <p className="text-xs">{systemUser?.email || 'email@exemplo.com'}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -461,14 +507,29 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           {!isCollapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-foreground truncate">Luciano</div>
-                <div className="text-xs text-muted-foreground truncate">luciano@drivendastre.com.br</div>
+                <div className="text-sm font-medium text-foreground truncate">{systemUser?.name || 'Usuário'}</div>
+                <div className="text-xs text-muted-foreground truncate">{systemUser?.email || 'email@exemplo.com'}</div>
               </div>
-              <button className="p-1 hover:bg-accent rounded-md">
-                <svg className="w-5 h-5 text-muted-foreground" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                </svg>
-              </button>
+              <Popover open={isUserMenuOpen} onOpenChange={setIsUserMenuOpen}>
+                <PopoverTrigger asChild>
+                  <button className="p-1 hover:bg-accent rounded-md">
+                    <svg className="w-5 h-5 text-muted-foreground" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="end" className="w-auto p-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="w-full justify-start gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sair
+                  </Button>
+                </PopoverContent>
+              </Popover>
             </>
           )}
         </div>
