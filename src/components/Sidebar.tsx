@@ -361,7 +361,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           alt="TEZEUS"
           className={cn(
             "transition-all duration-300",
-            isCollapsed ? "h-8 w-8" : "h-40 w-auto"
+            isCollapsed ? "h-8 w-8" : "h-20 w-40"
           )}
         />
         
