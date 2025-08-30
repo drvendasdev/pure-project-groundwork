@@ -199,6 +199,33 @@ export type Database = {
         }
         Relationships: []
       }
+      cargos: {
+        Row: {
+          created_at: string
+          funcao: string
+          id: string
+          nome: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          funcao: string
+          id?: string
+          nome: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          funcao?: string
+          id?: string
+          nome?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       channels: {
         Row: {
           created_at: string | null
@@ -564,6 +591,60 @@ export type Database = {
         }
         Relationships: []
       }
+      system_users: {
+        Row: {
+          avatar: string | null
+          cargo_id: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          profile: string
+          senha: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          profile: string
+          senha?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          profile?: string
+          senha?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_system_users_cargo_id"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_cargo_id_fkey"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tags: {
         Row: {
           color: string | null
@@ -643,9 +724,27 @@ export type Database = {
       }
     }
     Functions: {
+      block_system_user: {
+        Args: { user_email: string }
+        Returns: undefined
+      }
       clear_all_conversations: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      get_system_user: {
+        Args: { user_email: string; user_password: string }
+        Returns: {
+          avatar: string
+          cargo_id: string
+          created_at: string
+          email: string
+          id: string
+          name: string
+          profile: string
+          status: string
+          updated_at: string
+        }[]
       }
     }
     Enums: {
