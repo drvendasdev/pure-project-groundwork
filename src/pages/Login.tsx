@@ -28,11 +28,11 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      // Query system_users table using raw SQL
+      // Query system_users table using raw SQL function
       const { data: users, error } = await supabase.rpc('get_system_user', {
         user_email: email,
         user_password: password
-      });
+      }) as { data: any[] | null, error: any };
 
       if (error || !users || users.length === 0) {
         const newFailedAttempts = failedAttempts + 1;
