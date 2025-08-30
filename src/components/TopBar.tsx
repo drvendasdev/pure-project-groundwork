@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { WalletModal } from "./modals/WalletModal";
+import { LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface TopBarProps {
   onNavigateToConversation?: (conversationId: string) => void;
@@ -9,6 +11,12 @@ interface TopBarProps {
 
 export function TopBar({ onNavigateToConversation }: TopBarProps) {
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('systemUser');
+    navigate('/login');
+  };
 
   return (
     <>
@@ -54,12 +62,22 @@ export function TopBar({ onNavigateToConversation }: TopBarProps) {
               <div className="text-2xl font-bold" style={{ color: 'black' }}>
                 R$ 0
               </div>
-              <Button 
-                className="bg-yellow-500 hover:bg-yellow-600 text-black"
-                onClick={() => setShowWalletModal(true)}
-              >
-                Adicionar Saldo
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  onClick={() => setShowWalletModal(true)}
+                >
+                  Adicionar Saldo
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="icon"
+                  onClick={handleLogout}
+                  title="Sair"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
