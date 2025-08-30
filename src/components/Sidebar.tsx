@@ -356,14 +356,14 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           isCollapsed ? "p-3" : "p-6"
         )}
       >
-        <h1 
+        <img 
+          src="/lovable-uploads/9dbd9439-214a-4ea4-8a4b-8602b345ca06.png"
+          alt="TEZEUS"
           className={cn(
-            "font-bold transition-all duration-300 text-black",
-            isCollapsed ? "text-lg" : "text-2xl"
+            "transition-all duration-300",
+            isCollapsed ? "h-8 w-8" : "h-10 w-auto"
           )}
-        >
-          {isCollapsed ? "T" : "TEZEUS"}
-        </h1>
+        />
         
         {/* Botão de colapso */}
         <button

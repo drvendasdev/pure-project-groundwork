@@ -95,10 +95,14 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-2xl border border-border">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold text-primary">
-            TezeusCRM
-          </CardTitle>
+        <CardHeader className="space-y-4 text-center">
+          <div className="flex justify-center">
+            <img 
+              src="/lovable-uploads/9dbd9439-214a-4ea4-8a4b-8602b345ca06.png"
+              alt="TEZEUS"
+              className="h-16 w-auto"
+            />
+          </div>
           <CardDescription>
             Faça login para acessar o sistema
           </CardDescription>
