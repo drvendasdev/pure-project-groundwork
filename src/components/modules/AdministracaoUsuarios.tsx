@@ -172,7 +172,7 @@ export function AdministracaoUsuarios() {
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary" className="bg-brand-yellow text-black hover:bg-brand-yellow-hover rounded-full px-3 py-1">
+                  <Badge variant="secondary" className="bg-white text-brand-yellow border border-brand-yellow hover:bg-brand-yellow/10 rounded-full px-3 py-1">
                     Ativo
                   </Badge>
                 </TableCell>
