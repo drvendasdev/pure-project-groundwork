@@ -307,9 +307,9 @@ const CanaisDeAtendimentoPage = () => {
     <TooltipProvider>
       <div className="h-full">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4 px-4 sm:px-6 lg:px-8 pt-4">
           <h3 className="text-xl font-semibold text-slate-900">Canais de atendimento</h3>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <Button
               onClick={handleOpenAddModal}
               variant="yellow"
@@ -327,7 +327,7 @@ const CanaisDeAtendimentoPage = () => {
         </div>
         
         {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4 sm:px-6 lg:px-8">
           {canais.map((canal) => (
             <Card key={canal.id} className="bg-gradient-to-br from-white to-emerald-50/30 border border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-200">
               <div className="p-6">
