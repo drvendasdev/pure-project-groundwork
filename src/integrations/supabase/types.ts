@@ -746,6 +746,17 @@ export type Database = {
           updated_at: string
         }[]
       }
+<<<<<<< HEAD
+=======
+      hash_password: {
+        Args: { password: string }
+        Returns: string
+      }
+      verify_password: {
+        Args: { hash: string; password: string }
+        Returns: boolean
+      }
+>>>>>>> 4d4082e455d8356fd5dc12386da59cf2447bd6d2
     }
     Enums: {
       [_ in never]: never
