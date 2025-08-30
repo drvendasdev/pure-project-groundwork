@@ -199,6 +199,42 @@ export type Database = {
         }
         Relationships: []
       }
+      channels: {
+        Row: {
+          created_at: string | null
+          id: string
+          instance: string
+          last_state_at: string | null
+          name: string
+          number: string
+          status: string
+          updated_at: string | null
+          webhook_secret: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instance: string
+          last_state_at?: string | null
+          name: string
+          number: string
+          status?: string
+          updated_at?: string | null
+          webhook_secret: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instance?: string
+          last_state_at?: string | null
+          name?: string
+          number?: string
+          status?: string
+          updated_at?: string | null
+          webhook_secret?: string
+        }
+        Relationships: []
+      }
       contact_tags: {
         Row: {
           contact_id: string
@@ -572,7 +608,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      channels_view: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          instance: string | null
+          last_state_at: string | null
+          name: string | null
+          number: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          instance?: string | null
+          last_state_at?: string | null
+          name?: string | null
+          number?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          instance?: string | null
+          last_state_at?: string | null
+          name?: string | null
+          number?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       clear_all_conversations: {
