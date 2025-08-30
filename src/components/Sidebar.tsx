@@ -357,11 +357,11 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         )}
       >
         <img 
-          src="/lovable-uploads/9dbd9439-214a-4ea4-8a4b-8602b345ca06.png"
+          src="/lovable-uploads/1a02473c-7e74-4e58-b079-1e14541fa3c7.png"
           alt="TEZEUS"
           className={cn(
             "transition-all duration-300",
-            isCollapsed ? "h-8 w-8" : "h-50 w-auto"
+            isCollapsed ? "h-8 w-8" : "h-20 w-auto"
           )}
         />
         
