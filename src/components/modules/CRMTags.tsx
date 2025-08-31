@@ -13,14 +13,14 @@ export function CRMTags() {
   const [endDate, setEndDate] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   
-  const { tags: dbTags, isLoading, error } = useTags();
+  const { tags: dbTags, isLoading, error, refresh } = useTags();
 
   const filteredTags = dbTags.filter(tag =>
     tag.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleTagCreated = () => {
-    // Refresh will happen automatically via the useTags hook
+    refresh();
   };
 
   return (
