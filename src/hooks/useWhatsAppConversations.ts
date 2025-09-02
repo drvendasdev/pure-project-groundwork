@@ -42,77 +42,19 @@ export const useWhatsAppConversations = () => {
       setLoading(true);
       console.log('🔄 Carregando conversas do WhatsApp...');
 
-      // Buscar conversas do WhatsApp ordenadas por atividade
-      const { data: conversationsData, error: conversationsError } = await supabase
-        .from('conversations')
-        .select(`
-          id,
-          agente_ativo,
-          status,
-          unread_count,
-          last_activity_at,
-          created_at,
-          evolution_instance,
-          contact_id,
-          contacts!inner (
-            id,
-            name,
-            phone,
-            email,
-            profile_image_url
-          )
-        `)
-        .eq('canal', 'whatsapp')
-        .order('last_activity_at', { ascending: false });
+      // Use Edge Function to bypass RLS issues
+      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations');
 
-      if (conversationsError) {
-        throw conversationsError;
+      if (functionError) {
+        throw functionError;
       }
 
-      // Buscar mensagens para cada conversa
-      const conversationsWithMessages = await Promise.all(
-        (conversationsData || []).map(async (conv) => {
-          const { data: messagesData, error: messagesError } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('conversation_id', conv.id)
-            .order('created_at', { ascending: true });
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to fetch conversations');
+      }
 
-          if (messagesError) {
-            console.error('❌ Erro ao buscar mensagens:', messagesError);
-          }
-
-          return {
-            id: conv.id,
-            contact: {
-              id: conv.contacts.id,
-              name: conv.contacts.name,
-              phone: conv.contacts.phone,
-              email: conv.contacts.email,
-              profile_image_url: conv.contacts.profile_image_url,
-            },
-            agente_ativo: conv.agente_ativo,
-            status: conv.status as 'open' | 'closed' | 'pending',
-            unread_count: conv.unread_count,
-            last_activity_at: conv.last_activity_at,
-            created_at: conv.created_at,
-            evolution_instance: (conv as any).evolution_instance ?? null,
-            messages: (messagesData || []).map(msg => ({
-              id: msg.id,
-              content: msg.content,
-              sender_type: msg.sender_type as 'contact' | 'agent' | 'ia',
-              created_at: msg.created_at,
-              read_at: msg.read_at,
-              status: msg.status as 'sending' | 'sent' | 'delivered' | 'read' | 'failed',
-              message_type: msg.message_type as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
-              file_url: msg.file_url,
-              file_name: msg.file_name,
-              origem_resposta: (msg.origem_resposta || 'manual') as 'automatica' | 'manual',
-            })),
-          };
-        })
-      );
-
+      const conversationsWithMessages = response.data || [];
+      
       setConversations(conversationsWithMessages);
       console.log(`✅ ${conversationsWithMessages.length} conversas carregadas`);
     } catch (error) {
