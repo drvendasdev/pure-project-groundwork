@@ -1,5 +1,8 @@
 project_id = "zldeaozqxjwvzgrblyrh"
 
+[functions.evolution-instance-actions]
+verify_jwt = false
+
 [functions.batch-update-profile-images]
 verify_jwt = false
 

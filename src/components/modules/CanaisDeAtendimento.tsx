@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Signal, 
   RefreshCcw, 
@@ -86,10 +88,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 interface Canal {
   id: string;
   nome: string;
-  numero: string;
+  numero?: string;
   atualizadoEm: string;
   padrao: boolean;
   conectado?: boolean;
+  instanceName?: string;
+  status?: string;
   recoverFromInDays?: string;
   recoverMessages?: boolean;
   groupMessages?: boolean;
@@ -104,24 +108,9 @@ interface Canal {
 }
 
 const CanaisDeAtendimentoPage = () => {
-  const [canais, setCanais] = useState<Canal[]>([
-    {
-      id: '1',
-      nome: 'CDE OFICIAL (21)99329-2365',
-      numero: '5521993292365',
-      atualizadoEm: '18/07/25 14:34',
-      padrao: true,
-      conectado: true
-    },
-    {
-      id: '2',
-      nome: 'CDE Teste (21) 97318-3599',
-      numero: '5521973183599',
-      atualizadoEm: '12/08/25 14:28',
-      padrao: false,
-      conectado: false
-    }
-  ]);
+  const { toast } = useToast();
+  const [canais, setCanais] = useState<Canal[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [canaisDeletados, setCanaisDeletados] = useState<Canal[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -150,75 +139,119 @@ const CanaisDeAtendimentoPage = () => {
   });
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [qrCanal, setQrCanal] = useState<Canal | null>(null);
-  
+  const [qrCode, setQrCode] = useState<string>('');
+  const [qrLoading, setQrLoading] = useState(false);
+  const [statusPolling, setStatusPolling] = useState<NodeJS.Timeout | null>(null);
 
-  const handleSaveCanal = () => {
-    if (!novoCanal.nome || !novoCanal.numero) return;
+  // Carregar instâncias da Evolution API
+  useEffect(() => {
+    loadInstances();
+  }, []);
 
-    const canalData = {
-      nome: novoCanal.nome,
-      numero: novoCanal.numero,
-      atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      padrao: novoCanal.isDefault,
-      recoverFromInDays: novoCanal.recoverFromInDays,
-      recoverMessages: novoCanal.recoverMessages,
-      groupMessages: novoCanal.groupMessages,
-      syncContacts: novoCanal.syncContacts,
-      autoTransformToCommercialOrder: novoCanal.autoTransformToCommercialOrder,
-      allowReceiveCalls: novoCanal.allowReceiveCalls,
-      showTicketsWithoutQueue: novoCanal.showTicketsWithoutQueue,
-      pipelineId: novoCanal.pipelineId,
-      filas: novoCanal.filas,
-      promptId: novoCanal.promptId,
-      token: novoCanal.token
-    };
-
-    if (formMode === 'add') {
-      const newCanal: Canal = {
-        id: Date.now().toString(),
-        conectado: false,
-        ...canalData
-      };
+  const loadInstances = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.functions.invoke('list-evolution-instances');
       
-      // Se este canal for padrão, remover padrão dos outros
-      if (novoCanal.isDefault) {
-        setCanais(prev => prev.map(c => ({ ...c, padrao: false })));
+      if (error) {
+        console.error('Erro ao listar instâncias:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar canais de atendimento",
+          variant: "destructive",
+        });
+        return;
       }
-      
-      setCanais(prev => [...prev, newCanal]);
-    } else if (formMode === 'edit' && editingId) {
-      // Se este canal for padrão, remover padrão dos outros
-      if (novoCanal.isDefault) {
-        setCanais(prev => prev.map(c => ({ ...c, padrao: c.id === editingId })));
+
+      if (data?.success && data?.instances) {
+        const formattedCanais = data.instances.map((instance: any) => ({
+          id: instance.instanceName || instance.name,
+          nome: instance.instanceName || instance.name,
+          numero: instance.number || '',
+          instanceName: instance.instanceName || instance.name,
+          status: instance.connectionStatus?.instance?.state || instance.connectionStatus?.state || 'disconnected',
+          conectado: (instance.connectionStatus?.instance?.state || instance.connectionStatus?.state) === 'open',
+          atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          padrao: false
+        }));
+        
+        setCanais(formattedCanais);
       }
-      
-      setCanais(prev => prev.map(c => 
-        c.id === editingId 
-          ? { ...c, ...canalData }
-          : c
-      ));
+    } catch (error) {
+      console.error('Erro ao carregar instâncias:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar canais de atendimento",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // Reset form
-    setNovoCanal({ 
-      nome: '', 
-      numero: '',
-      recoverFromInDays: '0',
-      recoverMessages: false,
-      isDefault: false,
-      groupMessages: true,
-      syncContacts: true,
-      autoTransformToCommercialOrder: true,
-      allowReceiveCalls: false,
-      showTicketsWithoutQueue: true,
-      pipelineId: '',
-      filas: [],
-      promptId: '',
-      token: ''
-    });
-    setShowAddDialog(false);
-    setFormMode('add');
-    setEditingId(null);
+  const handleSaveCanal = async () => {
+    if (!novoCanal.nome) return;
+
+    try {
+      setLoading(true);
+      
+      // Criar instância na Evolution API
+      const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
+        body: {
+          action: 'create',
+          instanceName: novoCanal.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        }
+      });
+
+      if (error || !data?.success) {
+        console.error('Erro ao criar instância:', error || data?.error);
+        toast({
+          title: "Erro",
+          description: data?.error || "Erro ao criar canal de atendimento",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Canal criado com sucesso! Agora você pode gerar o QR Code para conectar.",
+      });
+
+      // Recarregar lista
+      await loadInstances();
+      
+      // Reset form
+      setNovoCanal({ 
+        nome: '', 
+        numero: '',
+        recoverFromInDays: '0',
+        recoverMessages: false,
+        isDefault: false,
+        groupMessages: true,
+        syncContacts: true,
+        autoTransformToCommercialOrder: true,
+        allowReceiveCalls: false,
+        showTicketsWithoutQueue: true,
+        pipelineId: '',
+        filas: [],
+        promptId: '',
+        token: ''
+      });
+      setShowAddDialog(false);
+      setFormMode('add');
+      setEditingId(null);
+
+    } catch (error) {
+      console.error('Erro ao criar canal:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao criar canal de atendimento",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteCanal = (canal: Canal) => {
@@ -255,7 +288,7 @@ const CanaisDeAtendimentoPage = () => {
     setEditingId(canal.id);
     setNovoCanal({
       nome: canal.nome,
-      numero: canal.numero,
+      numero: canal.numero || '',
       recoverFromInDays: canal.recoverFromInDays || '0',
       recoverMessages: canal.recoverMessages || false,
       isDefault: canal.padrao,
@@ -280,9 +313,35 @@ const CanaisDeAtendimentoPage = () => {
   };
 
   const handleRefresh = async (canalId: string) => {
-    setLoadingRefresh(canalId);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoadingRefresh(null);
+    try {
+      setLoadingRefresh(canalId);
+      const canal = canais.find(c => c.id === canalId);
+      if (!canal?.instanceName) return;
+
+      const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
+        body: {
+          action: 'status',
+          instanceName: canal.instanceName
+        }
+      });
+
+      if (data?.success) {
+        setCanais(prev => prev.map(c => 
+          c.id === canalId 
+            ? { 
+                ...c, 
+                status: data.status,
+                conectado: data.status === 'open',
+                atualizadoEm: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+              }
+            : c
+        ));
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+    } finally {
+      setLoadingRefresh(null);
+    }
   };
 
   const handleRestoreCanal = (canal: Canal) => {
@@ -290,18 +349,126 @@ const CanaisDeAtendimentoPage = () => {
     setCanais([...canais, canal]);
   };
 
-  const handleToggleConexao = (canalId: string) => {
-    setCanais(canais.map(c => 
-      c.id === canalId 
-        ? { ...c, conectado: !c.conectado }
-        : c
-    ));
+  const handleToggleConexao = async (canalId: string) => {
+    const canal = canais.find(c => c.id === canalId);
+    if (!canal?.instanceName) return;
+
+    try {
+      if (canal.conectado) {
+        // Desconectar
+        const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
+          body: {
+            action: 'disconnect',
+            instanceName: canal.instanceName
+          }
+        });
+
+        if (data?.success) {
+          toast({
+            title: "Sucesso",
+            description: "Canal desconectado com sucesso",
+          });
+          await handleRefresh(canalId);
+        }
+      } else {
+        // Conectar - abrir QR
+        handleOpenQrDialog(canal);
+      }
+    } catch (error) {
+      console.error('Erro ao alternar conexão:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao alterar conexão do canal",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleOpenQrDialog = (canal: Canal) => {
+  const handleOpenQrDialog = async (canal: Canal) => {
     setQrCanal(canal);
     setShowQrDialog(true);
+    await generateQrCode(canal);
   };
+
+  const generateQrCode = async (canal: Canal) => {
+    if (!canal.instanceName) return;
+
+    try {
+      setQrLoading(true);
+      const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
+        body: {
+          action: 'get_qr',
+          instanceName: canal.instanceName
+        }
+      });
+
+      if (data?.success && data?.qrcode) {
+        setQrCode(data.qrcode);
+        startStatusPolling(canal);
+      } else {
+        toast({
+          title: "Erro",
+          description: data?.error || "Erro ao gerar QR Code",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao gerar QR:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao gerar QR Code",
+        variant: "destructive",
+      });
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const startStatusPolling = (canal: Canal) => {
+    if (statusPolling) {
+      clearInterval(statusPolling);
+    }
+
+    const interval = setInterval(async () => {
+      if (!canal.instanceName) return;
+
+      try {
+        const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
+          body: {
+            action: 'status',
+            instanceName: canal.instanceName
+          }
+        });
+
+        if (data?.success && data?.status === 'open') {
+          // Conectado!
+          clearInterval(interval);
+          setStatusPolling(null);
+          setShowQrDialog(false);
+          
+          toast({
+            title: "Sucesso",
+            description: "Canal conectado com sucesso!",
+          });
+
+          await loadInstances();
+        }
+      } catch (error) {
+        console.error('Erro no polling de status:', error);
+      }
+    }, 3000);
+
+    setStatusPolling(interval);
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (statusPolling) {
+        clearInterval(statusPolling);
+      }
+    };
+  }, [statusPolling]);
 
   return (
     <TooltipProvider>
@@ -326,6 +493,13 @@ const CanaisDeAtendimentoPage = () => {
           </div>
         </div>
         
+        {/* Loading state */}
+        {loading && (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        )}
+
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {canais.map((canal) => (
@@ -387,10 +561,20 @@ const CanaisDeAtendimentoPage = () => {
                 </div>
 
                 {/* Number */}
+                {canal.numero && (
+                  <div className="mb-4">
+                    <label className="text-xs text-slate-500 block mb-1">Número</label>
+                    <div className="bg-slate-100 rounded-full px-3 py-1 text-sm text-slate-700 inline-block">
+                      {canal.numero}
+                    </div>
+                  </div>
+                )}
+
+                {/* Instance Name */}
                 <div className="mb-4">
-                  <label className="text-xs text-slate-500 block mb-1">Número</label>
+                  <label className="text-xs text-slate-500 block mb-1">Instância</label>
                   <div className="bg-slate-100 rounded-full px-3 py-1 text-sm text-slate-700 inline-block">
-                    {canal.numero}
+                    {canal.instanceName}
                   </div>
                 </div>
 
@@ -433,9 +617,9 @@ const CanaisDeAtendimentoPage = () => {
                         size="sm"
                         variant="outline"
                         onClick={() => handleOpenQrDialog(canal)}
-                        className="flex-1 h-8 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
+                        className="flex-1 h-8 text-xs border-primary text-primary hover:bg-primary hover:text-white"
                       >
-                        Novo QR CODE
+                        QR CODE
                       </Button>
                     </>
                   )}
@@ -463,385 +647,191 @@ const CanaisDeAtendimentoPage = () => {
           ))}
         </div>
 
-          {/* Dialog Adicionar Canal */}
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  <span>{formMode === 'add' ? 'Adicionar Canal de Atendimento' : 'Editar Canal de Atendimento'}</span>
-                </DialogTitle>
-                
-                {/* Stepper */}
-                <div className="flex items-center justify-center py-4">
-                  <div className="flex items-center">
-                    <div className="flex items-center">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ffc500] text-white text-sm font-medium">
-                        <Check className="h-4 w-4" />
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-[#ffc500]">Selecionar Canal de Atendimento</span>
-                    </div>
-                    <div className="w-16 h-0.5 bg-[#ffc500] mx-4"></div>
-                    <div className="flex items-center">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ffc500] text-white text-sm font-medium">
-                        2
-                      </div>
-                      <span className="ml-2 text-sm font-medium text-[#ffc500]">Configurar WhatsApp</span>
-                    </div>
-                  </div>
-                </div>
-              </DialogHeader>
-              
-              <div className="space-y-6 py-4">
-                {/* Nome Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="nome" className="text-sm font-medium">Nome *</Label>
-                  <Input
-                    id="nome"
-                    value={novoCanal.nome}
-                    onChange={(e) => setNovoCanal({...novoCanal, nome: e.target.value})}
-                    placeholder="Nome do canal"
-                    className={`${!novoCanal.nome ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
-                  />
-                  {!novoCanal.nome && <p className="text-xs text-red-500">Nome é obrigatório</p>}
-                </div>
-
-                {/* Número Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="numero" className="text-sm font-medium">Número *</Label>
-                  <Input
-                    id="numero"
-                    value={novoCanal.numero}
-                    onChange={(e) => setNovoCanal({...novoCanal, numero: e.target.value})}
-                    placeholder="Ex: 5521993292365"
-                    inputMode="numeric"
-                    pattern="\d*"
-                    className={`${!novoCanal.numero ? 'border-red-500' : ''} focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]`}
-                  />
-                  {!novoCanal.numero && <p className="text-xs text-red-500">Número é obrigatório</p>}
-                </div>
-
-                {/* Recovery Settings */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Recuperar mensagens a partir de</Label>
-                    <Select 
-                      value={novoCanal.recoverFromInDays} 
-                      onValueChange={(value) => setNovoCanal({...novoCanal, recoverFromInDays: value})}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione o período" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover z-50">
-                        <SelectItem value="0">Nenhuma</SelectItem>
-                        <SelectItem value="1">1 dia</SelectItem>
-                        <SelectItem value="7">7 dias</SelectItem>
-                        <SelectItem value="30">30 dias</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="recoverMessages"
-                      checked={novoCanal.recoverMessages}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, recoverMessages: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="recoverMessages" className="text-sm">Recuperar mensagens antigas</Label>
-                  </div>
-                </div>
-
-                {/* Switch Options Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="isDefault"
-                      checked={novoCanal.isDefault}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, isDefault: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="isDefault" className="text-sm">Canal de atendimento padrão</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="groupMessages"
-                      checked={novoCanal.groupMessages}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, groupMessages: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="groupMessages" className="text-sm">Receber mensagens de grupos</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="syncContacts"
-                      checked={novoCanal.syncContacts}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, syncContacts: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="syncContacts" className="text-sm">Sincronizar contatos</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="autoTransformToCommercialOrder"
-                      checked={novoCanal.autoTransformToCommercialOrder}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, autoTransformToCommercialOrder: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="autoTransformToCommercialOrder" className="text-sm">Criar card no CRM automaticamente</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="allowReceiveCalls"
-                      checked={novoCanal.allowReceiveCalls}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, allowReceiveCalls: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="allowReceiveCalls" className="text-sm">Enviar mensagem de recusa de ligação</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="showTicketsWithoutQueue"
-                      checked={novoCanal.showTicketsWithoutQueue}
-                      onCheckedChange={(checked) => setNovoCanal({...novoCanal, showTicketsWithoutQueue: checked})}
-                      className="data-[state=checked]:bg-[#ffc500]"
-                    />
-                    <Label htmlFor="showTicketsWithoutQueue" className="text-sm">Mostrar conversas sem fila para usuários</Label>
-                  </div>
-                </div>
-
-                {/* Pipeline Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Selecionar Pipeline</Label>
-                  <Select 
-                    value={novoCanal.pipelineId} 
-                    onValueChange={(value) => setNovoCanal({...novoCanal, pipelineId: value})}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecione um pipeline" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="vendas">Pipeline de Vendas</SelectItem>
-                      <SelectItem value="suporte">Pipeline de Suporte</SelectItem>
-                      <SelectItem value="leads">Pipeline de Leads</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Filas Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Filas</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className="w-full justify-between"
-                      >
-                        {novoCanal.filas.length > 0 
-                          ? `${novoCanal.filas.length} fila(s) selecionada(s)`
-                          : "Selecione as filas"
-                        }
-                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0 bg-popover z-50" align="start">
-                      <div className="p-4 space-y-3">
-                        {['Vendas', 'Suporte', 'Financeiro', 'Geral'].map((fila) => (
-                          <div key={fila} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`fila-${fila}`}
-                              checked={novoCanal.filas.includes(fila)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setNovoCanal({...novoCanal, filas: [...novoCanal.filas, fila]});
-                                } else {
-                                  setNovoCanal({...novoCanal, filas: novoCanal.filas.filter(f => f !== fila)});
-                                }
-                              }}
-                            />
-                            <Label htmlFor={`fila-${fila}`} className="text-sm">{fila}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* DS Agente Selection */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">DS Agente</Label>
-                  <Select 
-                    value={novoCanal.promptId} 
-                    onValueChange={(value) => setNovoCanal({...novoCanal, promptId: value})}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecione um agente" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="agente1">Agente de Vendas</SelectItem>
-                      <SelectItem value="agente2">Agente de Suporte</SelectItem>
-                      <SelectItem value="agente3">Agente Geral</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Token Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="token" className="text-sm font-medium">Token</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    value={novoCanal.token}
-                    onChange={(e) => setNovoCanal({...novoCanal, token: e.target.value})}
-                    placeholder="Token de acesso"
-                    className="focus-visible:ring-[#ffc500] focus-visible:border-[#ffc500]"
-                  />
-                </div>
+        {/* Dialog Adicionar Canal */}
+        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                <span>{formMode === 'add' ? 'Adicionar Canal de Atendimento' : 'Editar Canal de Atendimento'}</span>
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-6 py-4">
+              {/* Nome Field */}
+              <div className="space-y-2">
+                <Label htmlFor="nome" className="text-sm font-medium">Nome *</Label>
+                <Input
+                  id="nome"
+                  value={novoCanal.nome}
+                  onChange={(e) => setNovoCanal({...novoCanal, nome: e.target.value})}
+                  placeholder="Nome do canal"
+                  className={`${!novoCanal.nome ? 'border-red-500' : ''} focus-visible:ring-primary focus-visible:border-primary`}
+                />
+                {!novoCanal.nome && <p className="text-xs text-red-500">Nome é obrigatório</p>}
               </div>
+            </div>
 
-              <DialogFooter className="gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowAddDialog(false)}
-                  className="px-6"
-                >
-                  Voltar
-                </Button>
-                <Button 
-                  onClick={handleSaveCanal}
-                  variant="yellow"
-                  className="px-6"
-                  disabled={!novoCanal.nome || !novoCanal.numero}
-                >
-                  {formMode === 'add' ? 'Adicionar' : 'Salvar'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            <DialogFooter className="gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowAddDialog(false)}
+                className="px-6"
+              >
+                Voltar
+              </Button>
+              <Button 
+                onClick={handleSaveCanal}
+                variant="yellow"
+                className="px-6"
+                disabled={!novoCanal.nome || loading}
+              >
+                {loading ? 'Criando...' : (formMode === 'add' ? 'Adicionar' : 'Salvar')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
+        {/* AlertDialog Confirmação Delete */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar ação</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir este canal de atendimento? Esta ação pode ser desfeita na seção "Deletadas".
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => selectedCanal && handleDeleteCanal(selectedCanal)}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-          {/* AlertDialog Confirmação Delete/Desconectar */}
-          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Confirmar ação</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Tem certeza que deseja excluir este canal de atendimento? Esta ação pode ser desfeita na seção "Deletadas".
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={() => selectedCanal && handleDeleteCanal(selectedCanal)}
-                  className="bg-red-500 hover:bg-red-600"
-                >
-                  Confirmar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          {/* Dialog Canais Deletados */}
-          <Dialog open={showDeletedDialog} onOpenChange={setShowDeletedDialog}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Canais Deletados</DialogTitle>
-                <DialogDescription>
-                  Lista de canais de atendimento excluídos. Você pode restaurá-los se necessário.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {canaisDeletados.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4">Nenhum canal deletado</p>
-                ) : (
-                  canaisDeletados.map((canal) => (
-                    <div key={canal.id} className="flex items-center justify-between p-3 border rounded">
-                      <div>
-                        <p className="font-medium">{canal.nome}</p>
-                        <p className="text-sm text-slate-500">{canal.numero}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleRestoreCanal(canal)}
-                        className="bg-green-500 hover:bg-green-600 text-white"
-                      >
-                        Restaurar
-                      </Button>
+        {/* Dialog Canais Deletados */}
+        <Dialog open={showDeletedDialog} onOpenChange={setShowDeletedDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Canais Deletados</DialogTitle>
+              <DialogDescription>
+                Lista de canais de atendimento excluídos. Você pode restaurá-los se necessário.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {canaisDeletados.length === 0 ? (
+                <p className="text-slate-500 text-center py-4">Nenhum canal deletado</p>
+              ) : (
+                canaisDeletados.map((canal) => (
+                  <div key={canal.id} className="flex items-center justify-between p-3 border rounded">
+                    <div>
+                      <p className="font-medium">{canal.nome}</p>
+                      <p className="text-sm text-slate-500">{canal.numero}</p>
                     </div>
-                  ))
+                    <Button
+                      size="sm"
+                      onClick={() => handleRestoreCanal(canal)}
+                      className="bg-green-500 hover:bg-green-600 text-white"
+                    >
+                      Restaurar
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeletedDialog(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* QR Code Dialog */}
+        <Dialog open={showQrDialog} onOpenChange={(open) => {
+          setShowQrDialog(open);
+          if (!open && statusPolling) {
+            clearInterval(statusPolling);
+            setStatusPolling(null);
+          }
+        }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>QR Code para Conexão</DialogTitle>
+              <DialogDescription>
+                Escaneie o QR Code abaixo com seu WhatsApp para conectar o canal {qrCanal?.nome}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col items-center space-y-4">
+              <div className="w-64 h-64 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                {qrLoading ? (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                ) : qrCode ? (
+                  <img 
+                    src={`data:image/png;base64,${qrCode}`} 
+                    alt="QR Code" 
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <p className="text-gray-500 text-center">QR Code será exibido aqui</p>
                 )}
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowDeletedDialog(false)}>
-                  Fechar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              <Button 
+                onClick={() => generateQrCode(qrCanal!)}
+                variant="outline"
+                className="w-full"
+                disabled={qrLoading || !qrCanal}
+              >
+                <RefreshCcw className={`w-4 h-4 mr-2 ${qrLoading ? 'animate-spin' : ''}`} />
+                {qrLoading ? 'Gerando...' : 'Gerar Novo QR Code'}
+              </Button>
+              {statusPolling && (
+                <p className="text-sm text-muted-foreground text-center">
+                  Aguardando conexão... Verificando status automaticamente
+                </p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => {
+                setShowQrDialog(false);
+                if (statusPolling) {
+                  clearInterval(statusPolling);
+                  setStatusPolling(null);
+                }
+              }} variant="outline">
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-          {/* Dialog QR Code */}
-          <Dialog open={showQrDialog} onOpenChange={setShowQrDialog}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Novo QR CODE</DialogTitle>
-                <DialogDescription>
-                  Gerar novo QR Code para conectar o WhatsApp - {qrCanal?.nome}
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="flex flex-col items-center space-y-4 py-6">
-                <div className="w-48 h-48 bg-slate-100 rounded-lg flex items-center justify-center border-2 border-dashed border-slate-300">
-                  <div className="text-center text-slate-500">
-                    <MessageCircle className="w-12 h-12 mx-auto mb-2" />
-                    <p className="text-sm">QR Code será gerado aqui</p>
-                    <p className="text-xs mt-1">Via Evolution API</p>
-                  </div>
-                </div>
-                
-                <div className="text-center space-y-2">
-                  <p className="text-sm text-slate-600">
-                    Escaneie o QR Code com seu WhatsApp para conectar o canal
-                  </p>
+        {/* Sheet Registros */}
+        <Sheet open={showRegistrosSheet} onOpenChange={setShowRegistrosSheet}>
+          <SheetContent className="w-[400px] sm:w-[540px]">
+            <SheetHeader>
+              <SheetTitle>Registros do Canal</SheetTitle>
+              <SheetDescription>
+                Histórico de atividades e logs do canal de atendimento.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-6 space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="border-l-2 border-slate-200 pl-4 py-2">
+                  <p className="text-sm font-medium">Evento de exemplo {i}</p>
                   <p className="text-xs text-slate-500">
-                    Este recurso será integrado com a Evolution API em breve
+                    {new Date(Date.now() - i * 3600000).toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Descrição do evento que aconteceu no sistema...
                   </p>
                 </div>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowQrDialog(false)}>
-                  Fechar
-                </Button>
-                <Button variant="yellow" disabled>
-                  Gerar QR Code
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* Sheet Registros */}
-          <Sheet open={showRegistrosSheet} onOpenChange={setShowRegistrosSheet}>
-            <SheetContent className="w-[400px] sm:w-[540px]">
-              <SheetHeader>
-                <SheetTitle>Registros do Canal</SheetTitle>
-                <SheetDescription>
-                  Histórico de atividades e logs do canal de atendimento.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-6 space-y-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="border-l-2 border-slate-200 pl-4 py-2">
-                    <p className="text-sm font-medium">Evento de exemplo {i}</p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(Date.now() - i * 3600000).toLocaleString('pt-BR')}
-                    </p>
-                    <p className="text-sm text-slate-600 mt-1">
-                      Descrição do evento que aconteceu no sistema...
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </SheetContent>
-          </Sheet>
+              ))}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </TooltipProvider>
   );
