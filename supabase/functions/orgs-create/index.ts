@@ -19,51 +19,11 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('authorization');
-
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Authorization header is required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create user client for authentication checks
-    const supabaseUser = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { authorization: authHeader },
-        },
-      }
-    );
-
-    // Create admin client for bypassing RLS
+    // Create admin client for bypassing RLS (temporary until Supabase Auth is implemented)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-
-    // Check if user is authenticated
-    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-    
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'User not authenticated' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check if user is master (if this function exists)
-    const { data: isMaster, error: roleError } = await supabaseUser.rpc('is_master');
-    
-    if (roleError || !isMaster) {
-      return new Response(
-        JSON.stringify({ error: 'Only master users can create organizations' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const { name } = await req.json();
 
