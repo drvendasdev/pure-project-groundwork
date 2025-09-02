@@ -7,7 +7,6 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { getDefaultOrgId } from "@/lib/defaultOrg";
 
 interface Tag {
   id: string;
@@ -67,10 +66,9 @@ export function AddTagModal({
         tagId = existingTag.id;
       } else {
         // Criar nova tag
-        const orgId = await getDefaultOrgId();
         const { data: newTag, error: tagError } = await supabase
           .from('tags')
-          .insert([{ name: tagName, color: '#808080', org_id: orgId }])
+          .insert([{ name: tagName, color: '#808080' }])
           .select()
           .single();
 

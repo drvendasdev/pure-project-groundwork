@@ -20,11 +20,6 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-          <Route path="/parceiros" element={<Navigate to="/parceiros-dashboard" replace />} />
-          <Route path="/parceiros-dashboard" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-          <Route path="/parceiros-clientes" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-          <Route path="/parceiros-planos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-          <Route path="/parceiros-produtos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
           <Route path="/conversas" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
           <Route path="/ds-voice" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
           <Route path="/crm-negocios" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />

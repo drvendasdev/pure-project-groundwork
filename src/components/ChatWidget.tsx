@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { getDefaultOrgId } from '@/lib/defaultOrg';
 
 interface ChatMessage {
   id: string;
@@ -61,13 +60,11 @@ export const ChatWidget = ({
         if (existingContact) {
           contact = existingContact;
         } else {
-          const orgId = await getDefaultOrgId();
           const { data: newContact, error: contactError } = await supabase
             .from('contacts')
             .insert({
               name: customerName,
-              email: customerEmail,
-              org_id: orgId
+              email: customerEmail
             })
             .select()
             .single();
@@ -77,13 +74,11 @@ export const ChatWidget = ({
         }
       } else {
         // Criar contato temporário para visitante anônimo
-        const orgId = await getDefaultOrgId();
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert({
             name: `${customerName} ${Date.now()}`,
-            email: `temp_${Date.now()}@temp.com`,
-            org_id: orgId
+            email: `temp_${Date.now()}@temp.com`
           })
           .select()
           .single();
@@ -109,15 +104,13 @@ export const ChatWidget = ({
       if (existingConversation) {
         conversation = existingConversation;
       } else {
-        const orgId = await getDefaultOrgId();
         const { data: newConversation, error: convError } = await supabase
           .from('conversations')
           .insert({
             contact_id: contact.id,
             canal: 'site',
             agente_ativo: true,
-            status: 'open',
-            org_id: orgId
+            status: 'open'
           })
           .select()
           .single();

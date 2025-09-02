@@ -3,9 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Pipette } from "lucide-react";
+import { Eyedropper } from "lucide-react";
 import { ColorPickerModal } from "./ColorPickerModal";
-import { getDefaultOrgId } from "@/lib/defaultOrg";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -39,15 +38,12 @@ export function CriarTagModal({ isOpen, onClose, onCreated }: CriarTagModalProps
 
     setIsLoading(true);
     try {
-      const orgId = await getDefaultOrgId();
-
       const { error } = await supabase
         .from('tags')
         .insert([
           {
             name: nome.trim(),
-            color: cor,
-            org_id: orgId
+            color: cor
           }
         ]);
 
@@ -122,7 +118,7 @@ export function CriarTagModal({ isOpen, onClose, onCreated }: CriarTagModalProps
                   onClick={() => setIsColorPickerOpen(true)}
                   className="px-3"
                 >
-                  <Pipette className="h-4 w-4" />
+                  <Eyedropper className="h-4 w-4" />
                 </Button>
               </div>
             </div>
