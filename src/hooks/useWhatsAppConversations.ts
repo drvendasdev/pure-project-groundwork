@@ -59,9 +59,10 @@ export const useWhatsAppConversations = () => {
       console.log(`✅ ${conversationsWithMessages.length} conversas carregadas`);
     } catch (error) {
       console.error('❌ Erro ao buscar conversas:', error);
+      console.error('Error details:', error.message, error.details);
       toast({
         title: "Erro",
-        description: "Erro ao carregar conversas do WhatsApp",
+        description: `Erro ao carregar conversas do WhatsApp: ${error.message}`,
         variant: "destructive",
       });
     } finally {
