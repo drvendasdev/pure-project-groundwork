@@ -7,7 +7,7 @@
 @layer base {
   :root {
     /* Base colors */
-    --background: 275 48% 91%;
+    --background: 0 0% 96%;
     --foreground: 220 13% 18%;
 
     /* Brand colors */
