@@ -14,6 +14,7 @@ import { useTags } from "@/hooks/useTags";
 import { format } from "date-fns";
 import { DeletarTicketModal } from "@/components/modals/DeletarTicketModal";
 import { useToast } from "@/components/ui/use-toast";
+import { getDefaultOrgId } from "@/lib/defaultOrg";
 
 interface Contact {
   id: string;
@@ -356,13 +357,15 @@ export function CRMContatos() {
 
       if (isCreateMode) {
         // Create new contact
+        const orgId = await getDefaultOrgId();
         const { data: newContactData, error } = await supabase
           .from('contacts')
           .insert({
             name: editingContact.name.trim(),
             phone: editingContact.phone.trim() || null,
             email: editingContact.email.trim() || null,
-            extra_info: extraInfo
+            extra_info: extraInfo,
+            org_id: orgId
           })
           .select()
           .single();

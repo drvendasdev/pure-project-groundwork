@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Search, Phone, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getDefaultOrgId } from "@/lib/defaultOrg";
 
 interface Contact {
   id: string;
@@ -74,11 +75,13 @@ export function IniciarConversaModal({ open, onOpenChange, onConversationCreated
       
       if (!contactId) {
         const contactName = searchContact || `Contato ${phoneNumber}`;
+        const orgId = await getDefaultOrgId();
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert({
             name: contactName,
-            phone: fullPhone
+            phone: fullPhone,
+            org_id: orgId
           })
           .select()
           .single();
@@ -110,6 +113,7 @@ export function IniciarConversaModal({ open, onOpenChange, onConversationCreated
         });
       } else {
         // Criar nova conversa
+        const orgId = await getDefaultOrgId();
         const { data: newConversation, error: conversationError } = await supabase
           .from('conversations')
           .insert({
@@ -117,7 +121,8 @@ export function IniciarConversaModal({ open, onOpenChange, onConversationCreated
             canal: 'whatsapp',
             status: 'open',
             agente_ativo: false,
-            last_activity_at: new Date().toISOString()
+            last_activity_at: new Date().toISOString(),
+            org_id: orgId
           })
           .select()
           .single();

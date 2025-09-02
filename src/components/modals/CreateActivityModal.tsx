@@ -12,6 +12,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getDefaultOrgId } from "@/lib/defaultOrg";
 
 interface User {
   id: string;
@@ -116,8 +117,11 @@ export function CreateActivityModal({
       const scheduledDateTime = new Date(selectedDate);
       scheduledDateTime.setHours(hour, minute, 0, 0);
 
+      
+      const orgId = await getDefaultOrgId();
       const activityData = {
         contact_id: contactId,
+        org_id: orgId,
         type: formData.type,
         responsible_id: formData.responsibleId,
         subject: formData.subject,
