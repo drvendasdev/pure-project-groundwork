@@ -39,7 +39,7 @@ export function NovaEmpresaModal({ isOpen, onClose, onSuccess }: NovaEmpresaModa
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.functions.invoke('orgs-create', {
+      const { data, error } = await supabase.functions.invoke('orgs-create', {
         body: { name: nome.trim() }
       });
 
@@ -57,9 +57,20 @@ export function NovaEmpresaModal({ isOpen, onClose, onSuccess }: NovaEmpresaModa
       onSuccess();
     } catch (error: any) {
       console.error('Error creating organization:', error);
+      // Parse the error response to get the specific error message
+      let errorMessage = "Erro ao criar empresa";
+      if (error?.message) {
+        try {
+          const parsedError = JSON.parse(error.message);
+          errorMessage = parsedError.error || error.message;
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Erro",
-        description: error.message || "Erro ao criar empresa",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
