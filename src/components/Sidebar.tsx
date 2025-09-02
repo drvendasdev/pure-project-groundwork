@@ -31,7 +31,9 @@ import {
   GitBranch,
   Bell,
   User,
-  LogOut
+  LogOut,
+  Building,
+  Package
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -98,11 +100,16 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
     loadSystemUser();
   }, []);
 
-  // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
+  // Garantir que os grupos fiquem expandidos quando os itens estiverem ativos
   useEffect(() => {
     if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes") {
       setExpandedGroups(prev => 
         prev.includes("administracao") ? prev : [...prev, "administracao"]
+      );
+    }
+    if (activeModule === "parceiros-dashboard" || activeModule === "parceiros-clientes" || activeModule === "parceiros-planos" || activeModule === "parceiros-produtos") {
+      setExpandedGroups(prev => 
+        prev.includes("parceiros") ? prev : [...prev, "parceiros"]
       );
     }
   }, [activeModule]);
@@ -224,6 +231,30 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       label: "Configurações",
       icon: <Settings className="w-5 h-5" />,
       group: "administracao"
+    },
+    {
+      id: "parceiros-dashboard",
+      label: "Dashboard",
+      icon: <LayoutDashboard className="w-5 h-5" />,
+      group: "parceiros"
+    },
+    {
+      id: "parceiros-clientes",
+      label: "Clientes",
+      icon: <Building className="w-5 h-5" />,
+      group: "parceiros"
+    },
+    {
+      id: "parceiros-planos",
+      label: "Planos",
+      icon: <DollarSign className="w-5 h-5" />,
+      group: "parceiros"
+    },
+    {
+      id: "parceiros-produtos",
+      label: "Produtos",
+      icon: <Package className="w-5 h-5" />,
+      group: "parceiros"
     }
   ];
 
@@ -236,7 +267,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   };
 
   const renderMenuItem = (item: MenuItem & { group?: string }) => {
-    const isActive = activeModule === item.id;
+          const isActive = activeModule === item.id;
     
     const menuButton = (
       <button
@@ -252,7 +283,14 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         )}
       >
         {item.icon}
-        {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+        {!isCollapsed && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{item.label}</span>
+            {item.id === "parceiros-dashboard" && (
+              <Badge variant="secondary" className="text-xs">BETA</Badge>
+            )}
+          </div>
+        )}
       </button>
     );
 
@@ -308,6 +346,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   const crmItems = menuItems.filter(item => item.group === "crm");
   const recursosItems = menuItems.filter(item => item.group === "recursos");
   const automacoesItems = menuItems.filter(item => item.group === "automacoes");
+  const parceirosItems = menuItems.filter(item => item.group === "parceiros");
   const administracaoItems = menuItems.filter(item => item.group === "administracao");
 
   const handleNotificationClick = (conversationId: string) => {
@@ -385,6 +424,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}
         {renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
+        {renderGroup("parceiros", "Parceiros", parceirosItems)}
         {renderGroup("administracao", "Administração", administracaoItems)}
       </nav>
 
