@@ -13,7 +13,8 @@ import {
   Check,
   ChevronDown,
   MoreVertical,
-  MessageCircle
+  MessageCircle,
+  Zap
 } from 'lucide-react';
 
 // WhatsApp Icon Component
@@ -176,12 +177,20 @@ const CanaisDeAtendimentoPage = () => {
         }));
         
         setCanais(formattedCanais);
+      } else if (!data?.success) {
+        const errorMessage = data?.error || data?.response?.message || 'Erro desconhecido ao carregar canais';
+        toast({
+          title: "Erro ao carregar canais",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('Erro ao carregar instâncias:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar canais de atendimento';
       toast({
         title: "Erro",
-        description: "Erro ao carregar canais de atendimento",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -204,10 +213,11 @@ const CanaisDeAtendimentoPage = () => {
       });
 
       if (error || !data?.success) {
+        const errorMessage = data?.error || data?.response?.message || error?.message || "Erro ao criar canal de atendimento";
         console.error('Erro ao criar instância:', error || data?.error);
         toast({
-          title: "Erro",
-          description: data?.error || "Erro ao criar canal de atendimento",
+          title: "Erro ao criar canal",
+          description: errorMessage,
           variant: "destructive",
         });
         return;
@@ -244,9 +254,10 @@ const CanaisDeAtendimentoPage = () => {
 
     } catch (error) {
       console.error('Erro ao criar canal:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar canal de atendimento';
       toast({
-        title: "Erro",
-        description: "Erro ao criar canal de atendimento",
+        title: "Erro ao criar canal",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -489,6 +500,31 @@ const CanaisDeAtendimentoPage = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Deletadas
+            </Button>
+            <Button 
+              onClick={async () => {
+                try {
+                  const response = await supabase.functions.invoke('test-evolution-api');
+                  const result = response.data;
+                  
+                  toast({
+                    title: result?.success ? "Teste bem-sucedido" : "Teste falhou",
+                    description: result?.message || JSON.stringify(result, null, 2),
+                    variant: result?.success ? "default" : "destructive",
+                  });
+                } catch (error) {
+                  toast({
+                    title: "Erro no teste",
+                    description: "Falha ao executar teste de conexão",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Testar Conexão
             </Button>
           </div>
         </div>

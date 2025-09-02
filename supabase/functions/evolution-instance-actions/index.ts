@@ -11,19 +11,53 @@ serve(async (req) => {
   }
 
   try {
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+    // Try multiple secret name variants
+    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
+    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
     const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.functions.supabase.co/functions/v1/evolution-webhook';
-    const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || 'default-secret';
+    const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'default-secret';
 
     if (!evolutionApiUrl || !evolutionApiKey) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Credenciais da Evolution API não configuradas'
+        error: 'Credenciais da Evolution API não configuradas. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY.'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Helper function to try both authentication methods
+    async function makeAuthenticatedRequest(url: string, options: RequestInit = {}) {
+      console.log(`Fazendo requisição para: ${url}`);
+      
+      // First try with apikey header
+      let response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': evolutionApiKey,
+          ...options.headers,
+        },
+      });
+
+      // If unauthorized, try with Bearer token
+      if (response.status === 401 || response.status === 403) {
+        console.log('Primeira tentativa falhou, tentando com Bearer token...');
+        response = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${evolutionApiKey}`,
+            ...options.headers,
+          },
+        });
+      }
+
+      const responseText = await response.text();
+      console.log(`Resposta da API (${response.status}):`, responseText);
+      
+      return { response, responseText };
     }
 
     const { action, instanceName, webhookSecret: customWebhookSecret } = await req.json();
@@ -33,12 +67,8 @@ serve(async (req) => {
     switch (action) {
       case 'create':
         // Criar instância
-        const createResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+        const createResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/create`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey,
-          },
           body: JSON.stringify({
             instanceName: instanceName,
             token: evolutionApiKey,
@@ -75,33 +105,30 @@ serve(async (req) => {
           }),
         });
 
-        const createData = await createResponse.text();
-        let createResult;
+        let createData;
         try {
-          createResult = JSON.parse(createData);
+          createData = JSON.parse(createResult.responseText);
         } catch (e) {
-          createResult = createData;
+          createData = createResult.responseText;
         }
 
-        if (!createResponse.ok) {
+        if (!createResult.response.ok) {
+          const errorMessage = createData?.message || createData?.error || createResult.responseText || createResult.response.statusText;
           return new Response(JSON.stringify({
             success: false,
-            error: `Erro ao criar instância: ${createResponse.status}`,
-            response: createResult
+            error: `Erro ao criar instância (${createResult.response.status}): ${errorMessage}`,
+            response: createData,
+            statusCode: createResult.response.status
           }), {
-            status: createResponse.status,
+            status: createResult.response.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
         // Configurar webhook
         try {
-          await fetch(`${evolutionApiUrl}/webhook/set/${instanceName}`, {
+          await makeAuthenticatedRequest(`${evolutionApiUrl}/webhook/set/${instanceName}`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': evolutionApiKey,
-            },
             body: JSON.stringify({
               url: webhookUrl,
               webhook_by_events: false,
@@ -121,35 +148,32 @@ serve(async (req) => {
 
         return new Response(JSON.stringify({
           success: true,
-          data: createResult
+          data: createData
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
       case 'get_qr':
-        const qrResponse = await fetch(`${evolutionApiUrl}/instance/connect/${instanceName}`, {
+        const qrResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connect/${instanceName}`, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey,
-          },
         });
 
-        const qrText = await qrResponse.text();
         let qrData;
         try {
-          qrData = JSON.parse(qrText);
+          qrData = JSON.parse(qrResult.responseText);
         } catch (e) {
-          qrData = qrText;
+          qrData = qrResult.responseText;
         }
 
-        if (!qrResponse.ok) {
+        if (!qrResult.response.ok) {
+          const errorMessage = qrData?.message || qrData?.error || qrResult.responseText || qrResult.response.statusText;
           return new Response(JSON.stringify({
             success: false,
-            error: `Erro ao obter QR Code: ${qrResponse.status}`,
-            response: qrData
+            error: `Erro ao obter QR Code (${qrResult.response.status}): ${errorMessage}`,
+            response: qrData,
+            statusCode: qrResult.response.status
           }), {
-            status: qrResponse.status,
+            status: qrResult.response.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -163,29 +187,26 @@ serve(async (req) => {
         });
 
       case 'status':
-        const statusResponse = await fetch(`${evolutionApiUrl}/instance/connectionState/${instanceName}`, {
+        const statusResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connectionState/${instanceName}`, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey,
-          },
         });
 
-        const statusText = await statusResponse.text();
         let statusData;
         try {
-          statusData = JSON.parse(statusText);
+          statusData = JSON.parse(statusResult.responseText);
         } catch (e) {
-          statusData = statusText;
+          statusData = statusResult.responseText;
         }
 
-        if (!statusResponse.ok) {
+        if (!statusResult.response.ok) {
+          const errorMessage = statusData?.message || statusData?.error || statusResult.responseText || statusResult.response.statusText;
           return new Response(JSON.stringify({
             success: false,
-            error: `Erro ao verificar status: ${statusResponse.status}`,
-            response: statusData
+            error: `Erro ao verificar status (${statusResult.response.status}): ${errorMessage}`,
+            response: statusData,
+            statusCode: statusResult.response.status
           }), {
-            status: statusResponse.status,
+            status: statusResult.response.status,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -199,49 +220,41 @@ serve(async (req) => {
         });
 
       case 'disconnect':
-        const disconnectResponse = await fetch(`${evolutionApiUrl}/instance/logout/${instanceName}`, {
+        const disconnectResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/logout/${instanceName}`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey,
-          },
         });
 
-        const disconnectText = await disconnectResponse.text();
         let disconnectData;
         try {
-          disconnectData = JSON.parse(disconnectText);
+          disconnectData = JSON.parse(disconnectResult.responseText);
         } catch (e) {
-          disconnectData = disconnectText;
+          disconnectData = disconnectResult.responseText;
         }
 
         return new Response(JSON.stringify({
-          success: disconnectResponse.ok,
-          data: disconnectData
+          success: disconnectResult.response.ok,
+          data: disconnectData,
+          statusCode: disconnectResult.response.status
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
       case 'delete':
-        const deleteResponse = await fetch(`${evolutionApiUrl}/instance/delete/${instanceName}`, {
+        const deleteResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/delete/${instanceName}`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': evolutionApiKey,
-          },
         });
 
-        const deleteText = await deleteResponse.text();
         let deleteData;
         try {
-          deleteData = JSON.parse(deleteText);
+          deleteData = JSON.parse(deleteResult.responseText);
         } catch (e) {
-          deleteData = deleteText;
+          deleteData = deleteResult.responseText;
         }
 
         return new Response(JSON.stringify({
-          success: deleteResponse.ok,
-          data: deleteData
+          success: deleteResult.response.ok,
+          data: deleteData,
+          statusCode: deleteResult.response.status
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
