@@ -17,10 +17,27 @@ serve(async (req) => {
     const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.functions.supabase.co/functions/v1/evolution-webhook';
     const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'default-secret';
 
-    if (!evolutionApiUrl || !evolutionApiKey) {
+    // For operations with instanceToken, we can skip global credentials check
+    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret } = await req.json();
+    
+    // Operations that require instance token
+    const tokenOnlyActions = ['get_qr', 'status', 'disconnect', 'delete'];
+    
+    if (!tokenOnlyActions.includes(action) && (!evolutionApiUrl || !evolutionApiKey)) {
       return new Response(JSON.stringify({
         success: false,
         error: 'Credenciais da Evolution API não configuradas. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY.'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    // For token-only operations, validate instanceToken
+    if (tokenOnlyActions.includes(action) && !instanceToken) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Token da instância é obrigatório para esta operação.'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -61,8 +78,6 @@ serve(async (req) => {
       
       return { response, responseText };
     }
-
-    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret } = await req.json();
 
     console.log('Evolution instance action:', { action, instanceName, hasInstanceToken: !!instanceToken });
 

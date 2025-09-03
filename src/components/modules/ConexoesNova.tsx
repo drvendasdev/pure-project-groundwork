@@ -29,19 +29,24 @@ export default function ConexoesNova() {
       
       const instanceName = formData.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       
-      // Create instance
-      const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
+      // Check status of existing instance
+      const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
-          action: 'create',
+          action: 'status',
           instanceName,
           instanceToken: formData.token
         }
       });
 
-      if (error) throw error;
+      if (!statusResponse.data?.success) {
+        throw new Error(statusResponse.data?.error || 'Instância não encontrada ou token inválido');
+      }
 
-      if (data?.success) {
-        // Get QR code immediately
+      const status = statusResponse.data?.status === 'open' ? 'connected' : 'connecting';
+      let qrCode = null;
+
+      // If not connected, try to get QR code
+      if (status === 'connecting') {
         const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
           body: {
             action: 'get_qr',
@@ -50,24 +55,26 @@ export default function ConexoesNova() {
           }
         });
 
-        const novaConexao: Conexao = {
-          nome: formData.nome,
-          token: formData.token,
-          qrCode: qrResponse.data?.qrcode,
-          status: 'connecting'
-        };
-
-        setConexoes(prev => [...prev, novaConexao]);
-        setFormData({ nome: '', token: '' });
-        setDialogOpen(false);
-        toast({ title: 'Conexão adicionada com sucesso!' });
-      } else {
-        throw new Error(data?.message || 'Erro ao criar instância');
+        if (qrResponse.data?.success) {
+          qrCode = qrResponse.data?.qrcode;
+        }
       }
+
+      const novaConexao: Conexao = {
+        nome: formData.nome,
+        token: formData.token,
+        qrCode,
+        status
+      };
+
+      setConexoes(prev => [...prev, novaConexao]);
+      setFormData({ nome: '', token: '' });
+      setDialogOpen(false);
+      toast({ title: 'Instância referenciada com sucesso!' });
     } catch (error: any) {
-      console.error('Erro ao adicionar conexão:', error);
+      console.error('Erro ao referenciar instância:', error);
       toast({ 
-        title: 'Erro ao adicionar conexão',
+        title: 'Erro ao referenciar instância',
         description: error.message,
         variant: 'destructive'
       });
@@ -124,27 +131,9 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleDelete = async (conexao: Conexao, index: number) => {
-    try {
-      const instanceName = conexao.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      
-      await supabase.functions.invoke('evolution-instance-actions', {
-        body: {
-          action: 'delete',
-          instanceName,
-          instanceToken: conexao.token
-        }
-      });
-
-      setConexoes(prev => prev.filter((_, i) => i !== index));
-      toast({ title: 'Conexão removida!' });
-    } catch (error) {
-      console.error('Erro ao deletar:', error);
-      toast({ 
-        title: 'Erro ao remover conexão',
-        variant: 'destructive'
-      });
-    }
+  const handleDelete = (index: number) => {
+    setConexoes(prev => prev.filter((_, i) => i !== index));
+    toast({ title: 'Referência removida!' });
   };
 
   const getStatusColor = (status?: string) => {
@@ -179,14 +168,14 @@ export default function ConexoesNova() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Nova Conexão
+              Referenciar Instância
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Adicionar Nova Conexão</DialogTitle>
+              <DialogTitle>Referenciar Instância</DialogTitle>
               <DialogDescription>
-                Preencha os dados da nova conexão WhatsApp
+                Referencie uma instância existente do Evolution API
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -221,7 +210,7 @@ export default function ConexoesNova() {
                   onClick={handleAddConexao}
                   disabled={!formData.nome || !formData.token || loading}
                 >
-                  {loading ? 'Criando...' : 'Adicionar'}
+                  {loading ? 'Referenciando...' : 'Referenciar'}
                 </Button>
               </div>
             </div>
@@ -284,10 +273,10 @@ export default function ConexoesNova() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleDelete(conexao, index)}
+                  onClick={() => handleDelete(index)}
                 >
                   <Trash2 className="mr-1 h-3 w-3" />
-                  Deletar
+                  Remover
                 </Button>
               </div>
             </CardContent>
@@ -299,7 +288,7 @@ export default function ConexoesNova() {
             <QrCode className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-4 text-lg font-semibold">Nenhuma conexão</h3>
             <p className="text-muted-foreground">
-              Adicione sua primeira conexão WhatsApp
+              Referencie sua primeira instância WhatsApp
             </p>
           </div>
         )}
