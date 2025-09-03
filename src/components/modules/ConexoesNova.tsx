@@ -281,14 +281,14 @@ export default function ConexoesNova() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Referenciar Instância
+              Criar Canal de Atendimento
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Referenciar Instância</DialogTitle>
+              <DialogTitle>Nome da Instância</DialogTitle>
               <DialogDescription>
-                Referencie uma instância existente do Evolution API
+                Insira uma instância existente do Evolution API
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
