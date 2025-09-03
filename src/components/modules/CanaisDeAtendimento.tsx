@@ -257,6 +257,14 @@ const CanaisDeAtendimentoPage = () => {
       setFormMode('add');
       setEditingId(null);
 
+      // Automatically open QR code dialog for the new channel
+      setTimeout(async () => {
+        const newCanal = canais.find(c => c.instanceName === novoCanal.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase());
+        if (newCanal) {
+          await handleOpenQrDialog(newCanal);
+        }
+      }, 1000);
+
     } catch (error) {
       console.error('Erro ao criar canal:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao criar canal de atendimento';

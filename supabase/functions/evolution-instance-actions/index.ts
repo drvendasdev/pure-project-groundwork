@@ -60,18 +60,30 @@ serve(async (req) => {
       return { response, responseText };
     }
 
-    const { action, instanceName, webhookSecret: customWebhookSecret } = await req.json();
+    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret } = await req.json();
 
-    console.log('Evolution instance action:', { action, instanceName });
+    console.log('Evolution instance action:', { action, instanceName, hasInstanceToken: !!instanceToken });
 
     switch (action) {
       case 'create':
+        // Validar se o token da instância foi fornecido
+        if (!instanceToken) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Token da instância é obrigatório para criar uma nova conexão.',
+            statusCode: 400
+          }), {
+            status: 200, // Return 200 so frontend can handle the error properly
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Criar instância
         const createResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/create`, {
           method: 'POST',
           body: JSON.stringify({
             instanceName: instanceName,
-            token: evolutionApiKey,
+            token: instanceToken,
             qrcode: true,
             number: '',
             business: {
