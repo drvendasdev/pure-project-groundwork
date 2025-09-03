@@ -345,6 +345,41 @@ serve(async (req) => {
         conversation = { ...existingConversation, evolution_instance: evolutionInstance };
       }
     } else {
+      // Buscar usuário responsável pela instância antes de criar a conversa
+      let assignedUserId = null;
+      if (evolutionInstance) {
+        const { data: instanceAssignment } = await supabase
+          .from('instance_user_assignments')
+          .select('user_id')
+          .eq('instance', evolutionInstance)
+          .eq('is_default', true)
+          .single();
+
+        if (instanceAssignment) {
+          assignedUserId = instanceAssignment.user_id;
+          console.log('Usuário automaticamente atribuído pela instância:', { 
+            instance: evolutionInstance, 
+            assignedUserId 
+          });
+        } else {
+          // Se não há usuário padrão, buscar qualquer usuário atribuído à instância
+          const { data: anyAssignment } = await supabase
+            .from('instance_user_assignments')
+            .select('user_id')
+            .eq('instance', evolutionInstance)
+            .limit(1)
+            .single();
+
+          if (anyAssignment) {
+            assignedUserId = anyAssignment.user_id;
+            console.log('Usuário atribuído (não padrão) pela instância:', { 
+              instance: evolutionInstance, 
+              assignedUserId 
+            });
+          }
+        }
+      }
+
       // Criar nova conversa - N8N gerencia a IA, não o sistema local
       const { data: newConversation, error: convError } = await supabase
         .from('conversations')
@@ -353,7 +388,8 @@ serve(async (req) => {
           canal: 'whatsapp',
           agente_ativo: false, // N8N gerencia as respostas
           status: 'open',
-          evolution_instance: evolutionInstance || null
+          evolution_instance: evolutionInstance || null,
+          assigned_user_id: assignedUserId
         })
         .select()
         .single();
@@ -362,7 +398,34 @@ serve(async (req) => {
         throw new Error(`Erro ao criar conversa: ${convError.message}`);
       }
       conversation = newConversation;
-      console.log('Nova conversa criada com evolution_instance:', evolutionInstance);
+      console.log('Nova conversa criada:', { 
+        evolutionInstance, 
+        assignedUserId,
+        conversationId: newConversation.id 
+      });
+    }
+
+    // Atribuir usuário se a conversa não tem usuário atribuído e temos uma instância
+    if (!conversation.assigned_user_id && evolutionInstance) {
+      const { data: instanceAssignment } = await supabase
+        .from('instance_user_assignments')
+        .select('user_id')
+        .eq('instance', evolutionInstance)
+        .eq('is_default', true)
+        .single();
+
+      if (instanceAssignment) {
+        await supabase
+          .from('conversations')
+          .update({ assigned_user_id: instanceAssignment.user_id })
+          .eq('id', conversation.id);
+        
+        conversation.assigned_user_id = instanceAssignment.user_id;
+        console.log('Usuário atribuído à conversa existente:', { 
+          conversationId: conversation.id, 
+          assignedUserId: instanceAssignment.user_id 
+        });
+      }
     }
 
     // Verificar modo debug (enviar payload completo como content)

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
+import { useInstances } from "@/hooks/useInstances";
 
 
 interface AdicionarUsuarioModalProps {
@@ -44,6 +46,9 @@ const mockPhones = [
 export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarUsuarioModalProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [defaultInstance, setDefaultInstance] = useState<string>("");
+  const { instances, isLoading: instancesLoading } = useInstances();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -88,6 +93,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     });
     setShowPassword(false);
     setSelectedRoles([]);
+    setSelectedInstances([]);
+    setDefaultInstance("");
     onClose();
   };
 
@@ -105,6 +112,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     });
     setShowPassword(false);
     setSelectedRoles([]);
+    setSelectedInstances([]);
+    setDefaultInstance("");
     onClose();
   };
 
@@ -130,6 +139,25 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
 
   const removeRole = (roleName: string) => {
     setSelectedRoles(selectedRoles.filter(r => r !== roleName));
+  };
+
+  const handleInstanceToggle = (instanceId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedInstances([...selectedInstances, instanceId]);
+    } else {
+      setSelectedInstances(selectedInstances.filter(id => id !== instanceId));
+      // Remove as default if unchecked
+      if (defaultInstance === instanceId) {
+        setDefaultInstance("");
+      }
+    }
+  };
+
+  const handleDefaultInstanceChange = (instanceId: string) => {
+    // Only allow setting as default if it's selected
+    if (selectedInstances.includes(instanceId)) {
+      setDefaultInstance(instanceId);
+    }
   };
 
   return (
@@ -419,6 +447,67 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
               >
                 Telefone padrão
               </label>
+            </div>
+
+            {/* Instâncias/Canais de Atendimento */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-700 font-medium">Instâncias (Canais)</span>
+                <span className="text-xs text-gray-500">
+                  {selectedInstances.length} selecionada(s)
+                </span>
+              </div>
+              
+              {instancesLoading ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Carregando instâncias...
+                </div>
+              ) : instances.length === 0 ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Nenhuma instância encontrada
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
+                  {instances.map((instance) => (
+                    <div key={instance.instance} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`instance-${instance.instance}`}
+                          checked={selectedInstances.includes(instance.instance)}
+                          onCheckedChange={(checked) => 
+                            handleInstanceToggle(instance.instance, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`instance-${instance.instance}`}
+                          className="text-sm text-gray-700 cursor-pointer flex-1"
+                        >
+                          {instance.displayName || instance.instance}
+                        </label>
+                      </div>
+                      
+                      {selectedInstances.includes(instance.instance) && (
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="radio"
+                            id={`default-${instance.instance}`}
+                            name="defaultInstance"
+                            checked={defaultInstance === instance.instance}
+                            onChange={() => handleDefaultInstanceChange(instance.instance)}
+                            className="h-3 w-3"
+                          />
+                          <label 
+                            htmlFor={`default-${instance.instance}`}
+                            className="text-xs text-gray-500 cursor-pointer"
+                          >
+                            Padrão
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Google Button */}
