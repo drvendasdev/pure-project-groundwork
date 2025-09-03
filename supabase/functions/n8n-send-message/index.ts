@@ -97,11 +97,9 @@ serve(async (req) => {
       instanceSource = 'conversation';
     }
     
-    // Prioridade 3: user assignments (instância padrão do usuário, se houver)
-    // TODO: Implementar quando tiver sistema de autenticação
-    
-    // Prioridade 4: org default (instância padrão da organização)
-    if (!resolvedEvolutionInstance && conversationId) {
+    // Prioridade 3: org default (instância padrão da organização)
+    let orgDefaultInstance: string | null = null;
+    if (conversationId) {
       const { data: convData } = await supabase
         .from('conversations')
         .select('org_id')
@@ -116,11 +114,36 @@ serve(async (req) => {
           .maybeSingle();
         
         if (orgSettings?.default_instance) {
-          resolvedEvolutionInstance = orgSettings.default_instance;
-          instanceSource = 'orgDefault';
+          orgDefaultInstance = orgSettings.default_instance;
+          
+          // Se não achou instância ainda, usar o padrão da org
+          if (!resolvedEvolutionInstance) {
+            resolvedEvolutionInstance = orgDefaultInstance;
+            instanceSource = 'orgDefault';
+          }
+          // Se a conversa tem a instância global e existe padrão da org, sobrescrever
+          else if (evolutionInstance && evolutionInstance === Deno.env.get('EVOLUTION_INSTANCE') && orgDefaultInstance) {
+            resolvedEvolutionInstance = orgDefaultInstance;
+            instanceSource = 'orgDefaultOverride';
+            
+            // Atualizar a conversa com o padrão da org
+            console.log('🔄 Substituindo instância global por padrão da org:', {
+              conversationId: conversationId.substring(0, 8) + '***',
+              oldGlobal: evolutionInstance,
+              newOrgDefault: orgDefaultInstance
+            });
+            
+            await supabase
+              .from('conversations')
+              .update({ evolution_instance: orgDefaultInstance })
+              .eq('id', conversationId);
+          }
         }
       }
     }
+    
+    // Prioridade 4: user assignments (instância padrão do usuário, se houver)
+    // TODO: Implementar quando tiver sistema de autenticação
     
     // Prioridade 5: body (fallback apenas se não tiver outro)
     if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
@@ -137,8 +160,8 @@ serve(async (req) => {
       }
     }
     
-    // Atualizar conversa com a instância resolvida (sempre que diferente da atual)
-    if (resolvedEvolutionInstance && conversationId && resolvedEvolutionInstance !== evolutionInstance) {
+    // Atualizar conversa com a instância resolvida (sempre que diferente da atual ou se estava vazia)
+    if (resolvedEvolutionInstance && conversationId && (resolvedEvolutionInstance !== evolutionInstance || !evolutionInstance)) {
       console.log('🔄 Atualizando evolution_instance da conversa:', {
         conversationId: conversationId.substring(0, 8) + '***',
         old: evolutionInstance || 'EMPTY',
