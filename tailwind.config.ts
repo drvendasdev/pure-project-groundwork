@@ -84,20 +84,6 @@ export default {
 					border: 'hsl(var(--sidebar-border))'
 				},
 				
-				// Calendar specific colors
-				header: {
-					DEFAULT: 'hsl(var(--header))',
-					foreground: 'hsl(var(--header-foreground))'
-				},
-				surface: {
-					DEFAULT: 'hsl(var(--surface))',
-					foreground: 'hsl(var(--surface-foreground))',
-					border: 'hsl(var(--surface-border))'
-				},
-				text: {
-					secondary: 'hsl(var(--text-secondary))'
-				},
-				
 				// Metric cards
 				metric: {
 					card: 'hsl(var(--metric-card))',

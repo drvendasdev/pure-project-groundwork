@@ -70,7 +70,7 @@ serve(async (req) => {
       console.warn('Não foi possível carregar a conversa da mensagem:', msgErr.message);
     }
 
-    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> body)
+    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> user assignments -> org default -> body)
     let resolvedEvolutionInstance: string | null = null;
     let instanceSource = 'not_found';
     
@@ -97,17 +97,74 @@ serve(async (req) => {
       instanceSource = 'conversation';
     }
     
-    // Prioridade 3: body (fallback apenas se não tiver outro)
+    // Prioridade 3: org default (instância padrão da organização)
+    let orgDefaultInstance: string | null = null;
+    if (conversationId) {
+      const { data: convData } = await supabase
+        .from('conversations')
+        .select('org_id')
+        .eq('id', conversationId)
+        .maybeSingle();
+      
+      if (convData?.org_id) {
+        const { data: orgSettings } = await supabase
+          .from('org_messaging_settings')
+          .select('default_instance')
+          .eq('org_id', convData.org_id)
+          .maybeSingle();
+        
+        if (orgSettings?.default_instance) {
+          orgDefaultInstance = orgSettings.default_instance;
+          
+          // Se não achou instância ainda, usar o padrão da org
+          if (!resolvedEvolutionInstance) {
+            resolvedEvolutionInstance = orgDefaultInstance;
+            instanceSource = 'orgDefault';
+          }
+          // Se a conversa tem a instância global e existe padrão da org, sobrescrever
+          else if (evolutionInstance && evolutionInstance === Deno.env.get('EVOLUTION_INSTANCE') && orgDefaultInstance) {
+            resolvedEvolutionInstance = orgDefaultInstance;
+            instanceSource = 'orgDefaultOverride';
+            
+            // Atualizar a conversa com o padrão da org
+            console.log('🔄 Substituindo instância global por padrão da org:', {
+              conversationId: conversationId.substring(0, 8) + '***',
+              oldGlobal: evolutionInstance,
+              newOrgDefault: orgDefaultInstance
+            });
+            
+            await supabase
+              .from('conversations')
+              .update({ evolution_instance: orgDefaultInstance })
+              .eq('id', conversationId);
+          }
+        }
+      }
+    }
+    
+    // Prioridade 4: user assignments (instância padrão do usuário, se houver)
+    // TODO: Implementar quando tiver sistema de autenticação
+    
+    // Prioridade 5: body (fallback apenas se não tiver outro)
     if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
       resolvedEvolutionInstance = evolutionInstanceFromBody;
       instanceSource = 'body';
     }
     
-    // Atualizar conversa se a instância resolvida for diferente da atual
-    if (resolvedEvolutionInstance && evolutionInstance && resolvedEvolutionInstance !== evolutionInstance && conversationId) {
+    // Prioridade 6: global secret (último fallback)
+    if (!resolvedEvolutionInstance) {
+      const globalInstance = Deno.env.get('EVOLUTION_INSTANCE');
+      if (globalInstance) {
+        resolvedEvolutionInstance = globalInstance;
+        instanceSource = 'globalSecret';
+      }
+    }
+    
+    // Atualizar conversa com a instância resolvida (sempre que diferente da atual ou se estava vazia)
+    if (resolvedEvolutionInstance && conversationId && (resolvedEvolutionInstance !== evolutionInstance || !evolutionInstance)) {
       console.log('🔄 Atualizando evolution_instance da conversa:', {
         conversationId: conversationId.substring(0, 8) + '***',
-        old: evolutionInstance,
+        old: evolutionInstance || 'EMPTY',
         new: resolvedEvolutionInstance
       });
       
@@ -244,7 +301,7 @@ serve(async (req) => {
         contextInfo: null,
         messageType: evolutionMessageType,
         messageTimestamp: Math.floor(Date.now() / 1000),
-        instanceId: null,
+        instanceId: resolvedEvolutionInstance || null,
         source: 'crm',
       },
       date_time: new Date().toISOString(),
@@ -256,6 +313,7 @@ serve(async (req) => {
       meta: {
         conversationId: conversationId ?? undefined,
         contactEmail: contactEmail ?? undefined,
+        evolution_instance: resolvedEvolutionInstance ?? undefined,
       },
     };
 

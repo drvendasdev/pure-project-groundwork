@@ -12,30 +12,26 @@ export function useTags() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchTags = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('tags')
-        .select('id, name, color')
-        .order('name');
-
-      if (error) throw error;
-      setTags(data || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar tags');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
+    async function fetchTags() {
+      try {
+        setIsLoading(true);
+        const { data, error } = await supabase
+          .from('tags')
+          .select('id, name, color')
+          .order('name');
+
+        if (error) throw error;
+        setTags(data || []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao carregar tags');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     fetchTags();
   }, []);
 
-  const refresh = () => {
-    fetchTags();
-  };
-
-  return { tags, isLoading, error, refresh };
+  return { tags, isLoading, error };
 }

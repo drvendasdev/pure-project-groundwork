@@ -11,8 +11,9 @@ serve(async (req) => {
   }
 
   try {
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+    // Try multiple secret name variants
+    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
+    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
 
     console.log('Listando instâncias da Evolution API:', {
       url: evolutionApiUrl,
@@ -22,24 +23,52 @@ serve(async (req) => {
     if (!evolutionApiUrl || !evolutionApiKey) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Credenciais da Evolution API não configuradas'
+        error: 'Credenciais da Evolution API não configuradas. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY.'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    // Helper function to try both authentication methods
+    async function makeAuthenticatedRequest(url: string, options: RequestInit = {}) {
+      // First try with apikey header
+      let response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': evolutionApiKey,
+          ...options.headers,
+        },
+      });
+
+      // If unauthorized, try with Bearer token
+      if (response.status === 401 || response.status === 403) {
+        console.log('Primeira tentativa falhou, tentando com Bearer token...');
+        response = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${evolutionApiKey}`,
+            ...options.headers,
+          },
+        });
+      }
+
+      return response;
+    }
+
     // Listar todas as instâncias
-    const instancesResponse = await fetch(`${evolutionApiUrl}/instance/fetchInstances`, {
+    const instancesResponse = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/fetchInstances`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': evolutionApiKey,
-      },
     });
 
     const instancesText = await instancesResponse.text();
-    console.log('Resposta da API:', instancesText);
+    console.log('Resposta da API:', {
+      status: instancesResponse.status,
+      statusText: instancesResponse.statusText,
+      response: instancesText
+    });
 
     let instancesData;
     try {
@@ -49,12 +78,15 @@ serve(async (req) => {
     }
 
     if (!instancesResponse.ok) {
+      const errorMessage = instancesData?.message || instancesData?.error || instancesText || instancesResponse.statusText;
       return new Response(JSON.stringify({
         success: false,
-        error: `Erro ao listar instâncias: ${instancesResponse.status} - ${instancesResponse.statusText}`,
-        response: instancesData
+        error: `Erro ao listar instâncias (${instancesResponse.status}): ${errorMessage}`,
+        response: instancesData,
+        statusCode: instancesResponse.status,
+        evolutionResponse: instancesText
       }), {
-        status: instancesResponse.status,
+        status: 200, // Return 200 so frontend can handle the error properly
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -65,12 +97,8 @@ serve(async (req) => {
     if (Array.isArray(instancesData)) {
       for (const instance of instancesData) {
         try {
-          const statusResponse = await fetch(`${evolutionApiUrl}/instance/connectionState/${instance.instanceName || instance.name}`, {
+          const statusResponse = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connectionState/${instance.instanceName || instance.name}`, {
             method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': evolutionApiKey,
-            },
           });
 
           const statusText = await statusResponse.text();

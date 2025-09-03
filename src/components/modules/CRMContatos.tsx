@@ -45,56 +45,73 @@ export function CRMContatos() {
   const { tags } = useTags();
   const { toast } = useToast();
 
-  // Fetch contacts using Edge Function
+  // Fetch contacts from conversations
   const fetchContacts = async () => {
     try {
       setIsLoading(true);
       
-      // Call the list-contacts Edge Function
-      const { data, error } = await supabase.functions.invoke('list-contacts', {
-        body: {}
+      // First, get distinct contact_ids from conversations
+      const { data: conversationContacts, error: conversationsError } = await supabase
+        .from('conversations')
+        .select('contact_id')
+        .order('created_at', { ascending: false });
+
+      if (conversationsError) throw conversationsError;
+
+      const uniqueContactIds = [...new Set(conversationContacts?.map(c => c.contact_id) || [])];
+
+      if (uniqueContactIds.length === 0) {
+        setContacts([]);
+        return;
+      }
+
+      // Get contact details
+      const { data: contactsData, error: contactsError } = await supabase
+        .from('contacts')
+        .select('*')
+        .in('id', uniqueContactIds);
+
+      if (contactsError) throw contactsError;
+
+      // Get contact tags
+      const { data: contactTagsData, error: tagsError } = await supabase
+        .from('contact_tags')
+        .select(`
+          contact_id,
+          tags:tag_id (
+            id,
+            name,
+            color
+          )
+        `)
+        .in('contact_id', uniqueContactIds);
+
+      if (tagsError) throw tagsError;
+
+      // Map tags to contacts
+      const contactsWithTags = (contactsData || []).map(contact => {
+        const contactTags = contactTagsData
+          ?.filter(ct => ct.contact_id === contact.id)
+          ?.map(ct => ({
+            name: ct.tags?.name || '',
+            color: ct.tags?.color || '#808080'
+          })) || [];
+
+        return {
+          id: contact.id,
+          name: contact.name,
+          phone: contact.phone || '',
+          email: contact.email || '',
+          createdAt: format(new Date(contact.created_at), 'dd/MM/yyyy HH:mm:ss'),
+          tags: contactTags,
+          profile_image_url: contact.profile_image_url,
+          extra_info: contact.extra_info as Record<string, any> || {}
+        };
       });
-
-      if (error) {
-        console.error('Error calling list-contacts function:', error);
-        toast({
-          title: "Erro",
-          description: "Erro ao carregar contatos",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!data?.success) {
-        console.error('Function returned error:', data?.error);
-        toast({
-          title: "Erro",
-          description: data?.error || "Erro ao carregar contatos",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Map contacts to the expected format
-      const contactsWithTags = (data.contacts || []).map((contact: any) => ({
-        id: contact.id,
-        name: contact.name,
-        phone: contact.phone || '',
-        email: contact.email || '',
-        createdAt: format(new Date(contact.created_at), 'dd/MM/yyyy HH:mm:ss'),
-        tags: contact.tags || [],
-        profile_image_url: contact.profile_image_url,
-        extra_info: contact.extra_info || {}
-      }));
 
       setContacts(contactsWithTags);
     } catch (error) {
-      console.error('Unexpected error:', error);
-      toast({
-        title: "Erro",
-        description: "Erro inesperado ao carregar contatos",
-        variant: "destructive",
-      });
+      console.error('Error fetching contacts:', error);
     } finally {
       setIsLoading(false);
     }

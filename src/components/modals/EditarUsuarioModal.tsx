@@ -1,16 +1,33 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
-import { useCargos } from "@/hooks/useCargos";
-import { type SystemUser } from "@/hooks/useSystemUsers";
+import { useInstances } from "@/hooks/useInstances";
+import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
+
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  profile: "admin" | "user";
+  status: "active" | "inactive";
+  avatar?: string;
+}
 
 interface EditarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEditUser: (user: SystemUser) => void;
-  user?: SystemUser;
+  onEditUser: (user: {
+    id: string;
+    name: string;
+    email: string;
+    profile: "admin" | "user";
+    status: "active" | "inactive";
+  }) => void;
+  user?: User;
 }
 
 // Mock options para os selects
@@ -18,6 +35,12 @@ const mockQueues = [
   { value: "queue1", label: "Suporte Técnico" },
   { value: "queue2", label: "Vendas" },
   { value: "queue3", label: "Atendimento Geral" },
+];
+
+const mockRoles = [
+  { value: "role1", label: "Operador" },
+  { value: "role2", label: "Supervisor" },
+  { value: "role3", label: "Gerente" },
 ];
 
 const mockChannels = [
@@ -33,10 +56,12 @@ const mockPhones = [
 ];
 
 export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: EditarUsuarioModalProps) {
-  const { cargos } = useCargos();
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [defaultInstance, setDefaultInstance] = useState<string>("");
+  const { instances, isLoading: instancesLoading } = useInstances();
+  const { assignments, saveAssignments } = useInstanceAssignments(user?.id);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -59,38 +84,12 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     defaultPhone: false,
   });
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowRoleDropdown(false);
-      }
-    };
-
-    if (showRoleDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showRoleDropdown]);
-
-  // Reset dropdown when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setShowRoleDropdown(false);
-    }
-  }, [isOpen]);
-
   // Populate form when user changes
   useEffect(() => {
     if (user) {
       setFormData({
         name: user.name,
-        email: user.email || "",
+        email: user.email,
         profile: user.profile,
         password: "",
         temporaryPassword: false,
@@ -99,37 +98,42 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
         defaultChannel: "",
         defaultPhone: "",
       });
-      // Set roles based on user cargo
-      if (user.cargo?.nome) {
-        setSelectedRoles([user.cargo.nome]);
+      // Set roles based on user (mock data)
+      if (user.profile === "admin") {
+        setSelectedRoles(["Gerente"]);
       } else {
         setSelectedRoles([]);
       }
     }
   }, [user]);
 
-  const handleSubmit = () => {
+  // Populate instance assignments when they load
+  useEffect(() => {
+    if (assignments.length > 0) {
+      const instanceIds = assignments.map(a => a.instance);
+      const defaultInstanceId = assignments.find(a => a.is_default)?.instance || "";
+      
+      setSelectedInstances(instanceIds);
+      setDefaultInstance(defaultInstanceId);
+    } else {
+      setSelectedInstances([]);
+      setDefaultInstance("");
+    }
+  }, [assignments]);
+
+  const handleSubmit = async () => {
     if (!user) return;
     
-    const selectedCargo = selectedRoles.length > 0 
-      ? cargos.find(cargo => cargo.nome === selectedRoles[0])
-      : undefined;
+    // Save instance assignments
+    await saveAssignments(selectedInstances, defaultInstance);
     
-    // Prepare the updated user data
-    const updatedUser: SystemUser = {
-      ...user, // Keep all existing fields
+    onEditUser({
+      id: user.id,
       name: formData.name,
-      email: formData.email || undefined,
-      profile: formData.profile,
-      cargo_id: selectedCargo?.id
-    };
-
-    // Only include password if it was changed
-    if (formData.password && formData.password.trim() !== '') {
-      updatedUser.senha = formData.password;
-    }
-    
-    onEditUser(updatedUser);
+      email: formData.email,
+      profile: formData.profile as "admin" | "user",
+      status: user.status,
+    });
     
     handleCancel();
   };
@@ -148,6 +152,8 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     });
     setShowPassword(false);
     setSelectedRoles([]);
+    setSelectedInstances([]);
+    setDefaultInstance("");
     onClose();
   };
 
@@ -164,14 +170,34 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     // TODO: Implementar vinculação com Google
   };
 
-  const addRole = (roleName: string) => {
-    if (!selectedRoles.includes(roleName)) {
-      setSelectedRoles([...selectedRoles, roleName]);
+  const addRole = (roleValue: string) => {
+    const role = mockRoles.find(r => r.value === roleValue);
+    if (role && !selectedRoles.some(r => r === role.label)) {
+      setSelectedRoles([...selectedRoles, role.label]);
     }
   };
 
   const removeRole = (roleName: string) => {
     setSelectedRoles(selectedRoles.filter(r => r !== roleName));
+  };
+
+  const handleInstanceToggle = (instanceId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedInstances([...selectedInstances, instanceId]);
+    } else {
+      setSelectedInstances(selectedInstances.filter(id => id !== instanceId));
+      // Remove as default if unchecked
+      if (defaultInstance === instanceId) {
+        setDefaultInstance("");
+      }
+    }
+  };
+
+  const handleDefaultInstanceChange = (instanceId: string) => {
+    // Only allow setting as default if it's selected
+    if (selectedInstances.includes(instanceId)) {
+      setDefaultInstance(instanceId);
+    }
   };
 
   return (
@@ -340,8 +366,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('queues', e.target.value)}
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -364,52 +389,32 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
             </div>
 
             {/* Cargos with Adicionar button */}
-            <div className="relative">
+            <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-base font-normal text-gray-900">Cargos</p>
-                <button
+                <span className="text-sm text-gray-700">Cargos</span>
+                <Button
                   type="button"
-                  onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="inline-flex items-center justify-center p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    // Add first available role for demonstration
+                    const availableRole = mockRoles.find(role => 
+                      !selectedRoles.includes(role.label)
+                    );
+                    if (availableRole) {
+                      addRole(availableRole.value);
+                    }
+                  }}
+                  className="flex items-center gap-1 text-gray-700 hover:bg-gray-100 p-1 h-auto"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    <Plus className="h-4 w-4 text-gray-700" />
-                    <span className="text-xs text-gray-700">Adicionar</span>
-                  </span>
-                </button>
+                  <Plus className="h-4 w-4" />
+                  <span className="text-xs">Adicionar</span>
+                </Button>
               </div>
-
-              {/* Dropdown with role options */}
-              {showRoleDropdown && (
-                <div ref={dropdownRef} className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-                  <div className="py-1">
-                    {cargos
-                      .filter(cargo => !selectedRoles.includes(cargo.nome))
-                      .map((cargo) => (
-                        <button
-                          key={cargo.id}
-                          type="button"
-                          onClick={() => {
-                            addRole(cargo.nome);
-                            setShowRoleDropdown(false);
-                          }}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                        >
-                          {cargo.nome}
-                        </button>
-                      ))}
-                    {cargos.filter(cargo => !selectedRoles.includes(cargo.nome)).length === 0 && (
-                      <div className="px-4 py-2 text-sm text-gray-500">
-                        Todos os cargos já foram adicionados
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
               
               {/* Selected roles as pill tags */}
               {selectedRoles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex flex-wrap gap-2">
                   {selectedRoles.map((role, index) => (
                     <div 
                       key={index} 
@@ -433,8 +438,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -463,8 +467,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultPhone', e.target.value)}
                 onFocus={() => updateFocus('defaultPhone', true)}
                 onBlur={() => updateFocus('defaultPhone', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -484,6 +487,67 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               >
                 Telefone padrão
               </label>
+            </div>
+
+            {/* Instâncias/Canais de Atendimento */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-700 font-medium">Instâncias (Canais)</span>
+                <span className="text-xs text-gray-500">
+                  {selectedInstances.length} selecionada(s)
+                </span>
+              </div>
+              
+              {instancesLoading ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Carregando instâncias...
+                </div>
+              ) : instances.length === 0 ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Nenhuma instância encontrada
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
+                  {instances.map((instance) => (
+                    <div key={instance.instance} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`instance-edit-${instance.instance}`}
+                          checked={selectedInstances.includes(instance.instance)}
+                          onCheckedChange={(checked) => 
+                            handleInstanceToggle(instance.instance, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`instance-edit-${instance.instance}`}
+                          className="text-sm text-gray-700 cursor-pointer flex-1"
+                        >
+                          {instance.displayName || instance.instance}
+                        </label>
+                      </div>
+                      
+                      {selectedInstances.includes(instance.instance) && (
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="radio"
+                            id={`default-edit-${instance.instance}`}
+                            name="defaultInstanceEdit"
+                            checked={defaultInstance === instance.instance}
+                            onChange={() => handleDefaultInstanceChange(instance.instance)}
+                            className="h-3 w-3"
+                          />
+                          <label 
+                            htmlFor={`default-edit-${instance.instance}`}
+                            className="text-xs text-gray-500 cursor-pointer"
+                          >
+                            Padrão
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Google Button */}

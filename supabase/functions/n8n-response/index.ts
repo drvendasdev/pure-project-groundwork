@@ -149,6 +149,17 @@ serve(async (req) => {
     global: { headers: { "X-Client-Info": "lovable-n8n-responder" } },
   });
 
+  console.log('📥 N8N Response received:', {
+    conversation_id: convIdAlias,
+    phone_number,
+    response_message: response_message?.substring(0, 100),
+    message_type: finalMessageType,
+    file_url,
+    file_name,
+    sender_type,
+    metadata: metadata ? 'present' : 'none'
+  });
+
   try {
     // ---------- Resolver conversation_id (fallback por phone_number) ----------
     let conversation_id: string | null = convIdAlias;
@@ -269,6 +280,15 @@ serve(async (req) => {
       metadata: metadata ? { n8n_data: metadata, source: "n8n" } : { source: "n8n" },
     };
 
+    console.log('💾 Inserting message with payload:', {
+      conversation_id,
+      content_length: finalContent.length,
+      sender_type,
+      message_type: finalMessageType,
+      has_file: !!file_url,
+      metadata_present: !!metadata
+    });
+
     const { data: newMessage, error: msgErr } = await supabase
       .from("messages")
       .insert(insertPayload)
@@ -276,6 +296,13 @@ serve(async (req) => {
       .single();
 
     if (msgErr) {
+      console.error('❌ Database insertion failed:', {
+        error: msgErr.message,
+        code: msgErr.code,
+        hint: (msgErr as any).hint,
+        details: (msgErr as any).details,
+        payload: insertPayload
+      });
       return new Response(JSON.stringify({
         success: false,
         error: "Erro ao inserir resposta",
@@ -284,6 +311,13 @@ serve(async (req) => {
         payload: insertPayload,
       }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
     }
+
+    console.log('✅ Message inserted successfully:', {
+      message_id: newMessage.id,
+      conversation_id,
+      content: finalContent.substring(0, 50) + (finalContent.length > 50 ? '...' : ''),
+      created_at: newMessage.created_at
+    });
 
     // ---------- Atualiza conversa ----------
     await supabase

@@ -181,7 +181,7 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
           <div className="flex justify-end">
             <Button 
               onClick={handleConfirm}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white"
+              className="bg-warning hover:bg-yellow-500 text-black"
             >
               Concluir
             </Button>
