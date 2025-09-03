@@ -22,19 +22,17 @@ export default function ConexoesNova() {
   const [formData, setFormData] = useState({ nome: '', token: '' });
 
   const handleAddConexao = async () => {
-    if (!formData.nome || !formData.token) return;
+    if (!formData.nome.trim() || !formData.token.trim()) return;
 
     try {
       setLoading(true);
       
-      const instanceName = formData.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      
-      // Check status of existing instance
+      // Check status of existing instance using exact name
       const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'status',
-          instanceName,
-          instanceToken: formData.token
+          instanceName: formData.nome.trim(),
+          instanceToken: formData.token.trim()
         }
       });
 
@@ -50,8 +48,8 @@ export default function ConexoesNova() {
         const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
           body: {
             action: 'get_qr',
-            instanceName,
-            instanceToken: formData.token
+            instanceName: formData.nome.trim(),
+            instanceToken: formData.token.trim()
           }
         });
 
@@ -85,17 +83,15 @@ export default function ConexoesNova() {
 
   const handleCheckStatus = async (conexao: Conexao, index: number) => {
     try {
-      const instanceName = conexao.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      
       const { data } = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'status',
-          instanceName,
-          instanceToken: conexao.token
+          instanceName: conexao.nome.trim(),
+          instanceToken: conexao.token.trim()
         }
       });
 
-      const newStatus = data?.instance?.state === 'open' ? 'connected' : 'connecting';
+      const newStatus = data?.status === 'open' ? 'connected' : 'connecting';
       
       setConexoes(prev => prev.map((c, i) => 
         i === index ? { ...c, status: newStatus } : c
@@ -107,13 +103,11 @@ export default function ConexoesNova() {
 
   const handleDisconnect = async (conexao: Conexao, index: number) => {
     try {
-      const instanceName = conexao.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-      
       await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'disconnect',
-          instanceName,
-          instanceToken: conexao.token
+          instanceName: conexao.nome.trim(),
+          instanceToken: conexao.token.trim()
         }
       });
 
