@@ -6,13 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star } from 'lucide-react';
 
 interface Conexao {
   nome: string;
   token: string;
   qrCode?: string;
   status?: 'connecting' | 'connected' | 'disconnected';
+  isDefault?: boolean;
 }
 
 const STORAGE_KEY = 'conexoes-whatsapp';
@@ -23,6 +24,7 @@ export default function ConexoesNova() {
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [formData, setFormData] = useState({ nome: '', token: '' });
+  const [defaultOrgId, setDefaultOrgId] = useState<string>('');
   const pollRefs = useRef<Record<string, any>>({});
 
   // Cleanup polling on unmount
@@ -32,16 +34,31 @@ export default function ConexoesNova() {
     };
   }, []);
 
-  // Load connections from localStorage on mount
+  // Load connections from localStorage on mount and get default org
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        setConexoes(JSON.parse(saved));
+    const loadData = async () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          setConexoes(JSON.parse(saved));
+        }
+
+        // Get the first available org as default
+        const { data: orgData } = await supabase
+          .from('orgs')
+          .select('id')
+          .limit(1)
+          .single();
+        
+        if (orgData) {
+          setDefaultOrgId(orgData.id);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
       }
-    } catch (error) {
-      console.error('Error loading connections from localStorage:', error);
-    }
+    };
+    
+    loadData();
   }, []);
 
   // Utility function to save connections to localStorage
@@ -232,6 +249,44 @@ export default function ConexoesNova() {
     }
   };
 
+  const handleSetDefault = async (conexao: Conexao, index: number) => {
+    if (!defaultOrgId) {
+      toast({
+        title: 'Erro ao definir padrão',
+        description: 'Organização não encontrada',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.functions.invoke('set-default-instance', {
+        body: {
+          orgId: defaultOrgId,
+          instance: conexao.nome
+        }
+      });
+
+      if (error) throw error;
+
+      // Update local state to mark this as default
+      const updatedConexoes = conexoes.map((c, i) => ({
+        ...c,
+        isDefault: i === index
+      }));
+      saveConexoes(updatedConexoes);
+
+      toast({ title: 'Conexão definida como padrão!' });
+    } catch (error: any) {
+      console.error('Erro ao definir conexão padrão:', error);
+      toast({
+        title: 'Erro ao definir padrão',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handleDelete = (index: number) => {
     const conexao = conexoes[index];
     
@@ -336,7 +391,12 @@ export default function ConexoesNova() {
           <Card key={index}>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>{conexao.nome}</span>
+                <div className="flex items-center gap-2">
+                  <span>{conexao.nome}</span>
+                  {conexao.isDefault && (
+                    <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
+                  )}
+                </div>
                 <span className={`text-sm font-normal ${getStatusColor(conexao.status)}`}>
                   {getStatusText(conexao.status)}
                 </span>
@@ -397,6 +457,17 @@ export default function ConexoesNova() {
                   >
                     <Power className="mr-1 h-3 w-3" />
                     Conectar
+                  </Button>
+                )}
+
+                {!conexao.isDefault && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSetDefault(conexao, index)}
+                  >
+                    <Star className="mr-1 h-3 w-3" />
+                    Definir Padrão
                   </Button>
                 )}
                 

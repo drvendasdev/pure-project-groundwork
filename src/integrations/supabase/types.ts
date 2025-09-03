@@ -741,6 +741,30 @@ export type Database = {
           },
         ]
       }
+      org_messaging_settings: {
+        Row: {
+          created_at: string
+          default_instance: string
+          id: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_instance: string
+          id?: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_instance?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       orgs: {
         Row: {
           created_at: string | null

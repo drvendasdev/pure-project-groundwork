@@ -70,7 +70,7 @@ serve(async (req) => {
       console.warn('Não foi possível carregar a conversa da mensagem:', msgErr.message);
     }
 
-    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> body)
+    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> user assignments -> org default -> body)
     let resolvedEvolutionInstance: string | null = null;
     let instanceSource = 'not_found';
     
@@ -97,7 +97,32 @@ serve(async (req) => {
       instanceSource = 'conversation';
     }
     
-    // Prioridade 3: body (fallback apenas se não tiver outro)
+    // Prioridade 3: user assignments (instância padrão do usuário, se houver)
+    // TODO: Implementar quando tiver sistema de autenticação
+    
+    // Prioridade 4: org default (instância padrão da organização)
+    if (!resolvedEvolutionInstance && conversationId) {
+      const { data: convData } = await supabase
+        .from('conversations')
+        .select('org_id')
+        .eq('id', conversationId)
+        .maybeSingle();
+      
+      if (convData?.org_id) {
+        const { data: orgSettings } = await supabase
+          .from('org_messaging_settings')
+          .select('default_instance')
+          .eq('org_id', convData.org_id)
+          .maybeSingle();
+        
+        if (orgSettings?.default_instance) {
+          resolvedEvolutionInstance = orgSettings.default_instance;
+          instanceSource = 'orgDefault';
+        }
+      }
+    }
+    
+    // Prioridade 5: body (fallback apenas se não tiver outro)
     if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
       resolvedEvolutionInstance = evolutionInstanceFromBody;
       instanceSource = 'body';
