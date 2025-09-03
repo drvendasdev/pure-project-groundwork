@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,11 +15,35 @@ interface Conexao {
   status?: 'connecting' | 'connected' | 'disconnected';
 }
 
+const STORAGE_KEY = 'conexoes-whatsapp';
+
 export default function ConexoesNova() {
   const [conexoes, setConexoes] = useState<Conexao[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ nome: '', token: '' });
+
+  // Load connections from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        setConexoes(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error('Error loading connections from localStorage:', error);
+    }
+  }, []);
+
+  // Utility function to save connections to localStorage
+  const saveConexoes = (newConexoes: Conexao[]) => {
+    setConexoes(newConexoes);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newConexoes));
+    } catch (error) {
+      console.error('Error saving connections to localStorage:', error);
+    }
+  };
 
   const handleAddConexao = async () => {
     if (!formData.nome.trim() || !formData.token.trim()) return;
@@ -27,7 +51,6 @@ export default function ConexoesNova() {
     try {
       setLoading(true);
       
-      // Check status of existing instance using exact name
       const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'status',
@@ -40,10 +63,9 @@ export default function ConexoesNova() {
         throw new Error(statusResponse.data?.error || 'Instância não encontrada ou token inválido');
       }
 
-      const status = statusResponse.data?.status === 'open' ? 'connected' : 'connecting';
+      const status: 'connecting' | 'connected' | 'disconnected' = statusResponse.data?.status === 'open' ? 'connected' : 'connecting';
       let qrCode = null;
 
-      // If not connected, try to get QR code
       if (status === 'connecting') {
         const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
           body: {
@@ -65,7 +87,7 @@ export default function ConexoesNova() {
         status
       };
 
-      setConexoes(prev => [...prev, novaConexao]);
+      saveConexoes([...conexoes, novaConexao]);
       setFormData({ nome: '', token: '' });
       setDialogOpen(false);
       toast({ title: 'Instância referenciada com sucesso!' });
@@ -91,11 +113,12 @@ export default function ConexoesNova() {
         }
       });
 
-      const newStatus = data?.status === 'open' ? 'connected' : 'connecting';
+      const newStatus: 'connecting' | 'connected' | 'disconnected' = data?.status === 'open' ? 'connected' : 'connecting';
       
-      setConexoes(prev => prev.map((c, i) => 
+      const updatedConexoes = conexoes.map((c, i) => 
         i === index ? { ...c, status: newStatus } : c
-      ));
+      );
+      saveConexoes(updatedConexoes);
     } catch (error) {
       console.error('Erro ao verificar status:', error);
     }
@@ -111,9 +134,10 @@ export default function ConexoesNova() {
         }
       });
 
-      setConexoes(prev => prev.map((c, i) => 
+      const updatedConexoes = conexoes.map((c, i) => 
         i === index ? { ...c, status: 'disconnected' } : c
-      ));
+      );
+      saveConexoes(updatedConexoes);
       
       toast({ title: 'Instância desconectada!' });
     } catch (error) {
@@ -126,7 +150,8 @@ export default function ConexoesNova() {
   };
 
   const handleDelete = (index: number) => {
-    setConexoes(prev => prev.filter((_, i) => i !== index));
+    const updatedConexoes = conexoes.filter((_, i) => i !== index);
+    saveConexoes(updatedConexoes);
     toast({ title: 'Referência removida!' });
   };
 
@@ -155,6 +180,9 @@ export default function ConexoesNova() {
           <h1 className="text-3xl font-bold tracking-tight">Conexões</h1>
           <p className="text-muted-foreground">
             Gerencie suas conexões do WhatsApp
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Estas referências ficam salvas apenas neste navegador
           </p>
         </div>
         
