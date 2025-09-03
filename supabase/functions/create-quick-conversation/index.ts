@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { phoneNumber, orgId = '00000000-0000-0000-0000-000000000000' } = await req.json()
+    const { phoneNumber, orgId, instance } = await req.json()
 
     if (!phoneNumber) {
       return new Response(
@@ -32,12 +32,49 @@ serve(async (req) => {
 
     console.log(`Creating quick conversation for phone: ${normalizedPhone}`)
 
+    // Discover orgId if not provided
+    let finalOrgId = orgId
+    
+    if (!finalOrgId && instance) {
+      // Try to find orgId from channels table using instance
+      const { data: channelData } = await supabase
+        .from('channels')
+        .select('org_id')
+        .eq('instance', instance)
+        .maybeSingle()
+      
+      if (channelData) {
+        finalOrgId = channelData.org_id
+        console.log(`Found orgId from channels: ${finalOrgId}`)
+      }
+    }
+
+    if (!finalOrgId) {
+      // Fallback to first available org
+      const { data: orgData, error: orgError } = await supabase
+        .from('orgs')
+        .select('id')
+        .limit(1)
+        .single()
+
+      if (orgError || !orgData) {
+        console.error('No organizations found:', orgError)
+        return new Response(
+          JSON.stringify({ error: 'Nenhuma organização disponível' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      finalOrgId = orgData.id
+      console.log(`Using fallback orgId: ${finalOrgId}`)
+    }
+
     // Check if contact already exists
     let { data: existingContact } = await supabase
       .from('contacts')
       .select('id')
       .eq('phone', normalizedPhone)
-      .eq('org_id', orgId)
+      .eq('org_id', finalOrgId)
       .maybeSingle()
 
     let contactId = existingContact?.id
@@ -49,7 +86,7 @@ serve(async (req) => {
         .insert({
           name: `+${normalizedPhone}`,
           phone: normalizedPhone,
-          org_id: orgId,
+          org_id: finalOrgId,
           extra_info: { temporary: true }
         })
         .select('id')
@@ -75,22 +112,29 @@ serve(async (req) => {
       .select('id')
       .eq('contact_id', contactId)
       .eq('status', 'open')
-      .eq('org_id', orgId)
+      .eq('org_id', finalOrgId)
       .maybeSingle()
 
     let conversationId = existingConversation?.id
 
     // Create conversation if doesn't exist
     if (!conversationId) {
+      const conversationData: any = {
+        contact_id: contactId,
+        status: 'open',
+        org_id: finalOrgId,
+        canal: 'whatsapp',
+        agente_ativo: false
+      }
+
+      // Add instance if provided
+      if (instance) {
+        conversationData.evolution_instance = instance
+      }
+
       const { data: newConversation, error: conversationError } = await supabase
         .from('conversations')
-        .insert({
-          contact_id: contactId,
-          status: 'open',
-          org_id: orgId,
-          canal: 'whatsapp',
-          agente_ativo: false
-        })
+        .insert(conversationData)
         .select('id')
         .single()
 
