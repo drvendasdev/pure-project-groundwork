@@ -27,16 +27,18 @@ serve(async (req) => {
       });
     }
 
-    // Helper function to try both authentication methods
-    async function makeAuthenticatedRequest(url: string, options: RequestInit = {}) {
+    // Helper function to try both authentication methods with optional token override
+    async function makeAuthenticatedRequest(url: string, options: RequestInit = {}, tokenOverride?: string) {
       console.log(`Fazendo requisição para: ${url}`);
+      
+      const authToken = tokenOverride || evolutionApiKey;
       
       // First try with apikey header
       let response = await fetch(url, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          'apikey': evolutionApiKey,
+          'apikey': authToken,
           ...options.headers,
         },
       });
@@ -48,7 +50,7 @@ serve(async (req) => {
           ...options,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${evolutionApiKey}`,
+            'Authorization': `Bearer ${authToken}`,
             ...options.headers,
           },
         });
@@ -78,7 +80,7 @@ serve(async (req) => {
           });
         }
 
-        // Criar instância
+        // Criar instância usando o token da instância
         const createResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/create`, {
           method: 'POST',
           body: JSON.stringify({
@@ -115,7 +117,7 @@ serve(async (req) => {
               'NEW_JWT_TOKEN'
             ]
           }),
-        });
+        }, instanceToken);
 
         let createData;
         try {
@@ -138,7 +140,7 @@ serve(async (req) => {
           });
         }
 
-        // Configurar webhook
+        // Configurar webhook usando o token da instância
         try {
           await makeAuthenticatedRequest(`${evolutionApiUrl}/webhook/set/${instanceName}`, {
             method: 'POST',
@@ -154,7 +156,7 @@ serve(async (req) => {
                 'CONNECTION_UPDATE'
               ]
             }),
-          });
+          }, instanceToken);
         } catch (webhookError) {
           console.warn('Erro ao configurar webhook:', webhookError);
         }
@@ -169,7 +171,7 @@ serve(async (req) => {
       case 'get_qr':
         const qrResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connect/${instanceName}`, {
           method: 'GET',
-        });
+        }, instanceToken);
 
         let qrData;
         try {
@@ -203,7 +205,7 @@ serve(async (req) => {
       case 'status':
         const statusResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connectionState/${instanceName}`, {
           method: 'GET',
-        });
+        }, instanceToken);
 
         let statusData;
         try {
@@ -237,7 +239,7 @@ serve(async (req) => {
       case 'disconnect':
         const disconnectResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/logout/${instanceName}`, {
           method: 'DELETE',
-        });
+        }, instanceToken);
 
         let disconnectData;
         try {
@@ -257,7 +259,7 @@ serve(async (req) => {
       case 'delete':
         const deleteResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/delete/${instanceName}`, {
           method: 'DELETE',
-        });
+        }, instanceToken);
 
         let deleteData;
         try {
