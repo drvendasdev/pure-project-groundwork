@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,16 @@ export default function ConexoesNova() {
   const [conexoes, setConexoes] = useState<Conexao[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [formData, setFormData] = useState({ nome: '', token: '' });
+  const pollRefs = useRef<Record<string, any>>({});
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(pollRefs.current).forEach(id => id && clearInterval(id));
+    };
+  }, []);
 
   // Load connections from localStorage on mount
   useEffect(() => {
@@ -63,27 +72,12 @@ export default function ConexoesNova() {
         throw new Error(statusResponse.data?.error || 'Instância não encontrada ou token inválido');
       }
 
-      const status: 'connecting' | 'connected' | 'disconnected' = statusResponse.data?.status === 'open' ? 'connected' : 'connecting';
-      let qrCode = null;
-
-      if (status === 'connecting') {
-        const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
-          body: {
-            action: 'get_qr',
-            instanceName: formData.nome.trim(),
-            instanceToken: formData.token.trim()
-          }
-        });
-
-        if (qrResponse.data?.success) {
-          qrCode = qrResponse.data?.qrcode;
-        }
-      }
+      const state = statusResponse.data?.status || statusResponse.data?.instance?.state;
+      const status: 'connecting' | 'connected' | 'disconnected' = state === 'open' ? 'connected' : 'connecting';
 
       const novaConexao: Conexao = {
         nome: formData.nome,
         token: formData.token,
-        qrCode,
         status
       };
 
@@ -103,6 +97,94 @@ export default function ConexoesNova() {
     }
   };
 
+  const handleGetQr = async (conexao: Conexao, index: number) => {
+    // Clear existing polling for this instance
+    if (pollRefs.current[conexao.nome]) {
+      clearInterval(pollRefs.current[conexao.nome]);
+      delete pollRefs.current[conexao.nome];
+    }
+
+    try {
+      setQrLoading(prev => ({ ...prev, [index]: true }));
+
+      const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
+        body: {
+          action: 'get_qr',
+          instanceName: conexao.nome.trim(),
+          instanceToken: conexao.token.trim()
+        }
+      });
+
+      if (!qrResponse.data?.success) {
+        throw new Error(qrResponse.data?.error || 'Erro ao gerar QR code');
+      }
+
+      // Update connection with QR code and connecting status
+      const updatedConexoes = conexoes.map((c, i) => 
+        i === index ? { ...c, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const } : c
+      );
+      saveConexoes(updatedConexoes);
+
+      // Start polling for connection status
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
+            body: {
+              action: 'status',
+              instanceName: conexao.nome.trim(),
+              instanceToken: conexao.token.trim()
+            }
+          });
+
+          const state = statusResponse.data?.status || statusResponse.data?.instance?.state;
+          
+          if (state === 'open') {
+            // Connected! Clear QR and update status
+            clearInterval(pollRefs.current[conexao.nome]);
+            delete pollRefs.current[conexao.nome];
+            
+            setConexoes(current => {
+              const connectedConexoes = current.map((c, i) => 
+                i === index ? { ...c, qrCode: undefined, status: 'connected' as const } : c
+              );
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(connectedConexoes));
+              } catch (error) {
+                console.error('Error saving connections to localStorage:', error);
+              }
+              return connectedConexoes;
+            });
+            
+            toast({ title: 'Conectado com sucesso!' });
+          }
+        } catch (error) {
+          console.error('Error checking status during polling:', error);
+        }
+      }, 4000); // Poll every 4 seconds
+
+      pollRefs.current[conexao.nome] = pollInterval;
+
+      // Stop polling after 2 minutes
+      const timeoutId = setTimeout(() => {
+        if (pollRefs.current[conexao.nome]) {
+          clearInterval(pollRefs.current[conexao.nome]);
+          delete pollRefs.current[conexao.nome];
+          toast({ title: 'Tempo limite para conexão expirado', description: 'Tente gerar um novo QR code' });
+        }
+      }, 120000);
+
+    } catch (error: any) {
+      console.error('Erro ao gerar QR:', error);
+      toast({ 
+        title: 'Erro ao gerar QR code',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setQrLoading(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
   const handleCheckStatus = async (conexao: Conexao, index: number) => {
     try {
       const { data } = await supabase.functions.invoke('evolution-instance-actions', {
@@ -113,7 +195,8 @@ export default function ConexoesNova() {
         }
       });
 
-      const newStatus: 'connecting' | 'connected' | 'disconnected' = data?.status === 'open' ? 'connected' : 'connecting';
+      const state = data?.status || data?.instance?.state;
+      const newStatus: 'connecting' | 'connected' | 'disconnected' = state === 'open' ? 'connected' : 'connecting';
       
       const updatedConexoes = conexoes.map((c, i) => 
         i === index ? { ...c, status: newStatus } : c
@@ -135,7 +218,7 @@ export default function ConexoesNova() {
       });
 
       const updatedConexoes = conexoes.map((c, i) => 
-        i === index ? { ...c, status: 'disconnected' } : c
+        i === index ? { ...c, status: 'disconnected' as const } : c
       );
       saveConexoes(updatedConexoes);
       
@@ -150,6 +233,14 @@ export default function ConexoesNova() {
   };
 
   const handleDelete = (index: number) => {
+    const conexao = conexoes[index];
+    
+    // Clear polling if exists
+    if (pollRefs.current[conexao.nome]) {
+      clearInterval(pollRefs.current[conexao.nome]);
+      delete pollRefs.current[conexao.nome];
+    }
+    
     const updatedConexoes = conexoes.filter((_, i) => i !== index);
     saveConexoes(updatedConexoes);
     toast({ title: 'Referência removida!' });
@@ -253,12 +344,17 @@ export default function ConexoesNova() {
             </CardHeader>
             <CardContent className="space-y-4">
               {conexao.qrCode && (
-                <div className="flex justify-center">
-                  <img 
-                    src={conexao.qrCode} 
-                    alt="QR Code" 
-                    className="w-48 h-48 border rounded"
-                  />
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Abra o WhatsApp e escaneie este QR para conectar
+                  </p>
+                  <div className="flex justify-center">
+                    <img 
+                      src={conexao.qrCode} 
+                      alt="QR Code" 
+                      className="w-48 h-48 border rounded"
+                    />
+                  </div>
                 </div>
               )}
               
@@ -271,6 +367,18 @@ export default function ConexoesNova() {
                   <RefreshCw className="mr-1 h-3 w-3" />
                   Status
                 </Button>
+                
+                {conexao.status !== 'connected' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleGetQr(conexao, index)}
+                    disabled={qrLoading[index]}
+                  >
+                    <QrCode className="mr-1 h-3 w-3" />
+                    {conexao.qrCode ? 'Atualizar QR' : 'Gerar QR'}
+                  </Button>
+                )}
                 
                 {conexao.status === 'connected' ? (
                   <Button
