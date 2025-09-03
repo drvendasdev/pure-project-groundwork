@@ -274,15 +274,9 @@ const stopRecording = () => {
 
     setIsCreatingQuickConversation(true);
     try {
-      // Normalize phone number to E.164 format
-      let normalizedPhone;
-      try {
-        const phoneNumber = parsePhoneNumber(quickPhoneNumber, 'BR');
-        if (!phoneNumber || !phoneNumber.isValid()) {
-          throw new Error('Invalid phone number');
-        }
-        normalizedPhone = phoneNumber.format('E.164');
-      } catch (error) {
+      // Parse and validate phone number
+      const phoneNumber = parsePhoneNumber(quickPhoneNumber, 'BR');
+      if (!phoneNumber || !phoneNumber.isValid()) {
         toast({
           title: "Número inválido",
           description: "Por favor, digite um número de telefone válido.",
@@ -291,87 +285,33 @@ const stopRecording = () => {
         return;
       }
 
-      // Check if contact already exists
-      let { data: existingContact, error: contactCheckError } = await supabase
-        .from('contacts')
-        .select('id')
-        .eq('phone', normalizedPhone)
-        .single();
+      // Call Edge Function to create quick conversation
+      const { data, error } = await supabase.functions.invoke('create-quick-conversation', {
+        body: { phoneNumber: phoneNumber.format('E.164') }
+      });
 
-      let contactId;
-
-      if (contactCheckError && contactCheckError.code === 'PGRST116') {
-        // Contact doesn't exist, create temporary contact
-        const { data: newContact, error: contactError } = await supabase
-          .from('contacts')
-          .insert({
-            name: normalizedPhone,
-            phone: normalizedPhone,
-            extra_info: { temporary: true }
-          })
-          .select()
-          .single();
-
-        if (contactError) throw contactError;
-        contactId = newContact.id;
-      } else if (contactCheckError) {
-        throw contactCheckError;
-      } else {
-        contactId = existingContact.id;
+      if (error) {
+        console.error('Error calling create-quick-conversation:', error);
+        toast({
+          title: "Erro",
+          description: "Não foi possível criar conversa",
+          variant: "destructive",
+        });
+        return;
       }
 
-      // Check if conversation already exists
-      const { data: existingConversation, error: checkError } = await supabase
-        .from('conversations')
-        .select('id')
-        .eq('contact_id', contactId)
-        .eq('canal', 'whatsapp')
-        .eq('status', 'open')
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw checkError;
-      }
-
-      let conversationId;
-
-      if (existingConversation) {
-        conversationId = existingConversation.id;
+      if (!data.success) {
         toast({
-          title: "Conversa encontrada",
-          description: "Redirecionando para a conversa existente.",
+          title: "Erro",
+          description: data.error || "Não foi possível criar conversa",
+          variant: "destructive",
         });
-      } else {
-        // Get default instance for the user
-        const defaultAssignment = assignments.find(a => a.is_default);
-        const evolutionInstance = defaultAssignment?.instance;
-
-        // Create new conversation
-        const { data: newConversation, error: conversationError } = await supabase
-          .from('conversations')
-          .insert({
-            contact_id: contactId,
-            canal: 'whatsapp',
-            status: 'open',
-            agente_ativo: false,
-            last_activity_at: new Date().toISOString(),
-            evolution_instance: evolutionInstance
-          })
-          .select()
-          .single();
-
-        if (conversationError) throw conversationError;
-        conversationId = newConversation.id;
-
-        toast({
-          title: "Conversa criada",
-          description: "Nova conversa iniciada com sucesso.",
-        });
+        return;
       }
 
       // Find and select the conversation
       setTimeout(() => {
-        const conversation = conversations.find(conv => conv.id === conversationId);
+        const conversation = conversations.find(conv => conv.id === data.conversationId);
         if (conversation) {
           handleSelectConversation(conversation);
         } else {
@@ -381,12 +321,18 @@ const stopRecording = () => {
       }, 1000);
 
       setQuickPhoneNumber("");
+      
+      toast({
+        title: "Conversa criada",
+        description: `Conversa iniciada com ${phoneNumber.format('INTERNATIONAL')}`,
+      });
+
     } catch (error) {
       console.error('Error creating quick conversation:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível criar a conversa.",
-        variant: "destructive"
+        description: "Não foi possível criar conversa",
+        variant: "destructive",
       });
     } finally {
       setIsCreatingQuickConversation(false);
