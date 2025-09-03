@@ -203,7 +203,7 @@ const CanaisDeAtendimentoPage = () => {
   };
 
   const handleSaveCanal = async () => {
-    if (!novoCanal.nome) return;
+    if (!novoCanal.nome || !novoCanal.token) return;
 
     try {
       setLoading(true);
@@ -212,7 +212,8 @@ const CanaisDeAtendimentoPage = () => {
       const { data, error } = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'create',
-          instanceName: novoCanal.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+          instanceName: novoCanal.nome.replace(/[^a-zA-Z0-9]/g, '').toLowerCase(),
+          instanceToken: novoCanal.token
         }
       });
 
@@ -757,7 +758,7 @@ const CanaisDeAtendimentoPage = () => {
                 onClick={handleSaveCanal}
                 variant="yellow"
                 className="px-6"
-                disabled={!novoCanal.nome || loading}
+                disabled={!novoCanal.nome || !novoCanal.token || loading}
               >
                 {loading ? 'Criando...' : (formMode === 'add' ? 'Adicionar' : 'Salvar')}
               </Button>
