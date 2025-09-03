@@ -118,9 +118,10 @@ serve(async (req) => {
             success: false,
             error: `Erro ao criar instância (${createResult.response.status}): ${errorMessage}`,
             response: createData,
-            statusCode: createResult.response.status
+            statusCode: createResult.response.status,
+            evolutionResponse: createResult.responseText
           }), {
-            status: createResult.response.status,
+            status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -171,9 +172,10 @@ serve(async (req) => {
             success: false,
             error: `Erro ao obter QR Code (${qrResult.response.status}): ${errorMessage}`,
             response: qrData,
-            statusCode: qrResult.response.status
+            statusCode: qrResult.response.status,
+            evolutionResponse: qrResult.responseText
           }), {
-            status: qrResult.response.status,
+            status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -204,9 +206,10 @@ serve(async (req) => {
             success: false,
             error: `Erro ao verificar status (${statusResult.response.status}): ${errorMessage}`,
             response: statusData,
-            statusCode: statusResult.response.status
+            statusCode: statusResult.response.status,
+            evolutionResponse: statusResult.responseText
           }), {
-            status: statusResult.response.status,
+            status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }

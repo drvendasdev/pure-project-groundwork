@@ -83,9 +83,10 @@ serve(async (req) => {
         success: false,
         error: `Erro ao listar instâncias (${instancesResponse.status}): ${errorMessage}`,
         response: instancesData,
-        statusCode: instancesResponse.status
+        statusCode: instancesResponse.status,
+        evolutionResponse: instancesText
       }), {
-        status: instancesResponse.status,
+        status: 200, // Return 200 so frontend can handle the error properly
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

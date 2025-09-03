@@ -143,6 +143,9 @@ const CanaisDeAtendimentoPage = () => {
   const [qrCode, setQrCode] = useState<string>('');
   const [qrLoading, setQrLoading] = useState(false);
   const [statusPolling, setStatusPolling] = useState<NodeJS.Timeout | null>(null);
+  const [showTestDialog, setShowTestDialog] = useState(false);
+  const [testResults, setTestResults] = useState<any>(null);
+  const [testLoading, setTestLoading] = useState(false);
 
   // Carregar instâncias da Evolution API
   useEffect(() => {
@@ -178,10 +181,11 @@ const CanaisDeAtendimentoPage = () => {
         
         setCanais(formattedCanais);
       } else if (!data?.success) {
-        const errorMessage = data?.error || data?.response?.message || 'Erro desconhecido ao carregar canais';
+        const errorMessage = data?.error || data?.response?.message || data?.evolutionResponse || 'Erro desconhecido ao carregar canais';
+        console.error('Detalhes do erro:', data);
         toast({
           title: "Erro ao carregar canais",
-          description: errorMessage,
+          description: `${errorMessage}${data?.statusCode ? ` (Código: ${data.statusCode})` : ''}`,
           variant: "destructive",
         });
       }
@@ -213,11 +217,12 @@ const CanaisDeAtendimentoPage = () => {
       });
 
       if (error || !data?.success) {
-        const errorMessage = data?.error || data?.response?.message || error?.message || "Erro ao criar canal de atendimento";
+        const errorMessage = data?.error || data?.response?.message || data?.evolutionResponse || error?.message || "Erro ao criar canal de atendimento";
         console.error('Erro ao criar instância:', error || data?.error);
+        console.error('Detalhes completos:', data);
         toast({
           title: "Erro ao criar canal",
-          description: errorMessage,
+          description: `${errorMessage}${data?.statusCode ? ` (Código: ${data.statusCode})` : ''}`,
           variant: "destructive",
         });
         return;
@@ -417,9 +422,11 @@ const CanaisDeAtendimentoPage = () => {
         setQrCode(data.qrcode);
         startStatusPolling(canal);
       } else {
+        const errorMessage = data?.error || data?.response?.message || data?.evolutionResponse || "Erro ao gerar QR Code";
+        console.error('Erro ao gerar QR:', data);
         toast({
           title: "Erro",
-          description: data?.error || "Erro ao gerar QR Code",
+          description: `${errorMessage}${data?.statusCode ? ` (Código: ${data.statusCode})` : ''}`,
           variant: "destructive",
         });
       }
@@ -472,6 +479,46 @@ const CanaisDeAtendimentoPage = () => {
     setStatusPolling(interval);
   };
 
+  const handleTestConnection = async () => {
+    try {
+      setTestLoading(true);
+      const { data, error } = await supabase.functions.invoke('test-evolution-api');
+      
+      if (error) {
+        toast({
+          title: "Erro no teste",
+          description: "Falha ao executar teste de conexão",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setTestResults(data);
+      setShowTestDialog(true);
+      
+      const hasSuccessfulAuth = data?.tests?.some((test: any) => 
+        test.name.includes('instâncias') && test.success
+      );
+      
+      toast({
+        title: hasSuccessfulAuth ? "Teste concluído" : "Problemas detectados",
+        description: hasSuccessfulAuth 
+          ? "Conexão testada - verifique os detalhes" 
+          : "Foram encontrados problemas na conexão",
+        variant: hasSuccessfulAuth ? "default" : "destructive",
+      });
+    } catch (error) {
+      console.error('Erro no teste:', error);
+      toast({
+        title: "Erro no teste",
+        description: "Falha ao executar teste de conexão",
+        variant: "destructive",
+      });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
@@ -502,24 +549,7 @@ const CanaisDeAtendimentoPage = () => {
               Deletadas
             </Button>
             <Button 
-              onClick={async () => {
-                try {
-                  const response = await supabase.functions.invoke('test-evolution-api');
-                  const result = response.data;
-                  
-                  toast({
-                    title: result?.success ? "Teste bem-sucedido" : "Teste falhou",
-                    description: result?.message || JSON.stringify(result, null, 2),
-                    variant: result?.success ? "default" : "destructive",
-                  });
-                } catch (error) {
-                  toast({
-                    title: "Erro no teste",
-                    description: "Falha ao executar teste de conexão",
-                    variant: "destructive",
-                  });
-                }
-              }}
+              onClick={handleTestConnection}
               variant="outline"
               size="sm"
             >
@@ -839,6 +869,95 @@ const CanaisDeAtendimentoPage = () => {
                 }
               }} variant="outline">
                 Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Test Connection Dialog */}
+        <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
+          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Teste de Conexão Evolution API</DialogTitle>
+              <DialogDescription>
+                Resultado dos testes de conectividade e autenticação
+              </DialogDescription>
+            </DialogHeader>
+            
+            {testResults && (
+              <div className="space-y-4">
+                {/* Config Summary */}
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <h4 className="font-medium mb-2">Configuração</h4>
+                  <div className="space-y-1 text-sm">
+                    <p><span className="font-medium">URL:</span> {testResults.config?.url || 'Não configurado'}</p>
+                    <p><span className="font-medium">Instância:</span> {testResults.config?.instance || 'Não configurado'}</p>
+                    <p><span className="font-medium">API Key:</span> {testResults.config?.hasApiKey ? 'Configurada' : 'Não configurada'}</p>
+                  </div>
+                </div>
+
+                {/* Test Results */}
+                <div className="space-y-3">
+                  <h4 className="font-medium">Resultados dos Testes</h4>
+                  {testResults.tests?.map((test: any, index: number) => (
+                    <div key={index} className={`p-3 rounded-lg border-l-4 ${test.success ? 'bg-green-50 border-l-green-500' : 'bg-red-50 border-l-red-500'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="font-medium text-sm">{test.name}</h5>
+                        <span className={`text-xs px-2 py-1 rounded ${test.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {test.success ? 'Sucesso' : 'Falha'}
+                        </span>
+                      </div>
+                      
+                      {test.status && (
+                        <p className="text-xs text-slate-600 mb-1">
+                          Status: {test.status} - {test.statusText}
+                        </p>
+                      )}
+                      
+                      {test.authMethod && (
+                        <p className="text-xs text-slate-600 mb-1">
+                          Método: {test.authMethod}
+                        </p>
+                      )}
+                      
+                      {test.error && (
+                        <p className="text-xs text-red-600 mb-1">
+                          Erro: {test.error}
+                        </p>
+                      )}
+                      
+                      {test.data && test.data !== test.error && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-slate-500 cursor-pointer">Ver resposta</summary>
+                          <pre className="text-xs bg-slate-100 p-2 rounded mt-1 max-h-32 overflow-auto">
+                            {typeof test.data === 'string' ? test.data : JSON.stringify(test.data, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Overall Status */}
+                <div className={`p-4 rounded-lg ${testResults.success ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
+                  <h4 className="font-medium mb-2">
+                    {testResults.success ? '✅ Testes Concluídos' : '⚠️ Problemas Detectados'}
+                  </h4>
+                  <p className="text-sm text-slate-600">
+                    {testResults.success 
+                      ? 'A conexão com a Evolution API foi testada. Verifique os resultados acima.'
+                      : 'Foram encontrados problemas na conexão. Verifique as credenciais e configurações.'}
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            <DialogFooter>
+              <Button onClick={() => setShowTestDialog(false)} variant="outline">
+                Fechar
+              </Button>
+              <Button onClick={handleTestConnection} disabled={testLoading}>
+                {testLoading ? 'Testando...' : 'Testar Novamente'}
               </Button>
             </DialogFooter>
           </DialogContent>

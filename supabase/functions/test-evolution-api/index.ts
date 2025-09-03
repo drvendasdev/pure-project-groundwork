@@ -11,8 +11,9 @@ serve(async (req) => {
   }
 
   try {
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+    // Try multiple secret name variants
+    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
+    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
     const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
 
     console.log('Testando Evolution API:', {
@@ -60,9 +61,9 @@ serve(async (req) => {
       });
     }
 
-    // Teste 2: Listar instâncias
+    // Teste 2: Listar instâncias (apikey)
     try {
-      console.log('Teste 2: Listar instâncias');
+      console.log('Teste 2: Listar instâncias (apikey)');
       const instancesResponse = await fetch(`${evolutionApiUrl}/instance/fetchInstances`, {
         method: 'GET',
         headers: {
@@ -72,20 +73,53 @@ serve(async (req) => {
       });
       
       const instancesData = await instancesResponse.text();
-      console.log('Instâncias encontradas:', instancesData);
+      console.log('Instâncias encontradas (apikey):', instancesData);
       
       tests.push({
-        name: 'Listar instâncias',
+        name: 'Listar instâncias (apikey)',
         success: instancesResponse.ok,
         status: instancesResponse.status,
         statusText: instancesResponse.statusText,
-        data: instancesData
+        data: instancesData,
+        authMethod: 'apikey'
       });
     } catch (error) {
       tests.push({
-        name: 'Listar instâncias',
+        name: 'Listar instâncias (apikey)',
         success: false,
-        error: error.message
+        error: error.message,
+        authMethod: 'apikey'
+      });
+    }
+
+    // Teste 2b: Listar instâncias (Bearer)
+    try {
+      console.log('Teste 2b: Listar instâncias (Bearer)');
+      const instancesResponse = await fetch(`${evolutionApiUrl}/instance/fetchInstances`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${evolutionApiKey}`,
+        },
+      });
+      
+      const instancesData = await instancesResponse.text();
+      console.log('Instâncias encontradas (Bearer):', instancesData);
+      
+      tests.push({
+        name: 'Listar instâncias (Bearer)',
+        success: instancesResponse.ok,
+        status: instancesResponse.status,
+        statusText: instancesResponse.statusText,
+        data: instancesData,
+        authMethod: 'Bearer'
+      });
+    } catch (error) {
+      tests.push({
+        name: 'Listar instâncias (Bearer)',
+        success: false,
+        error: error.message,
+        authMethod: 'Bearer'
       });
     }
 
