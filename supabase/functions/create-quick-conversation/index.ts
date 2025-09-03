@@ -119,6 +119,29 @@ serve(async (req) => {
 
     // Create conversation if doesn't exist
     if (!conversationId) {
+      // Resolve evolution instance for new conversation
+      let evolutionInstance = instance;
+      
+      if (!evolutionInstance) {
+        // Try to get organization default
+        const { data: orgSettings } = await supabase
+          .from('org_messaging_settings')
+          .select('default_instance')
+          .eq('org_id', finalOrgId)
+          .maybeSingle();
+        
+        if (orgSettings?.default_instance) {
+          evolutionInstance = orgSettings.default_instance;
+          console.log(`Using org default instance: ${evolutionInstance}`);
+        } else {
+          // Fallback to global secret
+          evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
+          if (evolutionInstance) {
+            console.log('Using global default instance from secret');
+          }
+        }
+      }
+
       const conversationData: any = {
         contact_id: contactId,
         status: 'open',
@@ -127,9 +150,9 @@ serve(async (req) => {
         agente_ativo: false
       }
 
-      // Add instance if provided
-      if (instance) {
-        conversationData.evolution_instance = instance
+      // Add instance if resolved
+      if (evolutionInstance) {
+        conversationData.evolution_instance = evolutionInstance
       }
 
       const { data: newConversation, error: conversationError } = await supabase

@@ -128,11 +128,20 @@ serve(async (req) => {
       instanceSource = 'body';
     }
     
-    // Atualizar conversa se a instância resolvida for diferente da atual
-    if (resolvedEvolutionInstance && evolutionInstance && resolvedEvolutionInstance !== evolutionInstance && conversationId) {
+    // Prioridade 6: global secret (último fallback)
+    if (!resolvedEvolutionInstance) {
+      const globalInstance = Deno.env.get('EVOLUTION_INSTANCE');
+      if (globalInstance) {
+        resolvedEvolutionInstance = globalInstance;
+        instanceSource = 'globalSecret';
+      }
+    }
+    
+    // Atualizar conversa com a instância resolvida (sempre que diferente da atual)
+    if (resolvedEvolutionInstance && conversationId && resolvedEvolutionInstance !== evolutionInstance) {
       console.log('🔄 Atualizando evolution_instance da conversa:', {
         conversationId: conversationId.substring(0, 8) + '***',
-        old: evolutionInstance,
+        old: evolutionInstance || 'EMPTY',
         new: resolvedEvolutionInstance
       });
       
@@ -269,7 +278,7 @@ serve(async (req) => {
         contextInfo: null,
         messageType: evolutionMessageType,
         messageTimestamp: Math.floor(Date.now() / 1000),
-        instanceId: null,
+        instanceId: resolvedEvolutionInstance || null,
         source: 'crm',
       },
       date_time: new Date().toISOString(),
@@ -281,6 +290,7 @@ serve(async (req) => {
       meta: {
         conversationId: conversationId ?? undefined,
         contactEmail: contactEmail ?? undefined,
+        evolution_instance: resolvedEvolutionInstance ?? undefined,
       },
     };
 

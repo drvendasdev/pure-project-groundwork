@@ -128,3 +128,12 @@ verify_jwt = false
 
 [functions.n8n-response]
 verify_jwt = false
+
+[functions.set-default-instance]
+verify_jwt = false
+
+[functions.get-default-instance]
+verify_jwt = false
+
+[functions.create-quick-conversation]
+verify_jwt = false

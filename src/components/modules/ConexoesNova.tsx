@@ -34,15 +34,41 @@ export default function ConexoesNova() {
     };
   }, []);
 
-  // Load connections from localStorage on mount and get default org
+  // Load connections from localStorage and get default org
+  const loadConnections = async () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        let parsedConexoes = JSON.parse(saved);
+        
+        // Get default instance to mark it if we have orgId
+        if (defaultOrgId) {
+          try {
+            const { data: defaultData } = await supabase.functions.invoke('get-default-instance', {
+              body: { orgId: defaultOrgId }
+            });
+            
+            if (defaultData?.defaultInstance) {
+              parsedConexoes = parsedConexoes.map((conexao: Conexao) => ({
+                ...conexao,
+                isDefault: conexao.nome === defaultData.defaultInstance
+              }));
+            }
+          } catch (error) {
+            console.error('Error loading default instance:', error);
+          }
+        }
+        
+        setConexoes(parsedConexoes);
+      }
+    } catch (error) {
+      console.error('Error loading connections:', error);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          setConexoes(JSON.parse(saved));
-        }
-
         // Get the first available org as default
         const { data: orgData } = await supabase
           .from('orgs')
@@ -54,12 +80,25 @@ export default function ConexoesNova() {
           setDefaultOrgId(orgData.id);
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error loading org:', error);
       }
     };
     
     loadData();
   }, []);
+
+  // Load connections when defaultOrgId is available
+  useEffect(() => {
+    if (defaultOrgId) {
+      loadConnections();
+    } else {
+      // Load connections without default marking if no orgId
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        setConexoes(JSON.parse(saved));
+      }
+    }
+  }, [defaultOrgId]);
 
   // Utility function to save connections to localStorage
   const saveConexoes = (newConexoes: Conexao[]) => {
