@@ -254,6 +254,7 @@ serve(async (req) => {
                 instanceName: instanceName,
                 token: instanceToken,
                 qrcode: true,
+                integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
                 webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
                 webhook_by_events: false,
                 events: [
@@ -280,6 +281,7 @@ serve(async (req) => {
                 instanceName: instanceName,
                 token: instanceToken,
                 qrcode: true,
+                integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
                 webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
                 webhook_by_events: false,
                 events: [
@@ -296,8 +298,23 @@ serve(async (req) => {
 
           if (!createInstanceResponse.ok) {
             const errorText = await createInstanceResponse.text();
-            console.error('Evolution API create instance error:', errorText);
-            throw new Error('Erro ao criar instância na Evolution API');
+            console.error('Evolution API create instance error:', { status: createInstanceResponse.status, error: errorText });
+            
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch (e) {
+              errorData = { message: errorText };
+            }
+            
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: `Erro ao criar instância (${createInstanceResponse.status}): ${errorData.message || errorData.error || errorText}`,
+                evolutionResponse: errorData
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
           }
 
           const createData = await createInstanceResponse.json();

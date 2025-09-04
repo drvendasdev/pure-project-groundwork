@@ -187,7 +187,14 @@ export default function ConexoesNova() {
       });
 
       if (!data?.success) {
-        throw new Error(data?.error || 'Erro ao criar conexão');
+        const errorMessage = data?.error || 'Erro ao criar conexão';
+        
+        // Show detailed error if available from Evolution API
+        if (data?.evolutionResponse) {
+          console.error('Evolution API error details:', data.evolutionResponse);
+        }
+        
+        throw new Error(errorMessage);
       }
 
       setProvisionData({ instanceName: '', messageRecovery: 'none' });
