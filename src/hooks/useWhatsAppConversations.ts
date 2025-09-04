@@ -84,13 +84,9 @@ export const useWhatsAppConversations = () => {
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
-      // Buscar o usuário atual do sistema (temporariamente pegando o primeiro ativo)
-      const { data: currentUser } = await supabase
-        .from('system_users')
-        .select('id')
-        .eq('status', 'active')
-        .limit(1)
-        .single();
+      // Obter o usuário logado do localStorage ou auth context
+      const userData = localStorage.getItem('currentUser');
+      const currentUser = userData ? JSON.parse(userData) : null;
 
       // Inserir mensagem no banco com status 'sending' e sender_id
       const { data: insertedMessage, error: insertError } = await supabase
@@ -157,8 +153,12 @@ export const useWhatsAppConversations = () => {
           errorMessage = 'Sistema de mensagens não configurado. Entre em contato com o administrador.';
         } else if (apiError.message?.includes('Evolution API')) {
           errorMessage = 'API de WhatsApp não configurada. Verifique as configurações.';
+        } else if (apiError.message?.includes('senderId is empty')) {
+          errorMessage = 'Usuário não identificado. Faça login novamente.';
+        } else if (apiError.message?.includes('No evolution instance found')) {
+          errorMessage = 'Nenhuma instância de WhatsApp configurada para este usuário.';
         } else {
-          errorMessage = `Erro no envio: ${apiError.message}`;
+          errorMessage = `Erro no envio: ${apiError.message || 'Erro desconhecido'}`;
         }
         
         throw new Error(errorMessage);

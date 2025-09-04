@@ -49,6 +49,11 @@ serve(async (req) => {
       senderId = msgRow.sender_id;
     }
 
+    // Log se senderId está vazio para debugging
+    if (!senderId) {
+      console.log('⚠️ senderId is empty, message might fail instance resolution');
+    }
+
     if (msgRow?.conversation_id) {
       conversationId = msgRow.conversation_id as string;
 
