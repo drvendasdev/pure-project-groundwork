@@ -6,6 +6,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Configuration function
+function getConfig() {
+  const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
+  const evolutionVerifyToken = Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'evolution-webhook-token';
+  const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  return {
+    evolutionWebhookSecret,
+    evolutionVerifyToken,
+    n8nWebhookUrl,
+    supabaseUrl,
+    supabaseServiceRoleKey
+  };
+}
+
 // Função para sanitizar dados removendo campos grandes que causam problemas de memória
 function sanitizeWebhookData(data: any) {
   // Criar cópia dos dados sem os campos problemáticos
@@ -136,6 +153,9 @@ serve(async (req) => {
   }
 
   try {
+    // Generate correlation ID for request tracking
+    const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
+    const config = getConfig();
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const mode = url.searchParams.get('hub.mode');
@@ -145,35 +165,61 @@ serve(async (req) => {
 
       // Test endpoint for troubleshooting
       if (test === 'true') {
-        console.log('🧪 Test endpoint called');
+        console.log('🧪 Test endpoint called', { correlationId });
         return new Response(JSON.stringify({
           status: 'webhook_active',
           timestamp: new Date().toISOString(),
-          n8n_configured: !!Deno.env.get('N8N_WEBHOOK_URL'),
-          verify_token_configured: !!Deno.env.get('EVOLUTION_VERIFY_TOKEN')
+          n8n_configured: !!config.n8nWebhookUrl,
+          verify_token_configured: !!config.evolutionVerifyToken,
+          webhook_secret_configured: !!config.evolutionWebhookSecret,
+          correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       // Webhook verification for Evolution API
-      const VERIFY_TOKEN = Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'evolution-webhook-token';
-
-      if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-        console.log('✅ Webhook verified');
+      if (mode === 'subscribe' && token === config.evolutionVerifyToken) {
+        console.log('✅ Webhook verified', { correlationId });
         return new Response(challenge, { status: 200 });
       } else {
-        console.log('❌ Webhook verification failed', { mode, tokenProvided: !!token, expectedToken: VERIFY_TOKEN });
+        console.log('❌ Webhook verification failed', { 
+          correlationId, 
+          mode, 
+          tokenProvided: !!token, 
+          expectedToken: config.evolutionVerifyToken 
+        });
         return new Response('Forbidden', { status: 403 });
       }
     }
 
     if (req.method === 'POST') {
+      // Validate webhook authorization
+      const authHeader = req.headers.get('authorization');
+      if (config.evolutionWebhookSecret) {
+        const expectedAuth = `Bearer ${config.evolutionWebhookSecret}`;
+        if (!authHeader || authHeader !== expectedAuth) {
+          console.log('❌ Webhook authorization failed', { 
+            correlationId, 
+            hasAuth: !!authHeader,
+            authType: authHeader?.split(' ')[0] || 'none'
+          });
+          return new Response(JSON.stringify({ 
+            error: 'Unauthorized',
+            correlationId 
+          }), { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          });
+        }
+      }
+
       const body = await req.json();
       
       // Extrair metadados apenas para logs (sem payload completo)
       const metadata = extractMetadata(body);
       console.log('📥 Webhook recebido:', {
+        correlationId,
         event: metadata.event,
         instance: metadata.instance,
         messageType: metadata.messageType,
@@ -185,8 +231,8 @@ serve(async (req) => {
 
       // Initialize Supabase client for status updates
       const supabaseClient = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        config.supabaseUrl ?? '',
+        config.supabaseServiceRoleKey ?? ''
       );
 
       // Handle connection state changes
@@ -206,26 +252,26 @@ serve(async (req) => {
         }
       }
 
-      const n8nUrl = Deno.env.get('N8N_WEBHOOK_URL');
-      if (n8nUrl) {
+      if (config.n8nWebhookUrl) {
         try {
           // Sanitizar dados antes de enviar (remover base64 grandes)
           const sanitizedData = sanitizeWebhookData(body);
           
           const forwardPayload = { 
             source: 'evolution-webhook',
-            metadata: metadata,
+            metadata: { ...metadata, correlationId },
             data: sanitizedData,
             timestamp: metadata.timestamp
           };
           
           console.log('🔄 Sending to n8n:', {
-            url: n8nUrl.substring(0, 50) + '...',
+            correlationId,
+            url: config.n8nWebhookUrl.substring(0, 50) + '...',
             event: metadata.event,
             instance: metadata.instance
           });
           
-          const fRes = await fetch(n8nUrl, {
+          const fRes = await fetch(config.n8nWebhookUrl, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(forwardPayload),
@@ -235,6 +281,7 @@ serve(async (req) => {
           const success = fRes.ok;
           
           console.log('➡️ n8n Response:', {
+            correlationId,
             status: fRes.status,
             ok: success,
             response: success ? 'SUCCESS' : fText.substring(0, 200)
@@ -244,31 +291,32 @@ serve(async (req) => {
             ok: true, 
             forwarded: success,
             n8n_status: fRes.status,
-            metadata: metadata
+            metadata: { ...metadata, correlationId }
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         } catch (forwardErr) {
           console.error('❌ Error forwarding to n8n:', {
+            correlationId,
             error: forwardErr.message,
-            url: n8nUrl.substring(0, 50) + '...'
+            url: config.n8nWebhookUrl.substring(0, 50) + '...'
           });
           return new Response(JSON.stringify({ 
             ok: true, 
             forwarded: false, 
             error: forwardErr.message,
-            metadata: metadata
+            metadata: { ...metadata, correlationId }
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
       } else {
-        console.log('⚠️ N8N_WEBHOOK_URL not configured, webhook data discarded');
+        console.log('⚠️ N8N_WEBHOOK_URL not configured, webhook data discarded', { correlationId });
         return new Response(JSON.stringify({ 
           ok: true, 
           forwarded: false, 
           note: 'N8N_WEBHOOK_URL not configured',
-          metadata: metadata
+          metadata: { ...metadata, correlationId }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -277,8 +325,12 @@ serve(async (req) => {
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
   } catch (error) {
-    console.error('❌ Error in webhook:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const correlationId = crypto.randomUUID();
+    console.error('❌ Error in webhook:', { correlationId, error: error.message });
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      correlationId 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

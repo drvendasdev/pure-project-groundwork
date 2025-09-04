@@ -6,20 +6,75 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Configuration and validation functions
+function getConfig() {
+  const supabaseFunctionsWebhook = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
+  const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
+  const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
+  const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  return {
+    supabaseFunctionsWebhook,
+    evolutionWebhookSecret,
+    evolutionApiUrl,
+    evolutionApiKey,
+    supabaseUrl,
+    supabaseServiceRoleKey
+  };
+}
+
+function validateWebhookUrl(url: string): { valid: boolean, error?: string } {
+  if (!url) {
+    return { valid: false, error: 'URL do webhook não configurada' };
+  }
+  
+  try {
+    const urlObj = new URL(url);
+    
+    if (urlObj.protocol !== 'https:') {
+      return { valid: false, error: 'URL do webhook deve usar HTTPS' };
+    }
+    
+    if (!urlObj.hostname.endsWith('.functions.supabase.co')) {
+      return { valid: false, error: 'URL do webhook deve ser do Supabase Functions' };
+    }
+    
+    if (!urlObj.pathname.endsWith('/functions/v1/evolution-webhook')) {
+      return { valid: false, error: 'URL do webhook deve terminar com /functions/v1/evolution-webhook' };
+    }
+    
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: `URL do webhook inválida: ${error.message}` };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Generate correlation ID for request tracking
+    const correlationId = crypto.randomUUID();
+    const config = getConfig();
+    
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      config.supabaseUrl ?? '',
+      config.supabaseServiceRoleKey ?? ''
     )
 
     const { action, orgId, instanceName, instanceToken, evolutionUrl, messageRecovery } = await req.json();
     
-    console.log('Manage evolution connections action:', { action, orgId, instanceName, hasToken: !!instanceToken });
+    console.log('Manage evolution connections action:', { 
+      correlationId, 
+      action, 
+      orgId, 
+      instanceName, 
+      hasToken: !!instanceToken 
+    });
 
     switch (action) {
       case 'add_reference': {
@@ -109,7 +164,7 @@ serve(async (req) => {
 
         // Create/update channel record with initial disconnected status
         // Status will be updated later when user connects via QR
-        const webhookSecret = crypto.randomUUID();
+        const channelWebhookSecret = crypto.randomUUID();
         const { error: channelError } = await supabaseClient
           .from('channels')
           .upsert({
@@ -118,7 +173,7 @@ serve(async (req) => {
             number: '', // Will be updated when connected
             instance: instanceName,
             status: 'disconnected',
-            webhook_secret: webhookSecret,
+            webhook_secret: channelWebhookSecret,
             last_state_at: new Date().toISOString()
           }, {
             onConflict: 'org_id,instance'
@@ -133,7 +188,11 @@ serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ success: true, message: 'Conexão adicionada com sucesso' }),
+          JSON.stringify({ 
+            success: true, 
+            message: 'Conexão adicionada com sucesso',
+            correlationId 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -175,7 +234,12 @@ serve(async (req) => {
         })) || [];
 
         return new Response(
-          JSON.stringify({ success: true, connections, connectionLimit }),
+          JSON.stringify({ 
+            success: true, 
+            connections, 
+            connectionLimit,
+            correlationId 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -191,36 +255,29 @@ serve(async (req) => {
         const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
 
         // Validate webhook URL from SUPABASE_FUNCTIONS_WEBHOOK secret
-        const webhookUrl = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
-        if (!webhookUrl) {
+        const webhookValidation = validateWebhookUrl(config.supabaseFunctionsWebhook || '');
+        if (!webhookValidation.valid) {
+          console.error('Webhook validation failed:', { 
+            correlationId, 
+            error: webhookValidation.error,
+            url: config.supabaseFunctionsWebhook ? `${new URL(config.supabaseFunctionsWebhook).host}${new URL(config.supabaseFunctionsWebhook).pathname}` : 'undefined'
+          });
           return new Response(
             JSON.stringify({ 
               success: false, 
-              error: 'SUPABASE_FUNCTIONS_WEBHOOK secret não configurado' 
+              error: webhookValidation.error,
+              correlationId
             }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        // Validate webhook URL format
-        try {
-          const url = new URL(webhookUrl);
-          if (url.protocol !== 'https:' || 
-              !url.hostname.endsWith('.functions.supabase.co') || 
-              !url.pathname.endsWith('/functions/v1/evolution-webhook')) {
-            throw new Error('Invalid webhook URL format');
-          }
-        } catch (error) {
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: `URL do webhook inválida: ${error.message}` 
-            }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log('Using validated webhook URL:', webhookUrl);
+        const webhookUrl = config.supabaseFunctionsWebhook!;
+        console.log('Using validated webhook URL:', { 
+          correlationId,
+          webhookHost: new URL(webhookUrl).host,
+          webhookPath: new URL(webhookUrl).pathname
+        });
 
         // Check quota - get limit from org settings
         const { data: orgSettings, error: settingsError } = await supabaseClient
@@ -256,13 +313,14 @@ serve(async (req) => {
         }
 
         // Get Evolution API credentials from environment
-        const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
-        const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-
-        if (!evolutionApiKey || !evolutionApiUrl) {
-          console.error('Missing Evolution API credentials');
+        if (!config.evolutionApiKey || !config.evolutionApiUrl) {
+          console.error('Missing Evolution API credentials:', { correlationId });
           return new Response(
-            JSON.stringify({ success: false, error: 'Configuração da API Evolution não encontrada' }),
+            JSON.stringify({ 
+              success: false, 
+              error: 'Configuração da API Evolution não encontrada',
+              correlationId
+            }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -275,14 +333,13 @@ serve(async (req) => {
 
         try {
           // Prepare webhook configuration
-          const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
           const webhookConfig = globalWebhookEnabled ? {} : {
             webhook: webhookUrl,
             webhook_by_events: false,
             webhook_base64: false,
-            ...(webhookSecret && {
+            ...(config.evolutionWebhookSecret && {
               webhook_headers: {
-                authorization: `Bearer ${webhookSecret}`
+                authorization: `Bearer ${config.evolutionWebhookSecret}`
               }
             }),
             events: [
@@ -305,9 +362,11 @@ serve(async (req) => {
           };
 
           console.log('Creating instance with webhook config:', { 
-            webhookUrl: globalWebhookEnabled ? 'GLOBAL' : webhookUrl,
+            correlationId,
+            instanceName,
+            webhookUrl: globalWebhookEnabled ? 'GLOBAL' : `${new URL(webhookUrl).host}${new URL(webhookUrl).pathname}`,
             globalWebhookEnabled,
-            hasWebhookSecret: !!webhookSecret
+            hasWebhookSecret: !!config.evolutionWebhookSecret
           });
 
           // Try to create instance in Evolution API with different authentication methods
@@ -315,23 +374,23 @@ serve(async (req) => {
           
           // First try with apikey header
           try {
-            createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+            createInstanceResponse = await fetch(`${config.evolutionApiUrl}/instance/create`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'apikey': evolutionApiKey,
+                'apikey': config.evolutionApiKey,
               },
               body: JSON.stringify(requestBody)
             });
           } catch (error) {
-            console.warn('Failed with apikey, trying Authorization header:', error);
+            console.warn('Failed with apikey, trying Authorization header:', { correlationId, error: error.message });
             
             // If apikey fails, try with Authorization Bearer header
-            createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+            createInstanceResponse = await fetch(`${config.evolutionApiUrl}/instance/create`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${evolutionApiKey}`,
+                'Authorization': `Bearer ${config.evolutionApiKey}`,
               },
               body: JSON.stringify(requestBody)
             });
@@ -340,11 +399,15 @@ serve(async (req) => {
           // Check if creation failed due to webhook issues and implement fallback
           if (!createInstanceResponse.ok && !globalWebhookEnabled) {
             const errorText = await createInstanceResponse.text();
-            console.log('Instance creation failed, checking if webhook-related:', errorText);
+            console.log('Instance creation failed, checking if webhook-related:', { 
+              correlationId, 
+              status: createInstanceResponse.status,
+              error: errorText.substring(0, 200) 
+            });
             
             // If webhook seems to be the issue, try without webhook
             if (errorText.toLowerCase().includes('url') || errorText.toLowerCase().includes('webhook')) {
-              console.log('Attempting fallback: creating instance without webhook...');
+              console.log('Attempting fallback: creating instance without webhook...', { correlationId });
               
               const noWebhookBody = {
                 instanceName: instanceName,
@@ -354,33 +417,33 @@ serve(async (req) => {
               };
 
               try {
-                const fallbackResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+                const fallbackResponse = await fetch(`${config.evolutionApiUrl}/instance/create`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${evolutionApiKey}`,
+                    'Authorization': `Bearer ${config.evolutionApiKey}`,
                   },
                   body: JSON.stringify(noWebhookBody)
                 });
 
                 if (fallbackResponse.ok) {
-                  console.log('Instance created without webhook, setting webhook separately...');
+                  console.log('Instance created without webhook, setting webhook separately...', { correlationId });
                   
                   // Try to set webhook separately using the /webhook/set endpoint
                   try {
-                    const setWebhookResponse = await fetch(`${evolutionApiUrl}/webhook/set/${instanceName}`, {
+                    const setWebhookResponse = await fetch(`${config.evolutionApiUrl}/webhook/set/${instanceName}`, {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${evolutionApiKey}`,
+                        'Authorization': `Bearer ${config.evolutionApiKey}`,
                       },
                       body: JSON.stringify({
                         url: webhookUrl,
                         webhook_by_events: false,
                         webhook_base64: false,
-                        ...(webhookSecret && {
+                        ...(config.evolutionWebhookSecret && {
                           headers: {
-                            authorization: `Bearer ${webhookSecret}`
+                            authorization: `Bearer ${config.evolutionWebhookSecret}`
                           }
                         }),
                         events: [
@@ -395,27 +458,35 @@ serve(async (req) => {
                     });
                     
                     if (setWebhookResponse.ok) {
-                      console.log('Webhook configured successfully via fallback method');
+                      console.log('Webhook configured successfully via fallback method', { correlationId });
                     } else {
-                      console.warn('Failed to set webhook via fallback method:', await setWebhookResponse.text());
+                      console.warn('Failed to set webhook via fallback method:', { 
+                        correlationId, 
+                        status: setWebhookResponse.status,
+                        error: (await setWebhookResponse.text()).substring(0, 200)
+                      });
                     }
                   } catch (webhookError) {
-                    console.warn('Failed to set webhook separately:', webhookError);
+                    console.warn('Failed to set webhook separately:', { correlationId, error: webhookError.message });
                   }
 
                   // Use the successful fallback response
                   createInstanceResponse = fallbackResponse;
                 }
-              } catch (fallbackError) {
-                console.warn('Fallback method also failed:', fallbackError);
-              }
+                } catch (fallbackError) {
+                  console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
+                }
             }
           }
 
           // Final check if instance creation failed
           if (!createInstanceResponse.ok) {
             const errorText = await createInstanceResponse.text();
-            console.error('Evolution API create instance error:', { status: createInstanceResponse.status, error: errorText });
+            console.error('Evolution API create instance error:', { 
+              correlationId, 
+              status: createInstanceResponse.status, 
+              error: errorText.substring(0, 200) 
+            });
             
             let errorData;
             try {
@@ -428,22 +499,23 @@ serve(async (req) => {
               JSON.stringify({ 
                 success: false, 
                 error: `Erro ao criar instância (${createInstanceResponse.status}): ${errorData.message || errorData.error || errorText}`,
-                evolutionResponse: errorData
+                evolutionResponse: errorData,
+                correlationId
               }),
               { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
 
           const createData = await createInstanceResponse.json();
-          console.log('Instance created:', createData);
+          console.log('Instance created:', { correlationId, instanceName, status: createInstanceResponse.status });
 
           // Get QR code
           let qrCode = null;
           try {
-            const qrResponse = await fetch(`${evolutionApiUrl}/instance/connect/${instanceName}`, {
+            const qrResponse = await fetch(`${config.evolutionApiUrl}/instance/connect/${instanceName}`, {
               method: 'GET',
               headers: {
-                'apikey': evolutionApiKey,
+                'apikey': config.evolutionApiKey,
               },
             });
 
