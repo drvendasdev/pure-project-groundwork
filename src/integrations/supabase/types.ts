@@ -1000,6 +1000,57 @@ export type Database = {
         }
         Relationships: []
       }
+      system_users_view: {
+        Row: {
+          avatar: string | null
+          cargo_id: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          name: string | null
+          profile: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          name?: string | null
+          profile?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          name?: string | null
+          profile?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_system_users_cargo_id"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_cargo_id_fkey"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       block_system_user: {

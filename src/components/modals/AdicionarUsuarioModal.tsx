@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useInstances } from "@/hooks/useInstances";
+import { useSystemUsers } from "@/hooks/useSystemUsers";
 
 
 interface AdicionarUsuarioModalProps {
@@ -49,6 +50,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
   const [defaultInstance, setDefaultInstance] = useState<string>("");
   const { instances, isLoading: instancesLoading } = useInstances();
+  const { createUser, loading } = useSystemUsers();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -71,31 +73,45 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     defaultPhone: false,
   });
 
-  const handleSubmit = () => {
-    onAddUser({
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.email || !formData.password) {
+      return;
+    }
+
+    const result = await createUser({
       name: formData.name,
       email: formData.email,
-      profile: formData.profile as "admin" | "user",
+      profile: formData.profile,
       status: "active",
+      senha: formData.password
     });
-    
-    // Reset form
-    setFormData({
-      name: "",
-      email: "",
-      profile: "user",
-      password: "",
-      temporaryPassword: false,
-      queues: "",
-      roles: "",
-      defaultChannel: "",
-      defaultPhone: "",
-    });
-    setShowPassword(false);
-    setSelectedRoles([]);
-    setSelectedInstances([]);
-    setDefaultInstance("");
-    onClose();
+
+    if (result.data) {
+      onAddUser({
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile as "admin" | "user",
+        status: "active",
+      });
+      
+      // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        profile: "user",
+        password: "",
+        temporaryPassword: false,
+        queues: "",
+        roles: "",
+        defaultChannel: "",
+        defaultPhone: "",
+      });
+      setShowPassword(false);
+      setSelectedRoles([]);
+      setSelectedInstances([]);
+      setDefaultInstance("");
+      onClose();
+    }
   };
 
   const handleCancel = () => {
@@ -542,9 +558,10 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             <Button
               type="submit"
               onClick={handleSubmit}
-              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg"
+              disabled={loading || !formData.name || !formData.email || !formData.password}
+              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50"
             >
-              Adicionar
+              {loading ? "Salvando..." : "Adicionar"}
             </Button>
           </div>
         </div>
