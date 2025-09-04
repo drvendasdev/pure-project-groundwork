@@ -491,16 +491,36 @@ export default function ConexoesNova() {
             </CardHeader>
             <CardContent className="space-y-4">
               {connection.qrCode && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Abra o WhatsApp e escaneie este QR para conectar
-                  </p>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-4">
+                  <div className="text-center">
+                    <h4 className="font-semibold text-foreground mb-3">Passos para conectar</h4>
+                    <div className="space-y-2 text-sm text-muted-foreground text-left">
+                      <div className="flex items-start gap-2">
+                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">1</span>
+                        <span>Abra o <strong>WhatsApp</strong> no seu celular</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">2</span>
+                        <span>No Android toque em <strong>Menu</strong> : ou no iPhone em <strong>Ajustes</strong></span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">3</span>
+                        <span>Toque em <strong>Dispositivos conectados</strong> e depois <strong>Conectar um dispositivo</strong></span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">4</span>
+                        <span>Escaneie o QR Code à direita para confirmar</span>
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex justify-center">
-                    <img 
-                      src={connection.qrCode} 
-                      alt="QR Code" 
-                      className="w-48 h-48 border rounded"
-                    />
+                    <div className="bg-white p-3 rounded-lg border-2 border-border">
+                      <img 
+                        src={connection.qrCode} 
+                        alt="QR Code para conectar WhatsApp" 
+                        className="w-48 h-48"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -519,10 +539,11 @@ export default function ConexoesNova() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleCheckStatus(connection, index)}
+                    onClick={() => handleGetQr(connection, index)}
+                    disabled={qrLoading[index]}
                   >
                     <Power className="mr-1 h-3 w-3" />
-                    Conectar
+                    {qrLoading[index] ? 'Conectando...' : 'Conectar'}
                   </Button>
                 )}
                 
