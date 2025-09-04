@@ -79,11 +79,13 @@ export const useWhatsAppConversations = () => {
     fileUrl?: string, 
     fileName?: string
   ) => {
+    let newMessage: any = null;
+    
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
       // Inserir mensagem no banco com status 'sending'
-      const { data: newMessage, error: insertError } = await supabase
+      const { data: insertedMessage, error: insertError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
@@ -101,6 +103,8 @@ export const useWhatsAppConversations = () => {
       if (insertError) {
         throw insertError;
       }
+
+      newMessage = insertedMessage;
 
       // Atualizar estado local imediatamente
       setConversations(prev => prev.map(conv => {
@@ -124,7 +128,7 @@ export const useWhatsAppConversations = () => {
       }));
 
       // Enviar via N8N (não enviamos evolutionInstance para forçar uso da última mensagem inbound)
-      const { error: apiError } = await supabase.functions.invoke('n8n-send-message', {
+      const { data: sendResult, error: apiError } = await supabase.functions.invoke('n8n-send-message', {
         body: {
           messageId: newMessage.id,
           phoneNumber: contactPhone,
@@ -136,15 +140,51 @@ export const useWhatsAppConversations = () => {
       });
 
       if (apiError) {
-        throw new Error(apiError.message);
+        console.error('Erro ao enviar via N8N:', apiError);
+        
+        // Verificar se é problema de configuração
+        let errorMessage = "Erro ao enviar mensagem";
+        if (apiError.message?.includes('N8N não configurado')) {
+          errorMessage = 'Sistema de mensagens não configurado. Entre em contato com o administrador.';
+        } else if (apiError.message?.includes('Evolution API')) {
+          errorMessage = 'API de WhatsApp não configurada. Verifique as configurações.';
+        } else {
+          errorMessage = `Erro no envio: ${apiError.message}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
-      console.log('✅ Mensagem enviada com sucesso');
+      // Verificar se o resultado indica falha
+      if (sendResult && !sendResult.success) {
+        console.error('Envio falhou:', sendResult);
+        throw new Error(sendResult.error || 'Falha no envio da mensagem');
+      }
+
+      console.log('✅ Mensagem enviada com sucesso:', sendResult);
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
+      
+      // Atualizar UI para mostrar erro apenas se tivermos o ID da mensagem
+      if (newMessage?.id) {
+        setConversations(prev => prev.map(conv => {
+          if (conv.id === conversationId) {
+            return {
+              ...conv,
+              messages: conv.messages.map(msg => 
+                msg.id === newMessage.id 
+                  ? { ...msg, status: 'failed' as const }
+                  : msg
+              )
+            };
+          }
+          return conv;
+        }));
+      }
+      
       toast({
         title: "Erro",
-        description: "Erro ao enviar mensagem",
+        description: error instanceof Error ? error.message : "Erro ao enviar mensagem",
         variant: "destructive",
       });
     }

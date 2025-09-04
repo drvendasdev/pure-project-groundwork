@@ -18,9 +18,16 @@ serve(async (req) => {
     const { messageId, phoneNumber, content, messageType = 'text', fileUrl, fileName } = requestBody;
     
     // Check if Evolution API integration should be enabled (when n8n is not available)
-    const evolutionUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+    const evolutionUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
+    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
     const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
+    
+    console.log('🔍 Evolution API config check:', {
+      hasUrl: !!evolutionUrl,
+      hasApiKey: !!evolutionApiKey,
+      hasInstance: !!evolutionInstance,
+      url: evolutionUrl ? evolutionUrl.substring(0, 30) + '...' : 'NOT_SET'
+    });
     
     if (!evolutionUrl || !evolutionApiKey || !evolutionInstance) {
       console.log('🚫 Evolution API not fully configured - marking as sent locally');
@@ -35,7 +42,14 @@ serve(async (req) => {
           .from('messages')
           .update({ 
             status: 'sent',
-            metadata: { note: 'Evolution API not configured - local fallback' }
+            metadata: { 
+              note: 'Evolution API not configured - local fallback',
+              missing_config: {
+                url: !evolutionUrl,
+                apiKey: !evolutionApiKey,
+                instance: !evolutionInstance
+              }
+            }
           })
           .eq('id', messageId);
       }
@@ -43,7 +57,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         message: 'Evolution API not configured - message marked as sent locally',
-        sent_via_evolution: false
+        sent_via_evolution: false,
+        missing_config: {
+          url: !evolutionUrl,
+          apiKey: !evolutionApiKey,
+          instance: !evolutionInstance
+        }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -97,11 +116,16 @@ serve(async (req) => {
     }
 
     // Send via Evolution API
-    const evolutionEndpoint = `${evolutionUrl}/message/sendText/${evolutionInstance}`;
+    const evolutionEndpoint = messageType === 'text' 
+      ? `${evolutionUrl}/message/sendText/${evolutionInstance}`
+      : `${evolutionUrl}/message/sendMedia/${evolutionInstance}`;
     
     console.log('🔄 Calling Evolution API:', {
       endpoint: evolutionEndpoint,
-      method: 'POST'
+      method: 'POST',
+      messageType,
+      hasContent: !!content,
+      hasFileUrl: !!fileUrl
     });
 
     const response = await fetch(evolutionEndpoint, {
