@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, Edit, Pause, Trash2, Plus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Edit, Pause, Trash2, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,56 +9,28 @@ import { EditarUsuarioModal } from "@/components/modals/EditarUsuarioModal";
 import { PausarUsuarioModal } from "@/components/modals/PausarUsuarioModal";
 import { DeletarUsuarioModal } from "@/components/modals/DeletarUsuarioModal";
 import { AdministracaoCargos } from "./AdministracaoCargos";
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  profile: "admin" | "user";
-  status: "active" | "inactive";
-  avatar?: string;
-}
-
-// Mock data baseado nas imagens
-const mockUsers: User[] = [{
-  id: "1",
-  name: "Sergio Ricardo Rocha",
-  email: "sergioricardo@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "2",
-  name: "Luciano",
-  email: "luciano@drvendastreinamentos.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "3",
-  name: "Kamila Oliveira",
-  email: "kamila@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "4",
-  name: "CDE - Centro de Desenvolvimento Empresarial",
-  email: "cde@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "5",
-  name: "Dr Vendas",
-  email: "ferramentas@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}];
+import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 export function AdministracaoUsuarios() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const { loading, listUsers, createUser, updateUser, deleteUser } = useSystemUsers();
+  const [users, setUsers] = useState<SystemUser[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
+  const [selectedUser, setSelectedUser] = useState<SystemUser | undefined>(undefined);
   const [showCargos, setShowCargos] = useState(false);
+
+  const refreshUsers = async () => {
+    const result = await listUsers();
+    if (result.data) {
+      setUsers(result.data);
+    }
+  };
+
+  useEffect(() => {
+    refreshUsers();
+  }, []);
   const filteredUsers = users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
@@ -90,23 +62,39 @@ export function AdministracaoUsuarios() {
       setIsDeleteModalOpen(true);
     }
   };
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedUser) {
-      setUsers(users.filter(user => user.id !== selectedUser.id));
-      console.log("Usuário excluído:", selectedUser.id);
+      const result = await deleteUser(selectedUser.id);
+      if (result.success) {
+        await refreshUsers();
+      }
     }
     setIsDeleteModalOpen(false);
     setSelectedUser(undefined);
   };
-  const handleAddUser = (newUser: Omit<User, "id">) => {
-    const user: User = {
-      id: Date.now().toString(),
-      ...newUser
-    };
-    setUsers([...users, user]);
+  const handleAddUser = async (newUser: Omit<SystemUser, "id" | "created_at" | "updated_at" | "cargo_id">) => {
+    const result = await createUser({
+      name: newUser.name,
+      email: newUser.email,
+      profile: newUser.profile,
+      status: newUser.status,
+      senha: "123456" // Password default
+    });
+    if (result.data) {
+      await refreshUsers();
+    }
   };
-  const handleUpdateUser = (updatedUser: User) => {
-    setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+  const handleUpdateUser = async (updatedUser: SystemUser) => {
+    const result = await updateUser({
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      profile: updatedUser.profile,
+      status: updatedUser.status
+    });
+    if (result.data) {
+      await refreshUsers();
+    }
     setIsEditModalOpen(false);
     setSelectedUser(undefined);
   };
@@ -172,8 +160,14 @@ export function AdministracaoUsuarios() {
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary" className="bg-brand-yellow text-black hover:bg-brand-yellow-hover rounded-full px-3 py-1">
-                    Ativo
+                  <Badge 
+                    variant={user.status === 'active' ? 'secondary' : 'outline'} 
+                    className={user.status === 'active' 
+                      ? "bg-brand-yellow text-black hover:bg-brand-yellow-hover rounded-full px-3 py-1" 
+                      : "border-destructive text-destructive rounded-full px-3 py-1"
+                    }
+                  >
+                    {user.status === 'active' ? 'Ativo' : 'Inativo'}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -193,9 +187,18 @@ export function AdministracaoUsuarios() {
           </TableBody>
         </Table>
 
-        {filteredUsers.length === 0 && <div className="text-center py-8 text-muted-foreground">
+        {loading && (
+          <div className="text-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+            <p className="text-muted-foreground mt-2">Carregando usuários...</p>
+          </div>
+        )}
+        
+        {!loading && filteredUsers.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
             Nenhum usuário encontrado
-          </div>}
+          </div>
+        )}
       </div>
 
       {/* Modal de adicionar usuário */}

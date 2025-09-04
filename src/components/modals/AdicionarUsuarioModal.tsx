@@ -5,18 +5,13 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useInstances } from "@/hooks/useInstances";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
+import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 
 
 interface AdicionarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddUser: (user: {
-    name: string;
-    email: string;
-    profile: "admin" | "user";
-    status: "active" | "inactive";
-  }) => void;
+  onAddUser: (user: Omit<SystemUser, "id" | "created_at" | "updated_at" | "cargo_id">) => void;
 }
 
 // Mock options para os selects
@@ -90,7 +85,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
       onAddUser({
         name: formData.name,
         email: formData.email,
-        profile: formData.profile as "admin" | "user",
+        profile: formData.profile,
         status: "active",
       });
       

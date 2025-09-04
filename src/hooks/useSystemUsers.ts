@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface SystemUser {
+export interface SystemUser {
   id: string;
   name: string;
   email: string;

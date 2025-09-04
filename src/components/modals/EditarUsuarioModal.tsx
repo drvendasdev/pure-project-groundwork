@@ -6,29 +6,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useInstances } from "@/hooks/useInstances";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
-
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  profile: "admin" | "user";
-  status: "active" | "inactive";
-  avatar?: string;
-}
+import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 
 interface EditarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEditUser: (user: {
-    id: string;
-    name: string;
-    email: string;
-    profile: "admin" | "user";
-    status: "active" | "inactive";
-  }) => void;
-  user?: User;
+  onEditUser: (user: SystemUser) => void;
+  user?: SystemUser;
 }
 
 // Mock options para os selects
@@ -147,10 +131,10 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
 
     if (result.data) {
       onEditUser({
-        id: user.id,
+        ...user,
         name: formData.name,
         email: formData.email,
-        profile: formData.profile as "admin" | "user",
+        profile: formData.profile,
         status: user.status,
       });
       
