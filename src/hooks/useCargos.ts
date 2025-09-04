@@ -137,33 +137,76 @@ export const useCargos = () => {
   const deleteCargo = async (cargoId: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('cargos')
-        .delete()
-        .eq('id', cargoId);
-
-      if (error) {
-        console.error('Error deleting cargo:', error);
-        toast({
-          title: "Erro ao deletar cargo",
-          description: error.message,
-          variant: "destructive"
-        });
-        return { error: error.message };
-      }
-
-      toast({
-        title: "Cargo deletado",
-        description: "Cargo deletado com sucesso",
-        variant: "default"
+      console.log('🔍 Iniciando exclusão do cargo:', cargoId);
+      
+      // Chamar nova edge function para exclusão
+      const { data: result, error: functionError } = await supabase.functions.invoke('delete-cargo', {
+        body: { cargoId }
       });
 
-      return { success: true };
-    } catch (error) {
-      console.error('Error deleting cargo:', error);
+      console.log('📦 Resultado COMPLETO da edge function:');
+      console.log('- result:', JSON.stringify(result, null, 2));
+      console.log('- functionError:', JSON.stringify(functionError, null, 2));
+
+      if (functionError) {
+        console.error('❌ Error na edge function:', functionError);
+        toast({
+          title: "Erro ao excluir cargo",
+          description: `Erro na operação: ${functionError.message}`,
+          variant: "destructive"
+        });
+        return { error: functionError.message };
+      }
+
+      if (!result) {
+        console.error('❌ Nenhum resultado retornado da edge function');
+        toast({
+          title: "Erro ao excluir cargo",
+          description: "Erro interno: nenhum resultado retornado",
+          variant: "destructive"
+        });
+        return { error: "Erro interno" };
+      }
+
+      if (result.error) {
+        console.error('❌ Erro retornado pela edge function:', result.error);
+        toast({
+          title: "Erro ao excluir cargo",
+          description: result.error,
+          variant: "destructive"
+        });
+        return { error: result.error };
+      }
+
+      if (result.success === true) {
+        console.log('✅ Cargo excluído com sucesso');
+        const message = result.message || "Cargo excluído com sucesso!";
+          
+        toast({
+          title: "Cargo excluído",
+          description: message,
+          variant: "default"
+        });
+        return { success: true };
+      }
+
+      // Log mais detalhado do estado inesperado
+      console.error('❌ Estado inesperado da edge function');
+      console.error('- result keys:', Object.keys(result || {}));
+      console.error('- result values:', Object.values(result || {}));
+      
       toast({
-        title: "Erro ao deletar cargo",
-        description: "Erro interno do servidor",
+        title: "Erro ao excluir cargo",
+        description: `Estado inesperado: ${JSON.stringify(result)}`,
+        variant: "destructive"
+      });
+      return { error: "Estado inesperado" };
+
+    } catch (error) {
+      console.error('💥 Unexpected error deleting cargo:', error);
+      toast({
+        title: "Erro ao excluir cargo",
+        description: `Erro inesperado: ${error.message || 'Erro interno do servidor'}`,
         variant: "destructive"
       });
       return { error: 'Erro interno do servidor' };
