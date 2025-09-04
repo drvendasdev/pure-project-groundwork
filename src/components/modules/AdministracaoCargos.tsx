@@ -1,68 +1,31 @@
-<<<<<<< HEAD
 import { useState, useEffect } from "react";
-=======
-import { useState } from "react";
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 import { ArrowLeft, Search, Trash2, Edit, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-<<<<<<< HEAD
 import { AdicionarCargoModal } from "@/components/modals/AdicionarCargoSimples";
 import { EditarCargoSimples } from "@/components/modals/EditarCargoSimples";
 import { DeletarCargoSimples } from "@/components/modals/DeletarCargoSimples";
 import { useCargos } from "@/hooks/useCargos";
-=======
-import { AdicionarCargoModal } from "@/components/modals/AdicionarCargoModal";
-import { EditarCargoModal } from "@/components/modals/EditarCargoModal";
-import { DeletarCargoModal } from "@/components/modals/DeletarCargoModal";
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
 interface Cargo {
   id: string;
   nome: string;
   tipo: string;
   funcao: string;
-<<<<<<< HEAD
   created_at: string;
   updated_at: string;
 }
 
 // Mock data removido - agora usando dados reais do banco
-=======
-  criadoEm: string;
-}
-
-// Mock data baseado na imagem
-const mockCargos: Cargo[] = [
-  {
-    id: "1",
-    nome: "Closer",
-    tipo: "Vendedor",
-    funcao: "CLOSER",
-    criadoEm: "18/07/2025",
-  },
-  {
-    id: "2", 
-    nome: "SDR",
-    tipo: "Pré-vendedor",
-    funcao: "SDR",
-    criadoEm: "21/07/2025",
-  },
-];
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
 interface AdministracaoCargosProps {
   onBack: () => void;
 }
 
 export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
-<<<<<<< HEAD
   const [cargos, setCargos] = useState<Cargo[]>([]);
-=======
-  const [cargos, setCargos] = useState<Cargo[]>(mockCargos);
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   const [searchTerm, setSearchTerm] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -71,7 +34,6 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedCargo, setSelectedCargo] = useState<Cargo | undefined>(undefined);
 
-<<<<<<< HEAD
   const { listCargos, createCargo, updateCargo, deleteCargo, loading } = useCargos();
 
   // Carregar cargos ao montar o componente
@@ -85,8 +47,6 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
     loadCargos();
   }, []);
 
-=======
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   const filteredCargos = cargos.filter(cargo => 
     cargo.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cargo.tipo.toLowerCase().includes(searchTerm.toLowerCase())
@@ -117,7 +77,6 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
     setIsAddModalOpen(true);
   };
 
-<<<<<<< HEAD
   const handleConfirmAddCargo = async (newCargoData: { nome: string; tipo: string; funcao: string }) => {
     const result = await createCargo({
       nome: newCargoData.nome,
@@ -164,30 +123,6 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           setCargos(cargosResult.data);
         }
       }
-=======
-  const handleConfirmAddCargo = (newCargoData: { nome: string; tipo: string; funcao: string }) => {
-    const newCargo: Cargo = {
-      id: Date.now().toString(),
-      ...newCargoData,
-      criadoEm: new Date().toLocaleDateString('pt-BR'),
-    };
-    setCargos([...cargos, newCargo]);
-    console.log("Cargo adicionado:", newCargo);
-  };
-
-  const handleConfirmEditCargo = (updatedCargo: Cargo) => {
-    setCargos(cargos.map(cargo => 
-      cargo.id === updatedCargo.id ? updatedCargo : cargo
-    ));
-    console.log("Cargo editado:", updatedCargo);
-    setSelectedCargo(undefined);
-  };
-
-  const handleConfirmDeleteCargo = () => {
-    if (selectedCargo) {
-      setCargos(cargos.filter(cargo => cargo.id !== selectedCargo.id));
-      console.log("Cargo excluído:", selectedCargo.id);
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     }
     setIsDeleteModalOpen(false);
     setSelectedCargo(undefined);
@@ -259,11 +194,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
                       {cargo.tipo} ({cargo.funcao})
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-<<<<<<< HEAD
                       {new Date(cargo.created_at).toLocaleDateString('pt-BR')}
-=======
-                      {cargo.criadoEm}
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
@@ -351,18 +282,11 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           onAddCargo={handleConfirmAddCargo}
-<<<<<<< HEAD
           loading={loading}
         />
 
         {/* Modal de editar cargo */}
         <EditarCargoSimples
-=======
-        />
-
-        {/* Modal de editar cargo */}
-        <EditarCargoModal
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
           isOpen={isEditModalOpen}
           onClose={() => {
             setIsEditModalOpen(false);
@@ -370,18 +294,11 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           }}
           onEditCargo={handleConfirmEditCargo}
           cargo={selectedCargo}
-<<<<<<< HEAD
           loading={loading}
         />
 
         {/* Modal de deletar cargo */}
         <DeletarCargoSimples
-=======
-        />
-
-        {/* Modal de deletar cargo */}
-        <DeletarCargoModal
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
           isOpen={isDeleteModalOpen}
           onClose={() => {
             setIsDeleteModalOpen(false);
@@ -389,10 +306,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           }}
           onConfirm={handleConfirmDeleteCargo}
           cargoName={selectedCargo?.nome || ""}
-<<<<<<< HEAD
           loading={loading}
-=======
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
         />
       </div>
     </div>

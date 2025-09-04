@@ -2,18 +2,10 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-<<<<<<< HEAD
 import { Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useSystemUsers } from "@/hooks/useSystemUsers";
 import { useCargos } from "@/hooks/useCargos";
 import { useChannels } from "@/hooks/useChannels";
-=======
-import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
-import { useInstances } from "@/hooks/useInstances";
-import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
 
 interface User {
@@ -23,12 +15,9 @@ interface User {
   profile: "admin" | "user";
   status: "active" | "inactive";
   avatar?: string;
-<<<<<<< HEAD
   cargo_id?: string;
   default_channel?: string;
   cargos?: Array<{id: string; nome: string; tipo: string}>;
-=======
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 }
 
 interface EditarUsuarioModalProps {
@@ -51,14 +40,6 @@ const mockQueues = [
   { value: "queue3", label: "Atendimento Geral" },
 ];
 
-<<<<<<< HEAD
-=======
-const mockRoles = [
-  { value: "role1", label: "Operador" },
-  { value: "role2", label: "Supervisor" },
-  { value: "role3", label: "Gerente" },
-];
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
 const mockChannels = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -74,20 +55,11 @@ const mockPhones = [
 
 export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: EditarUsuarioModalProps) {
   const [showPassword, setShowPassword] = useState(false);
-<<<<<<< HEAD
   const [selectedCargos, setSelectedCargos] = useState<Array<{id: string; nome: string; tipo: string}>>([]);
   const { updateUser, loading } = useSystemUsers();
   const { listCargos } = useCargos();
   const { channels, loading: channelsLoading } = useChannels();
   const [cargos, setCargos] = useState<any[]>([]);
-=======
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
-  const [defaultInstance, setDefaultInstance] = useState<string>("");
-  const { instances, isLoading: instancesLoading } = useInstances();
-  const { assignments, saveAssignments } = useInstanceAssignments(user?.id);
-  const { updateUser, loading } = useSystemUsers();
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -95,10 +67,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     password: "",
     temporaryPassword: false,
     queues: "",
-<<<<<<< HEAD
-=======
-    roles: "",
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     defaultChannel: "",
     defaultPhone: "",
   });
@@ -113,7 +81,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     defaultPhone: false,
   });
 
-<<<<<<< HEAD
   // Load cargos on mount and when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -130,11 +97,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
   // Initialize form when modal opens for the first time
   useEffect(() => {
     if (isOpen && user) {
-=======
-  // Populate form when user changes
-  useEffect(() => {
-    if (user) {
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
       setFormData({
         name: user.name,
         email: user.email,
@@ -142,7 +104,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
         password: "",
         temporaryPassword: false,
         queues: "",
-<<<<<<< HEAD
         defaultChannel: user.default_channel || "",
         defaultPhone: "",
       });
@@ -165,44 +126,10 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     }
   }, [user, cargos]);
 
-=======
-        roles: "",
-        defaultChannel: "",
-        defaultPhone: "",
-      });
-      // Set roles based on user (mock data)
-      if (user.profile === "admin") {
-        setSelectedRoles(["Gerente"]);
-      } else {
-        setSelectedRoles([]);
-      }
-    }
-  }, [user]);
-
-  // Populate instance assignments when they load
-  useEffect(() => {
-    if (assignments.length > 0) {
-      const instanceIds = assignments.map(a => a.instance);
-      const defaultInstanceId = assignments.find(a => a.is_default)?.instance || "";
-      
-      setSelectedInstances(instanceIds);
-      setDefaultInstance(defaultInstanceId);
-    } else {
-      setSelectedInstances([]);
-      setDefaultInstance("");
-    }
-  }, [assignments]);
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
   const handleSubmit = async () => {
     if (!user) return;
     
-<<<<<<< HEAD
-=======
-    // Save instance assignments
-    await saveAssignments(selectedInstances, defaultInstance);
-    
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     // Update user data
     const updateData: any = {
       id: user.id,
@@ -210,11 +137,8 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
       email: formData.email,
       profile: formData.profile,
       status: user.status,
-<<<<<<< HEAD
       cargo_id: selectedCargos.length > 0 ? selectedCargos[0].id : null, // Por enquanto, mandar apenas o primeiro cargo
       default_channel: formData.defaultChannel || null, // Incluir canal padrão
-=======
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     };
 
     // Only include password if provided
@@ -245,21 +169,11 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
       password: "",
       temporaryPassword: false,
       queues: "",
-<<<<<<< HEAD
-=======
-      roles: "",
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
       defaultChannel: "",
       defaultPhone: "",
     });
     setShowPassword(false);
-<<<<<<< HEAD
     setSelectedCargos([]);
-=======
-    setSelectedRoles([]);
-    setSelectedInstances([]);
-    setDefaultInstance("");
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     onClose();
   };
 
@@ -276,7 +190,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     // TODO: Implementar vinculação com Google
   };
 
-<<<<<<< HEAD
 
   const addCargo = (cargoId: string) => {
     const cargo = cargos.find(c => c.id === cargoId);
@@ -287,36 +200,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
 
   const removeCargo = (cargoId: string) => {
     setSelectedCargos(selectedCargos.filter(c => c.id !== cargoId));
-=======
-  const addRole = (roleValue: string) => {
-    const role = mockRoles.find(r => r.value === roleValue);
-    if (role && !selectedRoles.some(r => r === role.label)) {
-      setSelectedRoles([...selectedRoles, role.label]);
-    }
-  };
-
-  const removeRole = (roleName: string) => {
-    setSelectedRoles(selectedRoles.filter(r => r !== roleName));
-  };
-
-  const handleInstanceToggle = (instanceId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedInstances([...selectedInstances, instanceId]);
-    } else {
-      setSelectedInstances(selectedInstances.filter(id => id !== instanceId));
-      // Remove as default if unchecked
-      if (defaultInstance === instanceId) {
-        setDefaultInstance("");
-      }
-    }
-  };
-
-  const handleDefaultInstanceChange = (instanceId: string) => {
-    // Only allow setting as default if it's selected
-    if (selectedInstances.includes(instanceId)) {
-      setDefaultInstance(instanceId);
-    }
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   };
 
   return (
@@ -507,7 +390,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               </label>
             </div>
 
-<<<<<<< HEAD
             {/* Cargos */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -546,58 +428,17 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                       <X 
                         className="h-3 w-3 cursor-pointer hover:text-red-600 ml-1" 
                         onClick={() => removeCargo(cargo.id)}
-=======
-            {/* Cargos with Adicionar button */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-700">Cargos</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // Add first available role for demonstration
-                    const availableRole = mockRoles.find(role => 
-                      !selectedRoles.includes(role.label)
-                    );
-                    if (availableRole) {
-                      addRole(availableRole.value);
-                    }
-                  }}
-                  className="flex items-center gap-1 text-gray-700 hover:bg-gray-100 p-1 h-auto"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="text-xs">Adicionar</span>
-                </Button>
-              </div>
-              
-              {/* Selected roles as pill tags */}
-              {selectedRoles.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedRoles.map((role, index) => (
-                    <div 
-                      key={index} 
-                      className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm border border-gray-300"
-                    >
-                      {role}
-                      <X 
-                        className="h-3 w-3 cursor-pointer hover:text-red-600" 
-                        onClick={() => removeRole(role)}
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                       />
                     </div>
                   ))}
                 </div>
               )}
-<<<<<<< HEAD
               
               {selectedCargos.length === 0 && (
                 <div className="text-sm text-gray-500 italic">
                   Nenhum cargo selecionado
                 </div>
               )}
-=======
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
             </div>
 
             {/* Canal de atendimento padrão */}
@@ -607,7 +448,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-<<<<<<< HEAD
                 disabled={channelsLoading || channels.length === 0}
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}  
@@ -623,17 +463,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                     Nenhum canal disponível
                   </option>
                 )}
-=======
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
-              >
-                <option value="" disabled hidden></option>
-                {mockChannels.map((channel) => (
-                  <option key={channel.value} value={channel.value}>
-                    {channel.label}
-                  </option>
-                ))}
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
               </select>
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <label
@@ -676,69 +505,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               </label>
             </div>
 
-<<<<<<< HEAD
-=======
-            {/* Instâncias/Canais de Atendimento */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-gray-700 font-medium">Instâncias (Canais)</span>
-                <span className="text-xs text-gray-500">
-                  {selectedInstances.length} selecionada(s)
-                </span>
-              </div>
-              
-              {instancesLoading ? (
-                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
-                  Carregando instâncias...
-                </div>
-              ) : instances.length === 0 ? (
-                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
-                  Nenhuma instância encontrada
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  {instances.map((instance) => (
-                    <div key={instance.instance} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`instance-edit-${instance.instance}`}
-                          checked={selectedInstances.includes(instance.instance)}
-                          onCheckedChange={(checked) => 
-                            handleInstanceToggle(instance.instance, checked as boolean)
-                          }
-                        />
-                        <label 
-                          htmlFor={`instance-edit-${instance.instance}`}
-                          className="text-sm text-gray-700 cursor-pointer flex-1"
-                        >
-                          {instance.displayName || instance.instance}
-                        </label>
-                      </div>
-                      
-                      {selectedInstances.includes(instance.instance) && (
-                        <div className="flex items-center space-x-1">
-                          <input
-                            type="radio"
-                            id={`default-edit-${instance.instance}`}
-                            name="defaultInstanceEdit"
-                            checked={defaultInstance === instance.instance}
-                            onChange={() => handleDefaultInstanceChange(instance.instance)}
-                            className="h-3 w-3"
-                          />
-                          <label 
-                            htmlFor={`default-edit-${instance.instance}`}
-                            className="text-xs text-gray-500 cursor-pointer"
-                          >
-                            Padrão
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
             {/* Google Button */}
             <Button

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { useState, useEffect } from "react";
-=======
-import { useState } from "react";
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 import { Search, Edit, Pause, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +9,6 @@ import { EditarUsuarioModal } from "@/components/modals/EditarUsuarioModal";
 import { PausarUsuarioModal } from "@/components/modals/PausarUsuarioModal";
 import { DeletarUsuarioModal } from "@/components/modals/DeletarUsuarioModal";
 import { AdministracaoCargos } from "./AdministracaoCargos";
-<<<<<<< HEAD
 import { useSystemUsers } from "@/hooks/useSystemUsers";
 import { useCargos } from "@/hooks/useCargos";
 import { useToast } from "@/hooks/use-toast";
@@ -35,57 +30,11 @@ interface SystemUser {
 export function AdministracaoUsuarios() {
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [cargos, setCargos] = useState<Array<{id: string; nome: string; tipo: string}>>([]);
-=======
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  profile: "admin" | "user";
-  status: "active" | "inactive";
-  avatar?: string;
-}
-
-// Mock data baseado nas imagens
-const mockUsers: User[] = [{
-  id: "1",
-  name: "Sergio Ricardo Rocha",
-  email: "sergioricardo@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "2",
-  name: "Luciano",
-  email: "luciano@drvendastreinamentos.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "3",
-  name: "Kamila Oliveira",
-  email: "kamila@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "4",
-  name: "CDE - Centro de Desenvolvimento Empresarial",
-  email: "cde@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}, {
-  id: "5",
-  name: "Dr Vendas",
-  email: "ferramentas@drvendas.com.br",
-  profile: "admin",
-  status: "active"
-}];
-export function AdministracaoUsuarios() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-<<<<<<< HEAD
   const [selectedUser, setSelectedUser] = useState<SystemUser | undefined>(undefined);
   const [showCargos, setShowCargos] = useState(false);
   
@@ -116,11 +65,6 @@ export function AdministracaoUsuarios() {
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
-=======
-  const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
-  const [showCargos, setShowCargos] = useState(false);
-  const filteredUsers = users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()));
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -151,7 +95,6 @@ export function AdministracaoUsuarios() {
       setIsDeleteModalOpen(true);
     }
   };
-<<<<<<< HEAD
   const handleConfirmDelete = async () => {
     if (selectedUser) {
       const result = await deleteUser(selectedUser.id);
@@ -162,17 +105,10 @@ export function AdministracaoUsuarios() {
           setUsers(usersResult.data);
         }
       }
-=======
-  const handleConfirmDelete = () => {
-    if (selectedUser) {
-      setUsers(users.filter(user => user.id !== selectedUser.id));
-      console.log("Usuário excluído:", selectedUser.id);
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     }
     setIsDeleteModalOpen(false);
     setSelectedUser(undefined);
   };
-<<<<<<< HEAD
 
   const handleAddUser = async (newUserData: {
     name: string;
@@ -269,19 +205,6 @@ export function AdministracaoUsuarios() {
       setIsEditModalOpen(false);
       setSelectedUser(undefined);
     }
-=======
-  const handleAddUser = (newUser: Omit<User, "id">) => {
-    const user: User = {
-      id: Date.now().toString(),
-      ...newUser
-    };
-    setUsers([...users, user]);
-  };
-  const handleUpdateUser = (updatedUser: User) => {
-    setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
-    setIsEditModalOpen(false);
-    setSelectedUser(undefined);
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   };
   const handleGerenciarCargos = () => {
     setShowCargos(true);
@@ -330,11 +253,7 @@ export function AdministracaoUsuarios() {
             </TableRow>
           </TableHeader>
           <TableBody>
-<<<<<<< HEAD
              {filteredUsers.map(user => <TableRow key={user.id} className="border-b border-border hover:bg-muted/50">
-=======
-            {filteredUsers.map(user => <TableRow key={user.id} className="border-b border-border hover:bg-muted/50">
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                 <TableCell className="text-center">
                   <span className="text-foreground font-medium">
                     {user.name}
@@ -349,7 +268,6 @@ export function AdministracaoUsuarios() {
                   </span>
                 </TableCell>
                 <TableCell>
-<<<<<<< HEAD
                   <Badge 
                     variant="secondary" 
                     className={`rounded-full px-3 py-1 ${
@@ -359,10 +277,6 @@ export function AdministracaoUsuarios() {
                     }`}
                   >
                     {user.status === 'active' ? 'Ativo' : 'Inativo'}
-=======
-                  <Badge variant="secondary" className="bg-brand-yellow text-black hover:bg-brand-yellow-hover rounded-full px-3 py-1">
-                    Ativo
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -391,7 +305,6 @@ export function AdministracaoUsuarios() {
       <AdicionarUsuarioModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAddUser={handleAddUser} />
 
       {/* Modal de editar usuário */}
-<<<<<<< HEAD
       <EditarUsuarioModal 
         isOpen={isEditModalOpen} 
         onClose={() => {
@@ -401,12 +314,6 @@ export function AdministracaoUsuarios() {
         onEditUser={handleUpdateUser} 
         user={selectedUser ? adaptUserForModal(selectedUser) : undefined} 
       />
-=======
-      <EditarUsuarioModal isOpen={isEditModalOpen} onClose={() => {
-      setIsEditModalOpen(false);
-      setSelectedUser(undefined);
-    }} onEditUser={handleUpdateUser} user={selectedUser} />
->>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
       {/* Modal de pausar usuário */}
       <PausarUsuarioModal isOpen={isPauseModalOpen} onClose={() => {
