@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { parsePhoneNumber } from 'libphonenumber-js';
 import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
+import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
 import { 
   Search, 
   Send, 
@@ -69,6 +70,8 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("");
   const [isUpdatingProfileImages, setIsUpdatingProfileImages] = useState(false);
+  const [peekModalOpen, setPeekModalOpen] = useState(false);
+  const [peekConversation, setPeekConversation] = useState<WhatsAppConversation | null>(null);
 const messagesEndRef = useRef<HTMLDivElement>(null);
 const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 const audioChunksRef = useRef<Blob[]>([]);
@@ -589,14 +592,19 @@ const stopRecording = () => {
                         >
                           {conversation.contact?.name || conversation.contact?.phone}
                         </span>
-                        <svg 
-                          className="ml-2 w-3 h-3 text-primary cursor-pointer" 
-                          viewBox="0 0 24 24" 
-                          fill="currentColor"
-                          style={{ fontSize: '12px' }}
-                        >
-                          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
-                        </svg>
+        <svg 
+          className="ml-2 w-3 h-3 text-primary cursor-pointer" 
+          viewBox="0 0 24 24" 
+          fill="currentColor"
+          style={{ fontSize: '12px' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPeekConversation(conversation);
+            setPeekModalOpen(true);
+          }}
+        >
+          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+        </svg>
                       </div>
                       
                       {/* Second line: Message preview */}
@@ -883,6 +891,12 @@ const stopRecording = () => {
             </div>
           </div>
         )}
+        
+        <PeekConversationModal
+          isOpen={peekModalOpen}
+          onClose={() => setPeekModalOpen(false)}
+          conversation={peekConversation}
+        />
       </div>
 
     </div>
