@@ -75,12 +75,18 @@ serve(async (req) => {
       console.warn('Não foi possível carregar a conversa da mensagem:', msgErr.message);
     }
 
-    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> user assignments -> org default -> body)
+    // Resolver evolutionInstance - Nova hierarquia (usuário específico -> org default)
     let resolvedEvolutionInstance: string | null = null;
     let instanceSource = 'not_found';
     
-    // Prioridade 1: última mensagem inbound (mais atual)
-    if (conversationId) {
+    // Prioridade 1: Body (explicit override)
+    if (evolutionInstanceFromBody) {
+      resolvedEvolutionInstance = evolutionInstanceFromBody;
+      instanceSource = 'body';
+    }
+    
+    // Prioridade 2: última mensagem inbound (mais atual)
+    if (!resolvedEvolutionInstance && conversationId) {
       const { data: lastInbound } = await supabase
         .from('messages')
         .select('metadata, created_at')
@@ -96,15 +102,59 @@ serve(async (req) => {
       }
     }
     
-    // Prioridade 2: conversa (se não achou na última mensagem)
+    // Prioridade 3: conversa
     if (!resolvedEvolutionInstance && evolutionInstance) {
       resolvedEvolutionInstance = evolutionInstance;
       instanceSource = 'conversation';
     }
     
-    // Prioridade 3: org default (instância padrão da organização)
-    let orgDefaultInstance: string | null = null;
-    if (conversationId) {
+    // Prioridade 4: user assignments (instância específica do usuário)
+    if (!resolvedEvolutionInstance && senderId) {
+      // Primeiro tentar instance_user_assignments com is_default=true
+      const { data: userDefaultAssignment } = await supabase
+        .from('instance_user_assignments')
+        .select('instance')
+        .eq('user_id', senderId)
+        .eq('is_default', true)
+        .maybeSingle();
+      
+      if (userDefaultAssignment?.instance) {
+        resolvedEvolutionInstance = userDefaultAssignment.instance;
+        instanceSource = 'userAssignmentDefault';
+        console.log('🔄 Usando instância padrão do usuário (assignments):', {
+          userId: senderId?.substring(0, 8) + '***',
+          instance: resolvedEvolutionInstance
+        });
+      } else {
+        // Fallback para default_channel do system_users
+        const { data: userData } = await supabase
+          .from('system_users')
+          .select('default_channel')
+          .eq('id', senderId)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        if (userData?.default_channel) {
+          const { data: channelData } = await supabase
+            .from('channels')
+            .select('instance')
+            .eq('id', userData.default_channel)
+            .maybeSingle();
+          
+          if (channelData?.instance) {
+            resolvedEvolutionInstance = channelData.instance;
+            instanceSource = 'userDefaultChannel';
+            console.log('🔄 Usando instância do default_channel do usuário:', {
+              userId: senderId?.substring(0, 8) + '***',
+              instance: resolvedEvolutionInstance
+            });
+          }
+        }
+      }
+    }
+    
+    // Prioridade 5: org default (instância padrão da organização)
+    if (!resolvedEvolutionInstance && conversationId) {
       const { data: convData } = await supabase
         .from('conversations')
         .select('org_id')
@@ -119,60 +169,10 @@ serve(async (req) => {
           .maybeSingle();
         
         if (orgSettings?.default_instance) {
-          orgDefaultInstance = orgSettings.default_instance;
-          
-          // Se não achou instância ainda, usar o padrão da org
-          if (!resolvedEvolutionInstance) {
-            resolvedEvolutionInstance = orgDefaultInstance;
-            instanceSource = 'orgDefault';
-          }
-          // Se a conversa tem a instância global e existe padrão da org, sobrescrever
-          else if (evolutionInstance && evolutionInstance === Deno.env.get('EVOLUTION_INSTANCE') && orgDefaultInstance) {
-            resolvedEvolutionInstance = orgDefaultInstance;
-            instanceSource = 'orgDefaultOverride';
-            
-            // Atualizar a conversa com o padrão da org
-            console.log('🔄 Substituindo instância global por padrão da org:', {
-              conversationId: conversationId.substring(0, 8) + '***',
-              oldGlobal: evolutionInstance,
-              newOrgDefault: orgDefaultInstance
-            });
-            
-            await supabase
-              .from('conversations')
-              .update({ evolution_instance: orgDefaultInstance })
-              .eq('id', conversationId);
-          }
+          resolvedEvolutionInstance = orgSettings.default_instance;
+          instanceSource = 'orgDefault';
         }
       }
-    }
-    
-    // Prioridade 4: user assignments (instância padrão do usuário via default_channel)
-    if (!resolvedEvolutionInstance && senderId) {
-      const { data: userChannel } = await supabase
-        .from('system_users')
-        .select(`
-          default_channel,
-          channels!inner(instance)
-        `)
-        .eq('id', senderId)
-        .eq('status', 'active')
-        .maybeSingle();
-      
-      if (userChannel?.channels?.instance) {
-        resolvedEvolutionInstance = userChannel.channels.instance;
-        instanceSource = 'userDefaultChannel';
-        console.log('🔄 Usando instância do default_channel do usuário:', {
-          userId: senderId?.substring(0, 8) + '***',
-          instance: resolvedEvolutionInstance
-        });
-      }
-    }
-    
-    // Prioridade 5: body (fallback apenas se não tiver outro)
-    if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
-      resolvedEvolutionInstance = evolutionInstanceFromBody;
-      instanceSource = 'body';
     }
     
     // Se não conseguiu resolver, retornar erro

@@ -47,18 +47,23 @@ serve(async (req) => {
 
     if (messageError) throw messageError;
 
-    // Buscar evolution_instance da conversa
+    // Resolver evolution_instance usando hierarquia completa
     let evolutionInstance = conversation.evolution_instance;
+    let instanceSource = 'conversation';
     
-    // Se não tem instância na conversa, tentar resolver por org
+    // Se não tem instância na conversa, tentar resolver hierarquicamente
     if (!evolutionInstance) {
+      // Tentar org default
       const { data: orgSettings } = await supabase
         .from('org_messaging_settings')
         .select('default_instance')
         .eq('org_id', conversation.org_id)
         .maybeSingle();
       
-      evolutionInstance = orgSettings?.default_instance;
+      if (orgSettings?.default_instance) {
+        evolutionInstance = orgSettings.default_instance;
+        instanceSource = 'orgDefault';
+      }
     }
     
     if (!evolutionInstance) {
@@ -71,6 +76,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    
+    console.log('📡 Instance resolved:', { instance: evolutionInstance, source: instanceSource });
 
     // Buscar credenciais da instância no banco
     const { data: instanceConfig, error: instanceError } = await supabase

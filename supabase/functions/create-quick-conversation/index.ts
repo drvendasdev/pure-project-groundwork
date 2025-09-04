@@ -121,6 +121,7 @@ serve(async (req) => {
     if (!conversationId) {
       // Resolve evolution instance for new conversation
       let evolutionInstance = instance;
+      let instanceSource = 'body';
       
       if (!evolutionInstance) {
         // Try to get organization default
@@ -132,11 +133,14 @@ serve(async (req) => {
         
         if (orgSettings?.default_instance) {
           evolutionInstance = orgSettings.default_instance;
+          instanceSource = 'orgDefault';
           console.log(`Using org default instance: ${evolutionInstance}`);
         } else {
           console.log('No default instance found for organization');
         }
       }
+      
+      console.log('📡 Instance resolved for new conversation:', { instance: evolutionInstance, source: instanceSource });
 
       const conversationData: any = {
         contact_id: contactId,
