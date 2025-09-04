@@ -534,6 +534,36 @@ export type Database = {
           },
         ]
       }
+      evolution_instance_tokens: {
+        Row: {
+          created_at: string
+          evolution_url: string
+          id: string
+          instance_name: string
+          org_id: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          evolution_url?: string
+          id?: string
+          instance_name: string
+          org_id?: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          evolution_url?: string
+          id?: string
+          instance_name?: string
+          org_id?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       instance_user_assignments: {
         Row: {
           created_at: string
@@ -1000,6 +1030,57 @@ export type Database = {
         }
         Relationships: []
       }
+      system_users_view: {
+        Row: {
+          avatar: string | null
+          cargo_id: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          name: string | null
+          profile: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          name?: string | null
+          profile?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          name?: string | null
+          profile?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_system_users_cargo_id"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_cargo_id_fkey"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       block_system_user: {
@@ -1046,13 +1127,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      sync_user_roles: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       verify_password: {
         Args: { hash: string; password: string }
         Returns: boolean
       }
     }
     Enums: {
-      app_role: "master" | "user"
+      app_role: "master" | "user" | "admin"
       org_role: "OWNER" | "ADMIN" | "USER"
     }
     CompositeTypes: {
@@ -1181,7 +1266,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["master", "user"],
+      app_role: ["master", "user", "admin"],
       org_role: ["OWNER", "ADMIN", "USER"],
     },
   },

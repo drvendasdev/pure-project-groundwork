@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { NotificationTooltip } from "@/components/NotificationTooltip";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
+import { useAuth } from "@/hooks/useAuth";
 import { 
   LayoutDashboard, 
   MessageCircle, 
@@ -53,7 +54,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
-  // Hooks para notificações
+  // Hooks para notificações e autenticação
   const { 
     notifications, 
     totalUnread, 
@@ -63,6 +64,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   } = useNotifications();
   
   const { markAsRead } = useWhatsAppConversations();
+  const { user, userRole, hasRole, logout } = useAuth();
 
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
@@ -338,8 +340,8 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         {renderGroup("crm", "CRM", crmItems)}
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}
-        {renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
-        {renderGroup("administracao", "Administração", administracaoItems)}
+        {hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
+        {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
       </nav>
 
       {/* Action Icons */}
@@ -446,13 +448,14 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-medium text-primary">
-                  L
+                  {user?.name?.charAt(0).toUpperCase() || 'U'}
                 </div>
               </TooltipTrigger>
               {isCollapsed && (
                 <TooltipContent side="right">
-                  <p>Luciano</p>
-                  <p className="text-xs">luciano@drivendastre.com.br</p>
+                  <p>{user?.name}</p>
+                  <p className="text-xs">{user?.email}</p>
+                  <p className="text-xs font-medium capitalize">{userRole}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -461,14 +464,25 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           {!isCollapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-foreground truncate">Luciano</div>
-                <div className="text-xs text-muted-foreground truncate">luciano@drivendastre.com.br</div>
+                <div className="text-sm font-medium text-foreground truncate">{user?.name}</div>
+                <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
+                <div className="text-xs text-primary font-medium capitalize">{userRole}</div>
               </div>
-              <button className="p-1 hover:bg-accent rounded-md">
-                <svg className="w-5 h-5 text-muted-foreground" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                </svg>
-              </button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button 
+                      onClick={logout}
+                      className="p-1 hover:bg-accent rounded-md text-destructive hover:text-destructive"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Sair</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </>
           )}
         </div>

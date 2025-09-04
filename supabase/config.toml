@@ -135,5 +135,14 @@ verify_jwt = false
 [functions.get-default-instance]
 verify_jwt = false
 
+[functions.get-system-user]
+verify_jwt = false
+
+[functions.manage-system-user]
+verify_jwt = false
+
 [functions.create-quick-conversation]
+verify_jwt = false
+
+[functions.manage-evolution-connections]
 verify_jwt = false

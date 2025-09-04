@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useInstances } from "@/hooks/useInstances";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
+import { useSystemUsers } from "@/hooks/useSystemUsers";
 
 
 interface User {
@@ -62,6 +63,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
   const [defaultInstance, setDefaultInstance] = useState<string>("");
   const { instances, isLoading: instancesLoading } = useInstances();
   const { assignments, saveAssignments } = useInstanceAssignments(user?.id);
+  const { updateUser, loading } = useSystemUsers();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -127,15 +129,33 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     // Save instance assignments
     await saveAssignments(selectedInstances, defaultInstance);
     
-    onEditUser({
+    // Update user data
+    const updateData: any = {
       id: user.id,
       name: formData.name,
       email: formData.email,
-      profile: formData.profile as "admin" | "user",
+      profile: formData.profile,
       status: user.status,
-    });
-    
-    handleCancel();
+    };
+
+    // Only include password if provided
+    if (formData.password) {
+      updateData.senha = formData.password;
+    }
+
+    const result = await updateUser(updateData);
+
+    if (result.data) {
+      onEditUser({
+        id: user.id,
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile as "admin" | "user",
+        status: user.status,
+      });
+      
+      handleCancel();
+    }
   };
 
   const handleCancel = () => {
@@ -582,9 +602,10 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
             <Button
               type="submit"
               onClick={handleSubmit}
-              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg"
+              disabled={loading}
+              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50"
             >
-              Salvar
+              {loading ? "Salvando..." : "Salvar"}
             </Button>
           </div>
         </div>
