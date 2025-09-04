@@ -15,66 +15,51 @@ serve(async (req) => {
   
   try {
     requestBody = await req.json();
-    const { messageId, phoneNumber, content, messageType = 'text', fileUrl, fileName } = requestBody;
+    const { messageId, phoneNumber, content, messageType = 'text', fileUrl, fileName, evolutionInstance } = requestBody;
     
-    // Check if Evolution API integration should be enabled (when n8n is not available)
-    const evolutionUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
-    const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
-    
-    console.log('🔍 Evolution API config check:', {
-      hasUrl: !!evolutionUrl,
-      hasApiKey: !!evolutionApiKey,
-      hasInstance: !!evolutionInstance,
-      url: evolutionUrl ? evolutionUrl.substring(0, 30) + '...' : 'NOT_SET'
-    });
-    
-    if (!evolutionUrl || !evolutionApiKey || !evolutionInstance) {
-      console.log('🚫 Evolution API not fully configured - marking as sent locally');
-      
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-      
-      if (messageId) {
-        await supabase
-          .from('messages')
-          .update({ 
-            status: 'sent',
-            metadata: { 
-              note: 'Evolution API not configured - local fallback',
-              missing_config: {
-                url: !evolutionUrl,
-                apiKey: !evolutionApiKey,
-                instance: !evolutionInstance
-              }
-            }
-          })
-          .eq('id', messageId);
-      }
-
+    if (!evolutionInstance) {
       return new Response(JSON.stringify({
-        success: true,
-        message: 'Evolution API not configured - message marked as sent locally',
-        sent_via_evolution: false,
-        missing_config: {
-          url: !evolutionUrl,
-          apiKey: !evolutionApiKey,
-          instance: !evolutionInstance
-        }
+        success: false,
+        error: 'evolutionInstance is required'
       }), {
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    console.log('📤 Sending message via Evolution API:', { messageId, phoneNumber: phoneNumber?.substring(0, 8) + '***', messageType });
 
     // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Get evolution instance configuration from database
+    const { data: instanceConfig, error: instanceError } = await supabase
+      .from('evolution_instance_tokens')
+      .select('evolution_url, token')
+      .eq('instance_name', evolutionInstance)
+      .maybeSingle();
+
+    if (!instanceConfig) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Instance ${evolutionInstance} not found in database`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const evolutionUrl = instanceConfig.evolution_url;
+    const evolutionApiKey = instanceConfig.token;
+    
+    console.log('📤 Sending message via Evolution API:', { 
+      messageId, 
+      phoneNumber: phoneNumber?.substring(0, 8) + '***', 
+      messageType,
+      instance: evolutionInstance,
+      url: evolutionUrl?.substring(0, 30) + '...'
+    });
 
     // Normalize phone number
     const normalizePhone = (phone: string): string => {

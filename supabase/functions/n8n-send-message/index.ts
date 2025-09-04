@@ -175,13 +175,15 @@ serve(async (req) => {
       instanceSource = 'body';
     }
     
-    // Prioridade 6: global secret (último fallback)
+    // Se não conseguiu resolver, retornar erro
     if (!resolvedEvolutionInstance) {
-      const globalInstance = Deno.env.get('EVOLUTION_INSTANCE');
-      if (globalInstance) {
-        resolvedEvolutionInstance = globalInstance;
-        instanceSource = 'globalSecret';
-      }
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Nenhuma instância Evolution encontrada. Configure uma instância padrão ou atribua uma instância ao usuário.'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
     // Atualizar conversa com a instância resolvida (sempre que diferente da atual ou se estava vazia)
