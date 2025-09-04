@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,16 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useCargos } from "@/hooks/useCargos";
 import { useChannels } from "@/hooks/useChannels";
+=======
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
+import { useInstances } from "@/hooks/useInstances";
+import { useSystemUsers } from "@/hooks/useSystemUsers";
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 
 
 interface AdicionarUsuarioModalProps {
@@ -12,6 +23,7 @@ interface AdicionarUsuarioModalProps {
   onClose: () => void;
   onAddUser: (user: {
     name: string;
+<<<<<<< HEAD
     email: string; // Agora obrigatório
     profile: string;
     status?: string;
@@ -19,6 +31,11 @@ interface AdicionarUsuarioModalProps {
     cargo_id?: string;
     senha: string; // Agora obrigatório
     default_channel?: string; // Canal padrão opcional
+=======
+    email: string;
+    profile: "admin" | "user";
+    status: "active" | "inactive";
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   }) => void;
 }
 
@@ -35,6 +52,15 @@ const mockRoles = [
   { value: "role3", label: "Gerente" },
 ];
 
+<<<<<<< HEAD
+=======
+const mockChannels = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "chat", label: "Chat Web" },
+  { value: "email", label: "Email" },
+];
+
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
 const mockPhones = [
   { value: "phone1", label: "+55 11 99999-9999" },
   { value: "phone2", label: "+55 11 88888-8888" },
@@ -42,12 +68,21 @@ const mockPhones = [
 ];
 
 export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarUsuarioModalProps) {
+<<<<<<< HEAD
   const { listCargos } = useCargos();
   const { channels, loading: channelsLoading } = useChannels();
   const [cargos, setCargos] = useState<Array<{id: string; nome: string; tipo: string; funcao: string}>>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+=======
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [defaultInstance, setDefaultInstance] = useState<string>("");
+  const { instances, isLoading: instancesLoading } = useInstances();
+  const { createUser, loading } = useSystemUsers();
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -70,6 +105,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     defaultPhone: false,
   });
 
+<<<<<<< HEAD
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Load cargos when modal opens
@@ -123,10 +159,19 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
       : undefined;
 
     onAddUser({
+=======
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.email || !formData.password) {
+      return;
+    }
+
+    const result = await createUser({
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
       name: formData.name,
       email: formData.email,
       profile: formData.profile,
       status: "active",
+<<<<<<< HEAD
       cargo_id: selectedCargo?.id,
       senha: formData.password,
       default_channel: formData.defaultChannel || undefined
@@ -147,6 +192,37 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     setShowPassword(false);
     setSelectedRoles([]);
     onClose();
+=======
+      senha: formData.password
+    });
+
+    if (result.data) {
+      onAddUser({
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile as "admin" | "user",
+        status: "active",
+      });
+      
+      // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        profile: "user",
+        password: "",
+        temporaryPassword: false,
+        queues: "",
+        roles: "",
+        defaultChannel: "",
+        defaultPhone: "",
+      });
+      setShowPassword(false);
+      setSelectedRoles([]);
+      setSelectedInstances([]);
+      setDefaultInstance("");
+      onClose();
+    }
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   };
 
   const handleCancel = () => {
@@ -163,6 +239,11 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     });
     setShowPassword(false);
     setSelectedRoles([]);
+<<<<<<< HEAD
+=======
+    setSelectedInstances([]);
+    setDefaultInstance("");
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     onClose();
   };
 
@@ -179,9 +260,16 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     // TODO: Implementar vinculação com Google
   };
 
+<<<<<<< HEAD
   const addRole = (roleName: string) => {
     if (!selectedRoles.includes(roleName)) {
       setSelectedRoles([...selectedRoles, roleName]);
+=======
+  const addRole = (roleValue: string) => {
+    const role = mockRoles.find(r => r.value === roleValue);
+    if (role && !selectedRoles.some(r => r === role.label)) {
+      setSelectedRoles([...selectedRoles, role.label]);
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
     }
   };
 
@@ -189,6 +277,28 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     setSelectedRoles(selectedRoles.filter(r => r !== roleName));
   };
 
+<<<<<<< HEAD
+=======
+  const handleInstanceToggle = (instanceId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedInstances([...selectedInstances, instanceId]);
+    } else {
+      setSelectedInstances(selectedInstances.filter(id => id !== instanceId));
+      // Remove as default if unchecked
+      if (defaultInstance === instanceId) {
+        setDefaultInstance("");
+      }
+    }
+  };
+
+  const handleDefaultInstanceChange = (instanceId: string) => {
+    // Only allow setting as default if it's selected
+    if (selectedInstances.includes(instanceId)) {
+      setDefaultInstance(instanceId);
+    }
+  };
+
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
       <DialogContent className="max-w-md max-h-[85vh] bg-white border-border flex flex-col p-0">
@@ -250,9 +360,15 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
+<<<<<<< HEAD
                 >
                   Nome *
                 </label>
+=======
+              >
+                Nome
+              </label>
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
             </div>
 
             {/* Email and Perfil side by side */}
@@ -274,7 +390,11 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                       : 'text-sm text-gray-500 top-3'
                   }`}
                 >
+<<<<<<< HEAD
                   Email *
+=======
+                  Email
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                 </label>
               </div>
 
@@ -334,9 +454,15 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
+<<<<<<< HEAD
                 >
                   Senha *
                 </label>
+=======
+              >
+                Trocar Senha
+              </label>
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
             </div>
 
             {/* Temporary password switch */}
@@ -355,8 +481,12 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('queues', e.target.value)}
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
+<<<<<<< HEAD
                 disabled={true}
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+=======
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -379,6 +509,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             </div>
 
             {/* Cargos with Adicionar button */}
+<<<<<<< HEAD
             <div className="relative">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-base font-normal text-gray-900">Cargos</p>
@@ -425,6 +556,34 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
               {/* Selected roles as pill tags */}
               {selectedRoles.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
+=======
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-700">Cargos</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    // Add first available role for demonstration
+                    const availableRole = mockRoles.find(role => 
+                      !selectedRoles.includes(role.label)
+                    );
+                    if (availableRole) {
+                      addRole(availableRole.value);
+                    }
+                  }}
+                  className="flex items-center gap-1 text-gray-700 hover:bg-gray-100 p-1 h-auto"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="text-xs">Adicionar</span>
+                </Button>
+              </div>
+              
+              {/* Selected roles as pill tags */}
+              {selectedRoles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                   {selectedRoles.map((role, index) => (
                     <div 
                       key={index} 
@@ -448,6 +607,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
+<<<<<<< HEAD
                 disabled={channelsLoading || channels.length === 0}
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
@@ -463,6 +623,17 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     Nenhum canal disponível
                   </option>
                 )}
+=======
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
+              >
+                <option value="" disabled hidden></option>
+                {mockChannels.map((channel) => (
+                  <option key={channel.value} value={channel.value}>
+                    {channel.label}
+                  </option>
+                ))}
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
               </select>
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <label
@@ -483,8 +654,12 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultPhone', e.target.value)}
                 onFocus={() => updateFocus('defaultPhone', true)}
                 onBlur={() => updateFocus('defaultPhone', false)}
+<<<<<<< HEAD
                 disabled={true}
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+=======
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -506,6 +681,70 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
               </label>
             </div>
 
+<<<<<<< HEAD
+=======
+            {/* Instâncias/Canais de Atendimento */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-700 font-medium">Instâncias (Canais)</span>
+                <span className="text-xs text-gray-500">
+                  {selectedInstances.length} selecionada(s)
+                </span>
+              </div>
+              
+              {instancesLoading ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Carregando instâncias...
+                </div>
+              ) : instances.length === 0 ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Nenhuma instância encontrada
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
+                  {instances.map((instance) => (
+                    <div key={instance.instance} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`instance-${instance.instance}`}
+                          checked={selectedInstances.includes(instance.instance)}
+                          onCheckedChange={(checked) => 
+                            handleInstanceToggle(instance.instance, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`instance-${instance.instance}`}
+                          className="text-sm text-gray-700 cursor-pointer flex-1"
+                        >
+                          {instance.displayName || instance.instance}
+                        </label>
+                      </div>
+                      
+                      {selectedInstances.includes(instance.instance) && (
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="radio"
+                            id={`default-${instance.instance}`}
+                            name="defaultInstance"
+                            checked={defaultInstance === instance.instance}
+                            onChange={() => handleDefaultInstanceChange(instance.instance)}
+                            className="h-3 w-3"
+                          />
+                          <label 
+                            htmlFor={`default-${instance.instance}`}
+                            className="text-xs text-gray-500 cursor-pointer"
+                          >
+                            Padrão
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
             {/* Google Button */}
             <Button
               type="button"
@@ -538,10 +777,17 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             <Button
               type="submit"
               onClick={handleSubmit}
+<<<<<<< HEAD
               disabled={!isFormValid}
               className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Adicionar
+=======
+              disabled={loading || !formData.name || !formData.email || !formData.password}
+              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50"
+            >
+              {loading ? "Salvando..." : "Adicionar"}
+>>>>>>> 59b2e6763ac3177ce66631715a595e7ca610264c
             </Button>
           </div>
         </div>
