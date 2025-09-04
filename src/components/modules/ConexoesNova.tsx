@@ -393,7 +393,7 @@ export default function ConexoesNova() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="evolutionUrl">URL da Evolution API (Opcional)</Label>
+                <Label htmlFor="evolutionUrl">URL da Evolution API</Label>
                 <Input
                   id="evolutionUrl"
                   value={formData.evolutionUrl}

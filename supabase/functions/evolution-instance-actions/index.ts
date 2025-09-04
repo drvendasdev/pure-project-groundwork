@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     // Try multiple secret name variants
-    const evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
+    let evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
     const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
     const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.functions.supabase.co/functions/v1/evolution-webhook';
     const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'default-secret';
@@ -31,13 +31,16 @@ serve(async (req) => {
 
       const { data: tokenData } = await supabaseClient
         .from('evolution_instance_tokens')
-        .select('token')
+        .select('token, evolution_url')
         .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
         .eq('instance_name', instanceName)
         .single();
 
       if (tokenData?.token) {
         finalToken = tokenData.token;
+        if (tokenData.evolution_url) {
+          evolutionApiUrl = tokenData.evolution_url;
+        }
         console.log('Token encontrado no banco de dados');
       }
     }

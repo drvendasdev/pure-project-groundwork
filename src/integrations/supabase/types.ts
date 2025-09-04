@@ -537,6 +537,7 @@ export type Database = {
       evolution_instance_tokens: {
         Row: {
           created_at: string
+          evolution_url: string
           id: string
           instance_name: string
           org_id: string
@@ -545,6 +546,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          evolution_url?: string
           id?: string
           instance_name: string
           org_id?: string
@@ -553,6 +555,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          evolution_url?: string
           id?: string
           instance_name?: string
           org_id?: string
