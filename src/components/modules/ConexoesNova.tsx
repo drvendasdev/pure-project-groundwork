@@ -474,9 +474,15 @@ export default function ConexoesNova() {
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span>{connection.name}</span>
-                  {connection.isDefault && (
-                    <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
-                  )}
+                  <Star 
+                    className={`h-4 w-4 cursor-pointer transition-colors ${
+                      connection.isDefault 
+                        ? 'text-yellow-500' 
+                        : 'text-muted-foreground hover:text-yellow-400'
+                    }`}
+                    fill={connection.isDefault ? 'currentColor' : 'none'}
+                    onClick={() => handleSetDefault(connection, index)}
+                  />
                 </div>
                 <span className={`text-sm font-normal ${getStatusColor(connection.status)}`}>
                   {getStatusText(connection.status)}
@@ -500,27 +506,6 @@ export default function ConexoesNova() {
               )}
               
               <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCheckStatus(connection, index)}
-                >
-                  <RefreshCw className="mr-1 h-3 w-3" />
-                  Status
-                </Button>
-                
-                {connection.status !== 'connected' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleGetQr(connection, index)}
-                    disabled={qrLoading[index]}
-                  >
-                    <QrCode className="mr-1 h-3 w-3" />
-                    {connection.qrCode ? 'Atualizar QR' : 'Gerar QR'}
-                  </Button>
-                )}
-                
                 {connection.status === 'connected' ? (
                   <Button
                     size="sm"
@@ -538,17 +523,6 @@ export default function ConexoesNova() {
                   >
                     <Power className="mr-1 h-3 w-3" />
                     Conectar
-                  </Button>
-                )}
-
-                {!connection.isDefault && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSetDefault(connection, index)}
-                  >
-                    <Star className="mr-1 h-3 w-3" />
-                    Definir Padrão
                   </Button>
                 )}
                 
