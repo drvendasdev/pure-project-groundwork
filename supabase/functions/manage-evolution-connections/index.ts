@@ -107,7 +107,30 @@ serve(async (req) => {
           );
         }
 
-        // Create/update channel record
+        // Get initial status from Evolution API
+        let initialStatus = 'disconnected';
+        try {
+          const statusResponse = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+            method: 'GET',
+            headers: {
+              'apikey': instanceToken,
+            },
+          });
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            const state = statusData.instance?.state || statusData.state;
+            if (state === 'open') {
+              initialStatus = 'connected';
+            } else if (state === 'connecting' || state === 'close') {
+              initialStatus = 'connecting';
+            }
+          }
+        } catch (error) {
+          console.warn('Could not get initial status, using disconnected:', error);
+        }
+
+        // Create/update channel record with initial status
         const webhookSecret = crypto.randomUUID();
         const { error: channelError } = await supabaseClient
           .from('channels')
@@ -116,8 +139,9 @@ serve(async (req) => {
             name: instanceName,
             number: '', // Will be updated when connected
             instance: instanceName,
-            status: 'disconnected',
-            webhook_secret: webhookSecret
+            status: initialStatus,
+            webhook_secret: webhookSecret,
+            last_state_at: new Date().toISOString()
           }, {
             onConflict: 'org_id,instance'
           });

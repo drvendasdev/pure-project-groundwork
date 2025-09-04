@@ -268,9 +268,32 @@ serve(async (req) => {
           });
         }
 
+        // Update channel status in database
+        const statusState = statusData.instance?.state || statusData.state || 'unknown';
+        let dbStatus = 'disconnected';
+        if (statusState === 'open') {
+          dbStatus = 'connected';
+        } else if (statusState === 'connecting' || statusState === 'close') {
+          dbStatus = 'connecting';
+        }
+
+        // Update database with current status
+        const supabaseClient = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        await supabaseClient
+          .from('channels')
+          .update({
+            status: dbStatus,
+            last_state_at: new Date().toISOString()
+          })
+          .eq('instance', instanceName);
+
         return new Response(JSON.stringify({
           success: true,
-          status: statusData.instance?.state || statusData.state || 'unknown',
+          status: statusState,
           data: statusData
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

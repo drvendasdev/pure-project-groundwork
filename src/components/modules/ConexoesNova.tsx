@@ -66,6 +66,48 @@ export default function ConexoesNova() {
     }
   }, [defaultOrgId]);
 
+  // Subscribe to realtime updates for channels
+  useEffect(() => {
+    if (!defaultOrgId) return;
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'channels',
+          filter: `org_id=eq.${defaultOrgId}`
+        },
+        (payload) => {
+          console.log('📡 Realtime channel update:', payload);
+          
+          // Update the specific connection in state
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const updatedChannel = payload.new;
+            setConnections(current => 
+              current.map(conn => 
+                conn.instance === updatedChannel.instance 
+                  ? { 
+                      ...conn, 
+                      status: updatedChannel.status as 'connecting' | 'connected' | 'disconnected',
+                      // Clear QR code if connected
+                      qrCode: updatedChannel.status === 'connected' ? undefined : conn.qrCode
+                    }
+                  : conn
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [defaultOrgId]);
+
   const loadConnections = async () => {
     try {
       const { data } = await supabase.functions.invoke('manage-evolution-connections', {
@@ -89,7 +131,7 @@ export default function ConexoesNova() {
   };
 
   const handleAddConexao = async () => {
-    if (!formData.nome.trim() || !formData.token.trim()) return;
+    if (!formData.nome.trim() || !formData.token.trim() || !formData.evolutionUrl.trim()) return;
 
     try {
       setLoading(true);
@@ -100,7 +142,7 @@ export default function ConexoesNova() {
           orgId: defaultOrgId,
           instanceName: formData.nome.trim(),
           instanceToken: formData.token.trim(),
-          evolutionUrl: formData.evolutionUrl.trim() || undefined
+          evolutionUrl: formData.evolutionUrl.trim()
         }
       });
 
@@ -398,10 +440,11 @@ export default function ConexoesNova() {
                   id="evolutionUrl"
                   value={formData.evolutionUrl}
                   onChange={(e) => setFormData(prev => ({ ...prev, evolutionUrl: e.target.value }))}
-                  placeholder="Deixe vazio para usar configuração padrão"
+                  placeholder="https://sua-evolution-api.com"
+                  required
                 />
                 <p className="text-sm text-muted-foreground">
-                  Se não informado, será usada a URL configurada nas variáveis de ambiente
+                  URL da sua instância da Evolution API
                 </p>
               </div>
               <div className="flex justify-end space-x-2">
@@ -414,7 +457,7 @@ export default function ConexoesNova() {
                 </Button>
                 <Button 
                   onClick={handleAddConexao}
-                  disabled={!formData.nome || !formData.token || loading}
+                  disabled={!formData.nome || !formData.token || !formData.evolutionUrl || loading}
                 >
                   {loading ? 'Adicionando...' : 'Adicionar'}
                 </Button>
