@@ -30,6 +30,17 @@ export const useAuth = () => {
   return context;
 };
 
+const mapProfileToRole = (profile: string): 'master' | 'admin' | 'user' => {
+  switch (profile) {
+    case 'master':
+      return 'master';
+    case 'admin':
+      return 'admin';
+    default:
+      return 'user';
+  }
+};
+
 export const useAuthState = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [userRole, setUserRole] = useState<'master' | 'admin' | 'user' | null>(null);
@@ -42,7 +53,7 @@ export const useAuthState = () => {
       try {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
-        loadUserRole(parsedUser.id);
+        setUserRole(mapProfileToRole(parsedUser.profile));
       } catch (error) {
         console.error('Error parsing saved user:', error);
         localStorage.removeItem('currentUser');
@@ -50,27 +61,6 @@ export const useAuthState = () => {
     }
     setLoading(false);
   }, []);
-
-  const loadUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error loading user role:', error);
-        setUserRole('user'); // Default role
-        return;
-      }
-
-      setUserRole(data.role);
-    } catch (error) {
-      console.error('Error loading user role:', error);
-      setUserRole('user');
-    }
-  };
 
   const login = async (email: string, password: string) => {
     try {
@@ -86,8 +76,8 @@ export const useAuthState = () => {
       setUser(user);
       localStorage.setItem('currentUser', JSON.stringify(user));
       
-      // Load user role
-      await loadUserRole(user.id);
+      // Set user role based on profile
+      setUserRole(mapProfileToRole(user.profile));
 
       return {};
     } catch (error) {
