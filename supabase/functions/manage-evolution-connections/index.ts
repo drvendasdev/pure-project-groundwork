@@ -190,6 +190,38 @@ serve(async (req) => {
 
         const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
 
+        // Validate webhook URL from SUPABASE_FUNCTIONS_WEBHOOK secret
+        const webhookUrl = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
+        if (!webhookUrl) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'SUPABASE_FUNCTIONS_WEBHOOK secret não configurado' 
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Validate webhook URL format
+        try {
+          const url = new URL(webhookUrl);
+          if (url.protocol !== 'https:' || 
+              !url.hostname.endsWith('.functions.supabase.co') || 
+              !url.pathname.endsWith('/functions/v1/evolution-webhook')) {
+            throw new Error('Invalid webhook URL format');
+          }
+        } catch (error) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `URL do webhook inválida: ${error.message}` 
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Using validated webhook URL:', webhookUrl);
+
         // Check quota - get limit from org settings
         const { data: orgSettings, error: settingsError } = await supabaseClient
           .from('org_messaging_settings')
@@ -238,7 +270,46 @@ serve(async (req) => {
         // Generate a unique token for this instance
         const instanceToken = crypto.randomUUID();
 
+        // Check if global webhook is enabled
+        const globalWebhookEnabled = Deno.env.get('EVOLUTION_WEBHOOK_GLOBAL_ENABLED') === 'true';
+
         try {
+          // Prepare webhook configuration
+          const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
+          const webhookConfig = globalWebhookEnabled ? {} : {
+            webhook: webhookUrl,
+            webhook_by_events: false,
+            webhook_base64: false,
+            ...(webhookSecret && {
+              webhook_headers: {
+                authorization: `Bearer ${webhookSecret}`
+              }
+            }),
+            events: [
+              'APPLICATION_STARTUP',
+              'QRCODE_UPDATED',
+              'CONNECTION_UPDATE',
+              'MESSAGES_UPSERT',
+              'MESSAGES_UPDATE',
+              'SEND_MESSAGE'
+            ]
+          };
+
+          // Create instance request body
+          const requestBody = {
+            instanceName: instanceName,
+            token: instanceToken,
+            qrcode: true,
+            integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
+            ...webhookConfig
+          };
+
+          console.log('Creating instance with webhook config:', { 
+            webhookUrl: globalWebhookEnabled ? 'GLOBAL' : webhookUrl,
+            globalWebhookEnabled,
+            hasWebhookSecret: !!webhookSecret
+          });
+
           // Try to create instance in Evolution API with different authentication methods
           let createInstanceResponse;
           
@@ -250,22 +321,7 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
                 'apikey': evolutionApiKey,
               },
-              body: JSON.stringify({
-                instanceName: instanceName,
-                token: instanceToken,
-                qrcode: true,
-                integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
-                webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
-                webhook_by_events: false,
-                events: [
-                  'APPLICATION_STARTUP',
-                  'QRCODE_UPDATED',
-                  'CONNECTION_UPDATE',
-                  'MESSAGES_UPSERT',
-                  'MESSAGES_UPDATE',
-                  'SEND_MESSAGE'
-                ]
-              })
+              body: JSON.stringify(requestBody)
             });
           } catch (error) {
             console.warn('Failed with apikey, trying Authorization header:', error);
@@ -277,25 +333,86 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${evolutionApiKey}`,
               },
-              body: JSON.stringify({
-                instanceName: instanceName,
-                token: instanceToken,
-                qrcode: true,
-                integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
-                webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
-                webhook_by_events: false,
-                events: [
-                  'APPLICATION_STARTUP',
-                  'QRCODE_UPDATED',
-                  'CONNECTION_UPDATE',
-                  'MESSAGES_UPSERT',
-                  'MESSAGES_UPDATE',
-                  'SEND_MESSAGE'
-                ]
-              })
+              body: JSON.stringify(requestBody)
             });
           }
 
+          // Check if creation failed due to webhook issues and implement fallback
+          if (!createInstanceResponse.ok && !globalWebhookEnabled) {
+            const errorText = await createInstanceResponse.text();
+            console.log('Instance creation failed, checking if webhook-related:', errorText);
+            
+            // If webhook seems to be the issue, try without webhook
+            if (errorText.toLowerCase().includes('url') || errorText.toLowerCase().includes('webhook')) {
+              console.log('Attempting fallback: creating instance without webhook...');
+              
+              const noWebhookBody = {
+                instanceName: instanceName,
+                token: instanceToken,
+                qrcode: true,
+                integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS'
+              };
+
+              try {
+                const fallbackResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${evolutionApiKey}`,
+                  },
+                  body: JSON.stringify(noWebhookBody)
+                });
+
+                if (fallbackResponse.ok) {
+                  console.log('Instance created without webhook, setting webhook separately...');
+                  
+                  // Try to set webhook separately using the /webhook/set endpoint
+                  try {
+                    const setWebhookResponse = await fetch(`${evolutionApiUrl}/webhook/set/${instanceName}`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${evolutionApiKey}`,
+                      },
+                      body: JSON.stringify({
+                        url: webhookUrl,
+                        webhook_by_events: false,
+                        webhook_base64: false,
+                        ...(webhookSecret && {
+                          headers: {
+                            authorization: `Bearer ${webhookSecret}`
+                          }
+                        }),
+                        events: [
+                          'APPLICATION_STARTUP',
+                          'QRCODE_UPDATED',
+                          'CONNECTION_UPDATE',
+                          'MESSAGES_UPSERT',
+                          'MESSAGES_UPDATE',
+                          'SEND_MESSAGE'
+                        ]
+                      })
+                    });
+                    
+                    if (setWebhookResponse.ok) {
+                      console.log('Webhook configured successfully via fallback method');
+                    } else {
+                      console.warn('Failed to set webhook via fallback method:', await setWebhookResponse.text());
+                    }
+                  } catch (webhookError) {
+                    console.warn('Failed to set webhook separately:', webhookError);
+                  }
+
+                  // Use the successful fallback response
+                  createInstanceResponse = fallbackResponse;
+                }
+              } catch (fallbackError) {
+                console.warn('Fallback method also failed:', fallbackError);
+              }
+            }
+          }
+
+          // Final check if instance creation failed
           if (!createInstanceResponse.ok) {
             const errorText = await createInstanceResponse.text();
             console.error('Evolution API create instance error:', { status: createInstanceResponse.status, error: errorText });
