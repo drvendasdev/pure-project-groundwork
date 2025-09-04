@@ -11,11 +11,44 @@ serve(async (req) => {
   }
 
   try {
-    // Try multiple secret name variants
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
-    const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
+    const { instanceName } = await req.json();
+    
+    if (!instanceName) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'instanceName é obrigatório'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
+    // Usar Supabase para buscar credenciais da instância
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    const { data: instanceConfig, error: instanceError } = await supabase
+      .from('evolution_instance_tokens')
+      .select('evolution_url, token')
+      .eq('instance_name', instanceName)
+      .maybeSingle();
+
+    if (!instanceConfig) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Instância ${instanceName} não encontrada no banco de dados`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const evolutionApiUrl = instanceConfig.evolution_url;
+    const evolutionApiKey = instanceConfig.token;
+    const evolutionInstance = instanceName;
     console.log('Testando Evolution API:', {
       url: evolutionApiUrl,
       instance: evolutionInstance,
@@ -25,7 +58,7 @@ serve(async (req) => {
     if (!evolutionApiUrl || !evolutionApiKey || !evolutionInstance) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Credenciais da Evolution API não configuradas',
+        error: 'Credenciais da instância não encontradas no banco',
         missing: {
           url: !evolutionApiUrl,
           key: !evolutionApiKey,

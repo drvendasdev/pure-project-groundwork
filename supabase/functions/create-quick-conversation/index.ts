@@ -134,11 +134,7 @@ serve(async (req) => {
           evolutionInstance = orgSettings.default_instance;
           console.log(`Using org default instance: ${evolutionInstance}`);
         } else {
-          // Fallback to global secret
-          evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
-          if (evolutionInstance) {
-            console.log('Using global default instance from secret');
-          }
+          console.log('No default instance found for organization');
         }
       }
 

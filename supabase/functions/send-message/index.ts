@@ -47,21 +47,50 @@ serve(async (req) => {
 
     if (messageError) throw messageError;
 
-    // Preparar dados para Evolution API
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
-    const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
-
-    if (!evolutionApiUrl || !evolutionApiKey || !evolutionInstance) {
-      console.log('⚠️ Credenciais da Evolution API não configuradas');
+    // Buscar evolution_instance da conversa
+    let evolutionInstance = conversation.evolution_instance;
+    
+    // Se não tem instância na conversa, tentar resolver por org
+    if (!evolutionInstance) {
+      const { data: orgSettings } = await supabase
+        .from('org_messaging_settings')
+        .select('default_instance')
+        .eq('org_id', conversation.org_id)
+        .maybeSingle();
+      
+      evolutionInstance = orgSettings?.default_instance;
+    }
+    
+    if (!evolutionInstance) {
+      console.log('⚠️ Nenhuma instância Evolution configurada para esta conversa');
       return new Response(JSON.stringify({
-        success: true,
-        message: 'Mensagem salva no banco (Evolution API não configurada)',
-        messageId: message.id
+        success: false,
+        error: 'Nenhuma instância Evolution configurada para esta conversa'
       }), {
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Buscar credenciais da instância no banco
+    const { data: instanceConfig, error: instanceError } = await supabase
+      .from('evolution_instance_tokens')
+      .select('evolution_url, token')
+      .eq('instance_name', evolutionInstance)
+      .maybeSingle();
+
+    if (!instanceConfig) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Instância ${evolutionInstance} não encontrada no banco de dados`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const evolutionApiUrl = instanceConfig.evolution_url;
+    const evolutionApiKey = instanceConfig.token;
 
     // Preparar payload baseado no tipo de mensagem
     let evolutionPayload: any;
