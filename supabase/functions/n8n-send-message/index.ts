@@ -31,18 +31,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Buscar dados da mensagem para ter contexto completo (sem embeds ambíguos)
+    // Buscar dados da mensagem para ter contexto completo (incluindo sender_id)
     let conversationId: string | null = null;
     let contactName: string | null = null;
     let contactEmail: string | null = null;
     let contactPhone: string | null = null;
     let evolutionInstance: string | null = null;
+    let senderId: string | null = null;
 
     const { data: msgRow, error: msgErr } = await supabase
       .from('messages')
-      .select('conversation_id')
+      .select('conversation_id, sender_id')
       .eq('id', messageId)
       .maybeSingle();
+
+    if (msgRow) {
+      senderId = msgRow.sender_id;
+    }
 
     if (msgRow?.conversation_id) {
       conversationId = msgRow.conversation_id as string;
@@ -142,8 +147,27 @@ serve(async (req) => {
       }
     }
     
-    // Prioridade 4: user assignments (instância padrão do usuário, se houver)
-    // TODO: Implementar quando tiver sistema de autenticação
+    // Prioridade 4: user assignments (instância padrão do usuário via default_channel)
+    if (!resolvedEvolutionInstance && senderId) {
+      const { data: userChannel } = await supabase
+        .from('system_users')
+        .select(`
+          default_channel,
+          channels!inner(instance)
+        `)
+        .eq('id', senderId)
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      if (userChannel?.channels?.instance) {
+        resolvedEvolutionInstance = userChannel.channels.instance;
+        instanceSource = 'userDefaultChannel';
+        console.log('🔄 Usando instância do default_channel do usuário:', {
+          userId: senderId?.substring(0, 8) + '***',
+          instance: resolvedEvolutionInstance
+        });
+      }
+    }
     
     // Prioridade 5: body (fallback apenas se não tiver outro)
     if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
@@ -322,10 +346,10 @@ serve(async (req) => {
     if (!webhookUrl) {
       console.error('❌ N8N_WEBHOOK_URL não configurada - tentando fallback para Evolution direto');
       
-      // Fallback: tentar enviar via send-evolution-message
+      // Fallback: tentar enviar via send-evolution-message com evolutionInstance resolvida
       try {
         const fallbackResult = await supabase.functions.invoke('send-evolution-message', {
-          body: requestBodyCache
+          body: { ...requestBodyCache, evolutionInstance: resolvedEvolutionInstance }
         });
         
         if (fallbackResult.error) {

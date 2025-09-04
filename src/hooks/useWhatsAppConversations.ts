@@ -84,13 +84,22 @@ export const useWhatsAppConversations = () => {
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
-      // Inserir mensagem no banco com status 'sending'
+      // Buscar o usuário atual do sistema (temporariamente pegando o primeiro ativo)
+      const { data: currentUser } = await supabase
+        .from('system_users')
+        .select('id')
+        .eq('status', 'active')
+        .limit(1)
+        .single();
+
+      // Inserir mensagem no banco com status 'sending' e sender_id
       const { data: insertedMessage, error: insertError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           content,
           sender_type: 'agent',
+          sender_id: currentUser?.id || null,
           message_type: messageType,
           status: 'sending',
           origem_resposta: 'manual',
