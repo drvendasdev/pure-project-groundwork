@@ -23,13 +23,20 @@ serve(async (req) => {
 
     switch (action) {
       case 'add_reference': {
+<<<<<<< HEAD
         if (!instanceName || !instanceToken) {
           return new Response(
             JSON.stringify({ success: false, error: 'instanceName e instanceToken são obrigatórios' }),
+=======
+        if (!instanceName || !instanceToken || !evolutionUrl) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'instanceName, instanceToken e evolutionUrl são obrigatórios' }),
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
+<<<<<<< HEAD
         // Get Evolution URL from parameter or environment
         let apiUrl = evolutionUrl;
         if (!apiUrl) {
@@ -42,6 +49,10 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+=======
+        // Use the provided Evolution URL (now mandatory)
+        const apiUrl = evolutionUrl;
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
         // Optional validation - try to test connection but don't fail if instance doesn't exist yet
         try {
@@ -97,13 +108,22 @@ serve(async (req) => {
           }
         }
 
+<<<<<<< HEAD
         // Store token securely with proper conflict resolution
+=======
+        // Store token and URL securely with proper conflict resolution
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         const { error: tokenError } = await supabaseClient
           .from('evolution_instance_tokens')
           .upsert({
             org_id: finalOrgId,
             instance_name: instanceName,
+<<<<<<< HEAD
             token: instanceToken
+=======
+            token: instanceToken,
+            evolution_url: evolutionUrl
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           }, {
             onConflict: 'org_id,instance_name'
           });
@@ -116,7 +136,34 @@ serve(async (req) => {
           );
         }
 
+<<<<<<< HEAD
         // Create/update channel record
+=======
+        // Get initial status from Evolution API
+        let initialStatus = 'disconnected';
+        try {
+          const statusResponse = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+            method: 'GET',
+            headers: {
+              'apikey': instanceToken,
+            },
+          });
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            const state = statusData.instance?.state || statusData.state;
+            if (state === 'open') {
+              initialStatus = 'connected';
+            } else if (state === 'connecting' || state === 'close') {
+              initialStatus = 'connecting';
+            }
+          }
+        } catch (error) {
+          console.warn('Could not get initial status, using disconnected:', error);
+        }
+
+        // Create/update channel record with initial status
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         const webhookSecret = crypto.randomUUID();
         const { error: channelError } = await supabaseClient
           .from('channels')
@@ -125,8 +172,14 @@ serve(async (req) => {
             name: instanceName,
             number: '', // Will be updated when connected
             instance: instanceName,
+<<<<<<< HEAD
             status: 'disconnected',
             webhook_secret: webhookSecret
+=======
+            status: initialStatus,
+            webhook_secret: webhookSecret,
+            last_state_at: new Date().toISOString()
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           }, {
             onConflict: 'org_id,instance'
           });

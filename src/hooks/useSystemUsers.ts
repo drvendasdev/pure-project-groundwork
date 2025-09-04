@@ -21,7 +21,10 @@ interface CreateUserData {
   status?: string;
   senha: string;
   cargo_id?: string;
+<<<<<<< HEAD
   default_channel?: string;
+=======
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 }
 
 interface UpdateUserData {
@@ -32,7 +35,10 @@ interface UpdateUserData {
   status?: string;
   senha?: string;
   cargo_id?: string;
+<<<<<<< HEAD
   default_channel?: string;
+=======
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 }
 
 export const useSystemUsers = () => {
@@ -48,6 +54,7 @@ export const useSystemUsers = () => {
           userData: userData
         }
       });
+<<<<<<< HEAD
 
       // Se houver erro na invocação da função
       if (error) {
@@ -120,6 +127,43 @@ export const useSystemUsers = () => {
         variant: "destructive"
       });
       return { error: "Este email já está em uso por outro usuário" };
+=======
+
+      if (error) {
+        console.error('Error creating user:', error);
+        toast({
+          title: "Erro ao criar usuário",
+          description: error.message || "Erro interno do servidor",
+          variant: "destructive"
+        });
+        return { error: error.message };
+      }
+
+      if (data.error) {
+        toast({
+          title: "Erro ao criar usuário",
+          description: data.error,
+          variant: "destructive"
+        });
+        return { error: data.error };
+      }
+
+      toast({
+        title: "Usuário criado",
+        description: "Usuário criado com sucesso",
+        variant: "default"
+      });
+
+      return { data: data.data };
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast({
+        title: "Erro ao criar usuário",
+        description: "Erro interno do servidor",
+        variant: "destructive"
+      });
+      return { error: 'Erro interno do servidor' };
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
     } finally {
       setLoading(false);
     }

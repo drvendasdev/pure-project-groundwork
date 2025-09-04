@@ -33,7 +33,11 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case 'create':
+<<<<<<< HEAD
         const { name, email, profile, status, senha, cargo_id, default_channel } = userData;
+=======
+        const { name, email, profile, status, senha, cargo_id } = userData;
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         
         if (!name || !email || !profile || !senha) {
           return new Response(
@@ -50,14 +54,19 @@ Deno.serve(async (req) => {
             profile,
             status: status || 'active',
             senha, // Will be automatically hashed by trigger
+<<<<<<< HEAD
             cargo_id,
             default_channel
+=======
+            cargo_id
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           })
           .select()
           .single();
 
         if (result.error) {
           console.error('Error creating user:', result.error);
+<<<<<<< HEAD
           
           // Handle specific database constraints
           let errorMessage = result.error.message;
@@ -68,6 +77,11 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({ error: errorMessage }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+=======
+          return new Response(
+            JSON.stringify({ error: 'Failed to create user: ' + result.error.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           );
         }
         break;

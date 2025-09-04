@@ -1052,7 +1052,10 @@ export type Database = {
           avatar: string | null
           cargo_id: string | null
           created_at: string | null
+<<<<<<< HEAD
           default_channel: string | null
+=======
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           email: string | null
           id: string | null
           name: string | null
@@ -1064,7 +1067,10 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string | null
+<<<<<<< HEAD
           default_channel?: string | null
+=======
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           email?: string | null
           id?: string | null
           name?: string | null
@@ -1076,7 +1082,10 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string | null
+<<<<<<< HEAD
           default_channel?: string | null
+=======
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           email?: string | null
           id?: string | null
           name?: string | null
@@ -1099,6 +1108,7 @@ export type Database = {
             referencedRelation: "cargos"
             referencedColumns: ["id"]
           },
+<<<<<<< HEAD
           {
             foreignKeyName: "system_users_default_channel_fkey"
             columns: ["default_channel"]
@@ -1113,6 +1123,8 @@ export type Database = {
             referencedRelation: "channels_view"
             referencedColumns: ["id"]
           },
+=======
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         ]
       }
     }

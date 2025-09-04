@@ -1,4 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+<<<<<<< HEAD
+=======
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -85,6 +89,51 @@ function extractMetadata(data: any) {
   }
 
   return metadata;
+<<<<<<< HEAD
+=======
+}
+
+// Map Evolution API states to internal status
+function mapEvolutionStateToStatus(state: string): string {
+  switch (state?.toLowerCase()) {
+    case 'open':
+      return 'connected';
+    case 'connecting':
+    case 'close':
+      return 'connecting';
+    case 'CONNECTING':
+      return 'connecting';
+    default:
+      return 'disconnected';
+  }
+}
+
+// Update channel status in database
+async function updateChannelStatus(supabaseClient: any, instanceName: string, status: string, number?: string) {
+  try {
+    const updateData: any = {
+      status,
+      last_state_at: new Date().toISOString()
+    };
+
+    if (number) {
+      updateData.number = number;
+    }
+
+    const { error } = await supabaseClient
+      .from('channels')
+      .update(updateData)
+      .eq('instance', instanceName);
+
+    if (error) {
+      console.error('Error updating channel status:', error);
+    } else {
+      console.log(`📊 Channel status updated: ${instanceName} -> ${status}`);
+    }
+  } catch (error) {
+    console.error('Error in updateChannelStatus:', error);
+  }
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 }
 
 serve(async (req) => {
@@ -126,6 +175,32 @@ serve(async (req) => {
         fromMe: metadata.fromMe
       });
 
+<<<<<<< HEAD
+=======
+      // Initialize Supabase client for status updates
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      // Handle connection state changes
+      if (body.event && body.instance) {
+        if (body.event === 'connection.update' || body.event === 'CONNECTION_UPDATE') {
+          const state = body.data?.state || body.state;
+          if (state) {
+            const status = mapEvolutionStateToStatus(state);
+            await updateChannelStatus(supabaseClient, body.instance, status);
+          }
+        } else if (body.event === 'qrcode.updated' || body.event === 'QRCODE_UPDATED') {
+          // When QR code is updated, instance is connecting
+          await updateChannelStatus(supabaseClient, body.instance, 'connecting');
+        } else if (body.event === 'logout.instance') {
+          // When instance logs out, mark as disconnected
+          await updateChannelStatus(supabaseClient, body.instance, 'disconnected');
+        }
+      }
+
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
       const n8nUrl = Deno.env.get('N8N_WEBHOOK_URL');
       if (n8nUrl) {
         try {
