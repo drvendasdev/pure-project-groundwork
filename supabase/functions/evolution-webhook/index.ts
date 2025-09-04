@@ -137,19 +137,33 @@ serve(async (req) => {
 
   try {
     if (req.method === 'GET') {
-      // Webhook verification for Evolution API
       const url = new URL(req.url);
       const mode = url.searchParams.get('hub.mode');
       const token = url.searchParams.get('hub.verify_token');
       const challenge = url.searchParams.get('hub.challenge');
+      const test = url.searchParams.get('test');
 
+      // Test endpoint for troubleshooting
+      if (test === 'true') {
+        console.log('🧪 Test endpoint called');
+        return new Response(JSON.stringify({
+          status: 'webhook_active',
+          timestamp: new Date().toISOString(),
+          n8n_configured: !!Deno.env.get('N8N_WEBHOOK_URL'),
+          verify_token_configured: !!Deno.env.get('EVOLUTION_VERIFY_TOKEN')
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Webhook verification for Evolution API
       const VERIFY_TOKEN = Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'evolution-webhook-token';
 
       if (mode === 'subscribe' && token === VERIFY_TOKEN) {
         console.log('✅ Webhook verified');
         return new Response(challenge, { status: 200 });
       } else {
-        console.log('❌ Webhook verification failed');
+        console.log('❌ Webhook verification failed', { mode, tokenProvided: !!token, expectedToken: VERIFY_TOKEN });
         return new Response('Forbidden', { status: 403 });
       }
     }
@@ -205,6 +219,12 @@ serve(async (req) => {
             timestamp: metadata.timestamp
           };
           
+          console.log('🔄 Sending to n8n:', {
+            url: n8nUrl.substring(0, 50) + '...',
+            event: metadata.event,
+            instance: metadata.instance
+          });
+          
           const fRes = await fetch(n8nUrl, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -212,17 +232,27 @@ serve(async (req) => {
           });
           
           const fText = await fRes.text();
-          console.log('➡️ Forwarded to n8n:', fRes.status, fRes.ok ? 'SUCCESS' : fText);
+          const success = fRes.ok;
+          
+          console.log('➡️ n8n Response:', {
+            status: fRes.status,
+            ok: success,
+            response: success ? 'SUCCESS' : fText.substring(0, 200)
+          });
           
           return new Response(JSON.stringify({ 
             ok: true, 
-            forwarded: fRes.ok,
+            forwarded: success,
+            n8n_status: fRes.status,
             metadata: metadata
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         } catch (forwardErr) {
-          console.error('❌ Error forwarding to n8n:', forwardErr.message);
+          console.error('❌ Error forwarding to n8n:', {
+            error: forwardErr.message,
+            url: n8nUrl.substring(0, 50) + '...'
+          });
           return new Response(JSON.stringify({ 
             ok: true, 
             forwarded: false, 
@@ -233,11 +263,11 @@ serve(async (req) => {
           });
         }
       } else {
-        console.log('⚠️ N8N_WEBHOOK_URL not configured, discarding message');
+        console.log('⚠️ N8N_WEBHOOK_URL not configured, webhook data discarded');
         return new Response(JSON.stringify({ 
           ok: true, 
           forwarded: false, 
-          note: 'n8n not configured',
+          note: 'N8N_WEBHOOK_URL not configured',
           metadata: metadata
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

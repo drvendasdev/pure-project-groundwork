@@ -320,10 +320,33 @@ serve(async (req) => {
     // Chamar webhook do N8N
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
     if (!webhookUrl) {
-      throw new Error('N8N_WEBHOOK_URL não configurada nos segredos do projeto');
+      console.error('❌ N8N_WEBHOOK_URL não configurada - tentando fallback para Evolution direto');
+      
+      // Fallback: tentar enviar via send-evolution-message
+      try {
+        const fallbackResult = await supabase.functions.invoke('send-evolution-message', {
+          body: requestBodyCache
+        });
+        
+        if (fallbackResult.error) {
+          throw new Error(`Fallback Evolution API failed: ${fallbackResult.error.message}`);
+        }
+        
+        console.log('✅ Mensagem enviada via fallback Evolution API');
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Mensagem enviada via fallback Evolution API',
+          data: { messageId, status: 'sent', via: 'evolution_fallback' }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (fallbackError) {
+        throw new Error(`N8N não configurado e fallback falhou: ${fallbackError.message}`);
+      }
     }
+    
     if (webhookUrl.includes('/test/')) {
-      console.warn('Aviso: N8N_WEBHOOK_URL parece ser a URL de Test do Webhook. Use a Production URL para produção.');
+      console.warn('⚠️ N8N_WEBHOOK_URL usando Test URL - considere usar Production URL');
     }
 
     // Anexar destino ao payload para compatibilidade com Evolution
