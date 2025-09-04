@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 import { useCargos } from "@/hooks/useCargos";
+import { useChannels } from "@/hooks/useChannels";
 
 
 interface AdicionarUsuarioModalProps {
@@ -11,12 +12,13 @@ interface AdicionarUsuarioModalProps {
   onClose: () => void;
   onAddUser: (user: {
     name: string;
-    email?: string;
+    email: string; // Agora obrigatório
     profile: string;
     status?: string;
     avatar?: string;
     cargo_id?: string;
-    senha?: string;
+    senha: string; // Agora obrigatório
+    default_channel?: string; // Canal padrão opcional
   }) => void;
 }
 
@@ -33,12 +35,6 @@ const mockRoles = [
   { value: "role3", label: "Gerente" },
 ];
 
-const mockChannels = [
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "chat", label: "Chat Web" },
-  { value: "email", label: "Email" },
-];
-
 const mockPhones = [
   { value: "phone1", label: "+55 11 99999-9999" },
   { value: "phone2", label: "+55 11 88888-8888" },
@@ -46,7 +42,9 @@ const mockPhones = [
 ];
 
 export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarUsuarioModalProps) {
-  const { cargos } = useCargos();
+  const { listCargos } = useCargos();
+  const { channels, loading: channelsLoading } = useChannels();
+  const [cargos, setCargos] = useState<Array<{id: string; nome: string; tipo: string; funcao: string}>>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
@@ -74,6 +72,19 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Load cargos when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const loadCargos = async () => {
+        const result = await listCargos();
+        if (result.data) {
+          setCargos(result.data);
+        }
+      };
+      loadCargos();
+    }
+  }, [isOpen, listCargos]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -98,18 +109,27 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     }
   }, [isOpen]);
 
+  // Form validation - campos obrigatórios: nome, email, senha
+  const isFormValid = formData.name.trim() !== "" && 
+                     formData.email.trim() !== "" && 
+                     formData.password.trim() !== "" &&
+                     formData.profile !== "";
+
   const handleSubmit = () => {
+    if (!isFormValid) return;
+
     const selectedCargo = selectedRoles.length > 0 
       ? cargos.find(cargo => cargo.nome === selectedRoles[0])
       : undefined;
 
     onAddUser({
       name: formData.name,
-      email: formData.email || undefined,
+      email: formData.email,
       profile: formData.profile,
       status: "active",
       cargo_id: selectedCargo?.id,
-      senha: formData.password || undefined
+      senha: formData.password,
+      default_channel: formData.defaultChannel || undefined
     });
     
     // Reset form
@@ -230,9 +250,9 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
-              >
-                Nome
-              </label>
+                >
+                  Nome *
+                </label>
             </div>
 
             {/* Email and Perfil side by side */}
@@ -254,7 +274,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                       : 'text-sm text-gray-500 top-3'
                   }`}
                 >
-                  Email
+                  Email *
                 </label>
               </div>
 
@@ -314,9 +334,9 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
-              >
-                Trocar Senha
-              </label>
+                >
+                  Senha *
+                </label>
             </div>
 
             {/* Temporary password switch */}
@@ -428,16 +448,21 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                disabled={channelsLoading || channels.length === 0}
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
-                {mockChannels.map((channel) => (
-                  <option key={channel.value} value={channel.value}>
-                    {channel.label}
+                 {channels.map((channel) => (
+                   <option key={channel.id} value={channel.id}>
+                     {channel.name}{channel.number ? ` (${channel.number})` : ''}
+                   </option>
+                 ))}
+                {channels.length === 0 && !channelsLoading && (
+                  <option value="" disabled>
+                    Nenhum canal disponível
                   </option>
-                ))}
+                )}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <label
@@ -513,7 +538,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             <Button
               type="submit"
               onClick={handleSubmit}
-              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg"
+              disabled={!isFormValid}
+              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Adicionar
             </Button>

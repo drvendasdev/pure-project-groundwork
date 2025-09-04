@@ -1,20 +1,31 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Search, Trash2, Edit, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AdicionarCargoModal } from "@/components/modals/AdicionarCargoModal";
-import { EditarCargoModal } from "@/components/modals/EditarCargoModal";
-import { DeletarCargoModal } from "@/components/modals/DeletarCargoModal";
-import { useCargos, type Cargo } from "@/hooks/useCargos";
+import { AdicionarCargoModal } from "@/components/modals/AdicionarCargoSimples";
+import { EditarCargoSimples } from "@/components/modals/EditarCargoSimples";
+import { DeletarCargoSimples } from "@/components/modals/DeletarCargoSimples";
+import { useCargos } from "@/hooks/useCargos";
+
+interface Cargo {
+  id: string;
+  nome: string;
+  tipo: string;
+  funcao: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Mock data removido - agora usando dados reais do banco
 
 interface AdministracaoCargosProps {
   onBack: () => void;
 }
 
 export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
-  const { cargos, addCargo, updateCargo, deleteCargo } = useCargos();
+  const [cargos, setCargos] = useState<Cargo[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -22,6 +33,19 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedCargo, setSelectedCargo] = useState<Cargo | undefined>(undefined);
+
+  const { listCargos, createCargo, updateCargo, deleteCargo, loading } = useCargos();
+
+  // Carregar cargos ao montar o componente
+  useEffect(() => {
+    const loadCargos = async () => {
+      const result = await listCargos();
+      if (result.data) {
+        setCargos(result.data);
+      }
+    };
+    loadCargos();
+  }, []);
 
   const filteredCargos = cargos.filter(cargo => 
     cargo.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -53,18 +77,52 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
     setIsAddModalOpen(true);
   };
 
-  const handleConfirmAddCargo = (newCargoData: { nome: string; tipo: string; funcao: string }) => {
-    addCargo(newCargoData);
+  const handleConfirmAddCargo = async (newCargoData: { nome: string; tipo: string; funcao: string }) => {
+    const result = await createCargo({
+      nome: newCargoData.nome,
+      tipo: newCargoData.tipo,
+      funcao: newCargoData.funcao
+    });
+    
+    if (!result.error) {
+      // Recarregar lista de cargos
+      const cargosResult = await listCargos();
+      if (cargosResult.data) {
+        setCargos(cargosResult.data);
+      }
+      setIsAddModalOpen(false);
+    }
   };
 
-  const handleConfirmEditCargo = (updatedCargo: Cargo) => {
-    updateCargo(updatedCargo);
-    setSelectedCargo(undefined);
+  const handleConfirmEditCargo = async (updatedCargo: Cargo) => {
+    const result = await updateCargo({
+      id: updatedCargo.id,
+      nome: updatedCargo.nome,
+      tipo: updatedCargo.tipo,
+      funcao: updatedCargo.funcao
+    });
+    
+    if (!result.error) {
+      // Recarregar lista de cargos
+      const cargosResult = await listCargos();
+      if (cargosResult.data) {
+        setCargos(cargosResult.data);
+      }
+      setIsEditModalOpen(false);
+      setSelectedCargo(undefined);
+    }
   };
 
-  const handleConfirmDeleteCargo = () => {
+  const handleConfirmDeleteCargo = async () => {
     if (selectedCargo) {
-      deleteCargo(selectedCargo.id);
+      const result = await deleteCargo(selectedCargo.id);
+      if (!result.error) {
+        // Recarregar lista de cargos
+        const cargosResult = await listCargos();
+        if (cargosResult.data) {
+          setCargos(cargosResult.data);
+        }
+      }
     }
     setIsDeleteModalOpen(false);
     setSelectedCargo(undefined);
@@ -224,10 +282,11 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           onAddCargo={handleConfirmAddCargo}
+          loading={loading}
         />
 
         {/* Modal de editar cargo */}
-        <EditarCargoModal
+        <EditarCargoSimples
           isOpen={isEditModalOpen}
           onClose={() => {
             setIsEditModalOpen(false);
@@ -235,10 +294,11 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           }}
           onEditCargo={handleConfirmEditCargo}
           cargo={selectedCargo}
+          loading={loading}
         />
 
         {/* Modal de deletar cargo */}
-        <DeletarCargoModal
+        <DeletarCargoSimples
           isOpen={isDeleteModalOpen}
           onClose={() => {
             setIsDeleteModalOpen(false);
@@ -246,6 +306,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
           }}
           onConfirm={handleConfirmDeleteCargo}
           cargoName={selectedCargo?.nome || ""}
+          loading={loading}
         />
       </div>
     </div>

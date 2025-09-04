@@ -8,8 +8,10 @@ import { MessageStatusIndicator } from "@/components/ui/message-status-indicator
 import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
+import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { parsePhoneNumber } from 'libphonenumber-js';
 import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
 import { 
@@ -53,12 +55,14 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   } = useWhatsAppConversations();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
+  const { assignments } = useInstanceAssignments();
   const { toast } = useToast();
   
   const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
   const [messageText, setMessageText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [newPhoneNumber, setNewPhoneNumber] = useState("");
+  const [quickPhoneNumber, setQuickPhoneNumber] = useState("");
+  const [isCreatingQuickConversation, setIsCreatingQuickConversation] = useState(false);
   const [showAllQueues, setShowAllQueues] = useState(true);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -263,6 +267,85 @@ const stopRecording = () => {
       console.error('Error refreshing profile image:', error)
     }
   }
+
+  // Create quick conversation without saving contact
+  const handleCreateQuickConversation = async () => {
+    if (!quickPhoneNumber.trim() || isCreatingQuickConversation) return;
+
+    setIsCreatingQuickConversation(true);
+    try {
+      // Parse and validate phone number
+      const phoneNumber = parsePhoneNumber(quickPhoneNumber, 'BR');
+      if (!phoneNumber || !phoneNumber.isValid()) {
+        toast({
+          title: "Número inválido",
+          description: "Por favor, digite um número de telefone válido.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Call Edge Function to create quick conversation
+      const { data, error } = await supabase.functions.invoke('create-quick-conversation', {
+        body: { phoneNumber: phoneNumber.format('E.164') }
+      });
+
+      if (error) {
+        console.error('Error calling create-quick-conversation:', error);
+        toast({
+          title: "Erro",
+          description: "Não foi possível criar conversa",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!data.success) {
+        toast({
+          title: "Erro",
+          description: data.error || "Não foi possível criar conversa",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Find and select the conversation
+      setTimeout(() => {
+        const conversation = conversations.find(conv => conv.id === data.conversationId);
+        if (conversation) {
+          handleSelectConversation(conversation);
+        } else {
+          // Refresh conversations if not found
+          window.location.reload();
+        }
+      }, 1000);
+
+      setQuickPhoneNumber("");
+      
+      toast({
+        title: "Conversa criada",
+        description: `Conversa iniciada com ${phoneNumber.format('INTERNATIONAL')}`,
+      });
+
+    } catch (error) {
+      console.error('Error creating quick conversation:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível criar conversa",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingQuickConversation(false);
+    }
+  };
+
+  // Handle Enter key press for quick conversation
+  const handleQuickConversationKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleCreateQuickConversation();
+    }
+  };
 
   // Efeito para selecionar conversa via notificação
   useEffect(() => {
@@ -582,17 +665,24 @@ const stopRecording = () => {
             <div className="flex-1 relative">
               <Input
                 placeholder="Digite o número do telefone"
-                value={newPhoneNumber}
-                onChange={(e) => setNewPhoneNumber(e.target.value)}
+                value={quickPhoneNumber}
+                onChange={(e) => setQuickPhoneNumber(e.target.value)}
+                onKeyPress={handleQuickConversationKeyPress}
                 className="pr-10"
+                disabled={isCreatingQuickConversation}
               />
               <Button 
                 variant="ghost" 
                 size="icon" 
                 className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8"
-                disabled={!newPhoneNumber.trim()}
+                disabled={!quickPhoneNumber.trim() || isCreatingQuickConversation}
+                onClick={handleCreateQuickConversation}
               >
-                <ArrowRight className="w-4 h-4" />
+                {isCreatingQuickConversation ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </div>

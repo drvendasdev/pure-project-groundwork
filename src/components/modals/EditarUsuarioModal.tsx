@@ -1,16 +1,36 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
+import { Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
+import { useSystemUsers } from "@/hooks/useSystemUsers";
 import { useCargos } from "@/hooks/useCargos";
-import { type SystemUser } from "@/hooks/useSystemUsers";
+import { useChannels } from "@/hooks/useChannels";
+
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  profile: "admin" | "user";
+  status: "active" | "inactive";
+  avatar?: string;
+  cargo_id?: string;
+  default_channel?: string;
+  cargos?: Array<{id: string; nome: string; tipo: string}>;
+}
 
 interface EditarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEditUser: (user: SystemUser) => void;
-  user?: SystemUser;
+  onEditUser: (user: {
+    id: string;
+    name: string;
+    email: string;
+    profile: "admin" | "user";
+    status: "active" | "inactive";
+  }) => void;
+  user?: User;
 }
 
 // Mock options para os selects
@@ -19,6 +39,7 @@ const mockQueues = [
   { value: "queue2", label: "Vendas" },
   { value: "queue3", label: "Atendimento Geral" },
 ];
+
 
 const mockChannels = [
   { value: "whatsapp", label: "WhatsApp" },
@@ -33,10 +54,12 @@ const mockPhones = [
 ];
 
 export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: EditarUsuarioModalProps) {
-  const { cargos } = useCargos();
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [selectedCargos, setSelectedCargos] = useState<Array<{id: string; nome: string; tipo: string}>>([]);
+  const { updateUser, loading } = useSystemUsers();
+  const { listCargos } = useCargos();
+  const { channels, loading: channelsLoading } = useChannels();
+  const [cargos, setCargos] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -44,7 +67,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     password: "",
     temporaryPassword: false,
     queues: "",
-    roles: "",
     defaultChannel: "",
     defaultPhone: "",
   });
@@ -59,79 +81,84 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     defaultPhone: false,
   });
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
+  // Load cargos on mount and when modal opens
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowRoleDropdown(false);
-      }
-    };
-
-    if (showRoleDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
+    if (isOpen) {
+      const fetchCargos = async () => {
+        const result = await listCargos();
+        if (result.data) {
+          setCargos(result.data);
+        }
+      };
+      fetchCargos();
     }
+  }, [isOpen, listCargos]);
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showRoleDropdown]);
-
-  // Reset dropdown when modal closes
+  // Initialize form when modal opens for the first time
   useEffect(() => {
-    if (!isOpen) {
-      setShowRoleDropdown(false);
-    }
-  }, [isOpen]);
-
-  // Populate form when user changes
-  useEffect(() => {
-    if (user) {
+    if (isOpen && user) {
       setFormData({
         name: user.name,
-        email: user.email || "",
+        email: user.email,
         profile: user.profile,
         password: "",
         temporaryPassword: false,
         queues: "",
-        roles: "",
-        defaultChannel: "",
+        defaultChannel: user.default_channel || "",
         defaultPhone: "",
       });
-      // Set roles based on user cargo
-      if (user.cargo?.nome) {
-        setSelectedRoles([user.cargo.nome]);
+    }
+  }, [isOpen, user]);
+
+  // Update selected cargos when user or cargos change
+  useEffect(() => {
+    if (user && cargos.length > 0) {
+      if (user.cargo_id) {
+        const userCargo = cargos.find(c => c.id === user.cargo_id);
+        if (userCargo) {
+          setSelectedCargos([userCargo]);
+        }
+      } else if (user.cargos) {
+        setSelectedCargos(user.cargos);
       } else {
-        setSelectedRoles([]);
+        setSelectedCargos([]);
       }
     }
-  }, [user]);
+  }, [user, cargos]);
 
-  const handleSubmit = () => {
+
+  const handleSubmit = async () => {
     if (!user) return;
     
-    const selectedCargo = selectedRoles.length > 0 
-      ? cargos.find(cargo => cargo.nome === selectedRoles[0])
-      : undefined;
-    
-    // Prepare the updated user data
-    const updatedUser: SystemUser = {
-      ...user, // Keep all existing fields
+    // Update user data
+    const updateData: any = {
+      id: user.id,
       name: formData.name,
-      email: formData.email || undefined,
+      email: formData.email,
       profile: formData.profile,
-      cargo_id: selectedCargo?.id
+      status: user.status,
+      cargo_id: selectedCargos.length > 0 ? selectedCargos[0].id : null, // Por enquanto, mandar apenas o primeiro cargo
+      default_channel: formData.defaultChannel || null, // Incluir canal padrão
     };
 
-    // Only include password if it was changed
-    if (formData.password && formData.password.trim() !== '') {
-      updatedUser.senha = formData.password;
+    // Only include password if provided
+    if (formData.password) {
+      updateData.senha = formData.password;
     }
-    
-    onEditUser(updatedUser);
-    
-    handleCancel();
+
+    const result = await updateUser(updateData);
+
+    if (result.data) {
+      onEditUser({
+        id: user.id,
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile as "admin" | "user",
+        status: user.status,
+      });
+      
+      handleCancel();
+    }
   };
 
   const handleCancel = () => {
@@ -142,12 +169,11 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
       password: "",
       temporaryPassword: false,
       queues: "",
-      roles: "",
       defaultChannel: "",
       defaultPhone: "",
     });
     setShowPassword(false);
-    setSelectedRoles([]);
+    setSelectedCargos([]);
     onClose();
   };
 
@@ -164,14 +190,16 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     // TODO: Implementar vinculação com Google
   };
 
-  const addRole = (roleName: string) => {
-    if (!selectedRoles.includes(roleName)) {
-      setSelectedRoles([...selectedRoles, roleName]);
+
+  const addCargo = (cargoId: string) => {
+    const cargo = cargos.find(c => c.id === cargoId);
+    if (cargo && !selectedCargos.some(c => c.id === cargo.id)) {
+      setSelectedCargos([...selectedCargos, cargo]);
     }
   };
 
-  const removeRole = (roleName: string) => {
-    setSelectedRoles(selectedRoles.filter(r => r !== roleName));
+  const removeCargo = (cargoId: string) => {
+    setSelectedCargos(selectedCargos.filter(c => c.id !== cargoId));
   };
 
   return (
@@ -340,8 +368,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('queues', e.target.value)}
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -363,65 +390,53 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               </label>
             </div>
 
-            {/* Cargos with Adicionar button */}
-            <div className="relative">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-base font-normal text-gray-900">Cargos</p>
-                <button
-                  type="button"
-                  onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="inline-flex items-center justify-center p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
+            {/* Cargos */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-gray-700">Cargos</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      addCargo(e.target.value);
+                      e.target.value = ""; // Reset select
+                    }
+                  }}
+                  className="text-xs border border-gray-300 rounded px-2 py-1 text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    <Plus className="h-4 w-4 text-gray-700" />
-                    <span className="text-xs text-gray-700">Adicionar</span>
-                  </span>
-                </button>
+                  <option value="">+ Adicionar</option>
+                  {cargos
+                    .filter(cargo => !selectedCargos.some(sc => sc.id === cargo.id))
+                    .map((cargo) => (
+                      <option key={cargo.id} value={cargo.id}>
+                        {cargo.nome}
+                      </option>
+                    ))}
+                </select>
               </div>
-
-              {/* Dropdown with role options */}
-              {showRoleDropdown && (
-                <div ref={dropdownRef} className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-                  <div className="py-1">
-                    {cargos
-                      .filter(cargo => !selectedRoles.includes(cargo.nome))
-                      .map((cargo) => (
-                        <button
-                          key={cargo.id}
-                          type="button"
-                          onClick={() => {
-                            addRole(cargo.nome);
-                            setShowRoleDropdown(false);
-                          }}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                        >
-                          {cargo.nome}
-                        </button>
-                      ))}
-                    {cargos.filter(cargo => !selectedRoles.includes(cargo.nome)).length === 0 && (
-                      <div className="px-4 py-2 text-sm text-gray-500">
-                        Todos os cargos já foram adicionados
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
               
-              {/* Selected roles as pill tags */}
-              {selectedRoles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedRoles.map((role, index) => (
+              {/* Selected cargos as pill tags */}
+              {selectedCargos.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedCargos.map((cargo) => (
                     <div 
-                      key={index} 
-                      className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm border border-gray-300"
+                      key={cargo.id} 
+                      className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-800 border border-yellow-300 px-3 py-1 rounded-full text-sm"
                     >
-                      {role}
+                      <span className="font-medium">{cargo.nome}</span>
+                      <span className="text-yellow-600">-</span>
+                      <span className="text-yellow-600">{cargo.tipo}</span>
                       <X 
-                        className="h-3 w-3 cursor-pointer hover:text-red-600" 
-                        onClick={() => removeRole(role)}
+                        className="h-3 w-3 cursor-pointer hover:text-red-600 ml-1" 
+                        onClick={() => removeCargo(cargo.id)}
                       />
                     </div>
                   ))}
+                </div>
+              )}
+              
+              {selectedCargos.length === 0 && (
+                <div className="text-sm text-gray-500 italic">
+                  Nenhum cargo selecionado
                 </div>
               )}
             </div>
@@ -433,16 +448,21 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
-                style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
+                disabled={channelsLoading || channels.length === 0}
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}  
               >
                 <option value="" disabled hidden></option>
-                {mockChannels.map((channel) => (
-                  <option key={channel.value} value={channel.value}>
-                    {channel.label}
+                {channels.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.name}{channel.number ? ` (${channel.number})` : ''}
                   </option>
                 ))}
+                {channels.length === 0 && !channelsLoading && (
+                  <option value="" disabled>
+                    Nenhum canal disponível
+                  </option>
+                )}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <label
@@ -463,8 +483,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultPhone', e.target.value)}
                 onFocus={() => updateFocus('defaultPhone', true)}
                 onBlur={() => updateFocus('defaultPhone', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -485,6 +504,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 Telefone padrão
               </label>
             </div>
+
 
             {/* Google Button */}
             <Button
@@ -518,9 +538,10 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
             <Button
               type="submit"
               onClick={handleSubmit}
-              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg"
+              disabled={loading}
+              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50"
             >
-              Salvar
+              {loading ? "Salvando..." : "Salvar"}
             </Button>
           </div>
         </div>

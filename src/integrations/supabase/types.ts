@@ -25,6 +25,7 @@ export type Database = {
           duration_minutes: number | null
           id: string
           is_completed: boolean | null
+          org_id: string
           responsible_id: string | null
           scheduled_for: string
           subject: string
@@ -41,6 +42,7 @@ export type Database = {
           duration_minutes?: number | null
           id?: string
           is_completed?: boolean | null
+          org_id?: string
           responsible_id?: string | null
           scheduled_for: string
           subject: string
@@ -57,6 +59,7 @@ export type Database = {
           duration_minutes?: number | null
           id?: string
           is_completed?: boolean | null
+          org_id?: string
           responsible_id?: string | null
           scheduled_for?: string
           subject?: string
@@ -76,6 +79,13 @@ export type Database = {
             columns: ["responsible_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_activities_org"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
             referencedColumns: ["id"]
           },
         ]
@@ -234,6 +244,7 @@ export type Database = {
           last_state_at: string | null
           name: string
           number: string
+          org_id: string
           status: string
           updated_at: string | null
           webhook_secret: string
@@ -245,6 +256,7 @@ export type Database = {
           last_state_at?: string | null
           name: string
           number: string
+          org_id: string
           status?: string
           updated_at?: string | null
           webhook_secret: string
@@ -256,11 +268,20 @@ export type Database = {
           last_state_at?: string | null
           name?: string
           number?: string
+          org_id?: string
           status?: string
           updated_at?: string | null
           webhook_secret?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_channels_org"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contact_tags: {
         Row: {
@@ -305,6 +326,7 @@ export type Database = {
           extra_info: Json | null
           id: string
           name: string
+          org_id: string
           phone: string | null
           profile_image_updated_at: string | null
           profile_image_url: string | null
@@ -316,6 +338,7 @@ export type Database = {
           extra_info?: Json | null
           id?: string
           name: string
+          org_id?: string
           phone?: string | null
           profile_image_updated_at?: string | null
           profile_image_url?: string | null
@@ -327,12 +350,21 @@ export type Database = {
           extra_info?: Json | null
           id?: string
           name?: string
+          org_id?: string
           phone?: string | null
           profile_image_updated_at?: string | null
           profile_image_url?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_contacts_org"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversation_participants: {
         Row: {
@@ -423,6 +455,7 @@ export type Database = {
           id: string
           last_activity_at: string | null
           last_message_at: string | null
+          org_id: string
           priority: string | null
           queue_id: string | null
           status: string
@@ -439,6 +472,7 @@ export type Database = {
           id?: string
           last_activity_at?: string | null
           last_message_at?: string | null
+          org_id?: string
           priority?: string | null
           queue_id?: string | null
           status?: string
@@ -455,6 +489,7 @@ export type Database = {
           id?: string
           last_activity_at?: string | null
           last_message_at?: string | null
+          org_id?: string
           priority?: string | null
           queue_id?: string | null
           status?: string
@@ -484,10 +519,153 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "fk_conversations_org"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "fk_conversations_queue_id"
             columns: ["queue_id"]
             isOneToOne: false
             referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evolution_instance_tokens: {
+        Row: {
+          created_at: string
+          evolution_url: string
+          id: string
+          instance_name: string
+          org_id: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          evolution_url?: string
+          id?: string
+          instance_name: string
+          org_id?: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          evolution_url?: string
+          id?: string
+          instance_name?: string
+          org_id?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      instance_user_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          instance: string
+          is_default: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance: string
+          is_default?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance?: string
+          is_default?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instance_user_assignments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      internal_conversations: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          last_message_at: string | null
+          participants: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          last_message_at?: string | null
+          participants?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          last_message_at?: string | null
+          participants?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      internal_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          file_name: string | null
+          file_url: string | null
+          id: string
+          message_type: string
+          sender_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          message_type?: string
+          sender_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          message_type?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "internal_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "internal_conversations"
             referencedColumns: ["id"]
           },
         ]
@@ -564,6 +742,104 @@ export type Database = {
           },
         ]
       }
+      org_members: {
+        Row: {
+          created_at: string | null
+          org_id: string
+          role: Database["public"]["Enums"]["org_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          org_id: string
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          org_id?: string
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_messaging_settings: {
+        Row: {
+          created_at: string
+          default_instance: string
+          id: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_instance: string
+          id?: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_instance?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      orgs: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          full_name: string | null
+          id: string
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       queues: {
         Row: {
           created_at: string
@@ -596,6 +872,7 @@ export type Database = {
           avatar: string | null
           cargo_id: string | null
           created_at: string
+          default_channel: string | null
           email: string | null
           id: string
           name: string
@@ -608,6 +885,7 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string
+          default_channel?: string | null
           email?: string | null
           id?: string
           name: string
@@ -620,6 +898,7 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string
+          default_channel?: string | null
           email?: string | null
           id?: string
           name?: string
@@ -643,6 +922,20 @@ export type Database = {
             referencedRelation: "cargos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels_view"
+            referencedColumns: ["id"]
+          },
         ]
       }
       tags: {
@@ -651,18 +944,50 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          org_id: string
         }
         Insert: {
           color?: string | null
           created_at?: string
           id?: string
           name: string
+          org_id?: string
         }
         Update: {
           color?: string | null
           created_at?: string
           id?: string
           name?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_tags_org"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -722,6 +1047,74 @@ export type Database = {
         }
         Relationships: []
       }
+      system_users_view: {
+        Row: {
+          avatar: string | null
+          cargo_id: string | null
+          created_at: string | null
+          default_channel: string | null
+          email: string | null
+          id: string | null
+          name: string | null
+          profile: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string | null
+          default_channel?: string | null
+          email?: string | null
+          id?: string | null
+          name?: string | null
+          profile?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar?: string | null
+          cargo_id?: string | null
+          created_at?: string | null
+          default_channel?: string | null
+          email?: string | null
+          id?: string | null
+          name?: string | null
+          profile?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_system_users_cargo_id"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_cargo_id_fkey"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       block_system_user: {
@@ -746,20 +1139,40 @@ export type Database = {
           updated_at: string
         }[]
       }
-<<<<<<< HEAD
-=======
+      has_role: {
+        Args: {
+          role_name: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Returns: boolean
+      }
       hash_password: {
         Args: { password: string }
         Returns: string
+      }
+      is_master: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      is_member: {
+        Args: {
+          min_role?: Database["public"]["Enums"]["org_role"]
+          org_id: string
+        }
+        Returns: boolean
+      }
+      sync_user_roles: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       verify_password: {
         Args: { hash: string; password: string }
         Returns: boolean
       }
->>>>>>> 4d4082e455d8356fd5dc12386da59cf2447bd6d2
     }
     Enums: {
-      [_ in never]: never
+      app_role: "master" | "user" | "admin"
+      org_role: "OWNER" | "ADMIN" | "USER"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -886,6 +1299,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["master", "user", "admin"],
+      org_role: ["OWNER", "ADMIN", "USER"],
+    },
   },
 } as const

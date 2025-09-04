@@ -1,5 +1,5 @@
-import CanaisDeAtendimentoPage from './CanaisDeAtendimento';
+import ConexoesNova from './ConexoesNova';
 
 export function Conexoes() {
-  return <CanaisDeAtendimentoPage />;
+  return <ConexoesNova />;
 }

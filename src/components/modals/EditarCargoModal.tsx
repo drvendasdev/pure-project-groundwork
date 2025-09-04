@@ -4,7 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { type Cargo } from "@/hooks/useCargos";
+
+interface Cargo {
+  id: string;
+  nome: string;
+  tipo: string;
+  funcao: string;
+  criadoEm: string;
+}
 
 interface EditarCargoModalProps {
   isOpen: boolean;
