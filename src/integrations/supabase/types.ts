@@ -872,7 +872,6 @@ export type Database = {
           avatar: string | null
           cargo_id: string | null
           created_at: string
-          default_channel: string | null
           email: string | null
           id: string
           name: string
@@ -885,7 +884,6 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string
-          default_channel?: string | null
           email?: string | null
           id?: string
           name: string
@@ -898,7 +896,6 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string
-          default_channel?: string | null
           email?: string | null
           id?: string
           name?: string
@@ -920,20 +917,6 @@ export type Database = {
             columns: ["cargo_id"]
             isOneToOne: false
             referencedRelation: "cargos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "system_users_default_channel_fkey"
-            columns: ["default_channel"]
-            isOneToOne: false
-            referencedRelation: "channels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "system_users_default_channel_fkey"
-            columns: ["default_channel"]
-            isOneToOne: false
-            referencedRelation: "channels_view"
             referencedColumns: ["id"]
           },
         ]
@@ -1052,7 +1035,6 @@ export type Database = {
           avatar: string | null
           cargo_id: string | null
           created_at: string | null
-          default_channel: string | null
           email: string | null
           id: string | null
           name: string | null
@@ -1064,7 +1046,6 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string | null
-          default_channel?: string | null
           email?: string | null
           id?: string | null
           name?: string | null
@@ -1076,7 +1057,6 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string | null
-          default_channel?: string | null
           email?: string | null
           id?: string | null
           name?: string | null
@@ -1097,20 +1077,6 @@ export type Database = {
             columns: ["cargo_id"]
             isOneToOne: false
             referencedRelation: "cargos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "system_users_default_channel_fkey"
-            columns: ["default_channel"]
-            isOneToOne: false
-            referencedRelation: "channels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "system_users_default_channel_fkey"
-            columns: ["default_channel"]
-            isOneToOne: false
-            referencedRelation: "channels_view"
             referencedColumns: ["id"]
           },
         ]

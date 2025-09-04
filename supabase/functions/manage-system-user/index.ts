@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case 'create':
-        const { name, email, profile, status, senha, cargo_id, default_channel } = userData;
+        const { name, email, profile, status, senha, cargo_id } = userData;
         
         if (!name || !email || !profile || !senha) {
           return new Response(
@@ -50,24 +50,16 @@ Deno.serve(async (req) => {
             profile,
             status: status || 'active',
             senha, // Will be automatically hashed by trigger
-            cargo_id,
-            default_channel
+            cargo_id
           })
           .select()
           .single();
 
         if (result.error) {
           console.error('Error creating user:', result.error);
-          
-          // Handle specific database constraints
-          let errorMessage = result.error.message;
-          if (result.error.code === '23505' && result.error.message.includes('idx_system_users_email_unique')) {
-            errorMessage = 'Este email já está em uso por outro usuário';
-          }
-          
           return new Response(
-            JSON.stringify({ error: errorMessage }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ error: 'Failed to create user: ' + result.error.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
         break;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface SystemUser {
+export interface SystemUser {
   id: string;
   name: string;
   email: string;
@@ -21,7 +21,6 @@ interface CreateUserData {
   status?: string;
   senha: string;
   cargo_id?: string;
-  default_channel?: string;
 }
 
 interface UpdateUserData {
@@ -32,7 +31,6 @@ interface UpdateUserData {
   status?: string;
   senha?: string;
   cargo_id?: string;
-  default_channel?: string;
 }
 
 export const useSystemUsers = () => {
@@ -49,77 +47,40 @@ export const useSystemUsers = () => {
         }
       });
 
-      // Se houver erro na invocação da função
       if (error) {
         console.error('Error creating user:', error);
-        
-        let errorMessage = "Erro interno do servidor";
-        
-        // Tentar extrair a mensagem específica do erro
-        if (error.message === "Edge Function returned a non-2xx status code") {
-          // Tentar buscar a mensagem no contexto da resposta
-          try {
-            // A mensagem de erro específica geralmente vem no context
-            if (error.context) {
-              errorMessage = "Este email já está em uso por outro usuário";
-            }
-          } catch {
-            errorMessage = "Este email já está em uso por outro usuário";
-          }
-        } else {
-          errorMessage = error.message || "Erro interno do servidor";
-        }
-        
         toast({
           title: "Erro ao criar usuário",
-          description: errorMessage,
+          description: error.message || "Erro interno do servidor",
           variant: "destructive"
         });
-        return { error: errorMessage };
+        return { error: error.message };
       }
 
-      // Se houver erro na resposta da função
-      if (data?.error) {
-        let errorMessage = data.error;
-        if (errorMessage.includes('duplicate key') || errorMessage.includes('email já está em uso')) {
-          errorMessage = "Este email já está em uso por outro usuário";
-        }
-        
+      if (data.error) {
         toast({
           title: "Erro ao criar usuário",
-          description: errorMessage,
+          description: data.error,
           variant: "destructive"
         });
-        return { error: errorMessage };
+        return { error: data.error };
       }
 
-      // Sucesso
-      if (data?.success) {
-        toast({
-          title: "Usuário criado",
-          description: "Usuário criado com sucesso",
-          variant: "default"
-        });
-        return { data: data.data };
-      }
-
-      // Fallback para erro não tratado
       toast({
-        title: "Erro ao criar usuário",
-        description: "Erro desconhecido",
-        variant: "destructive"
+        title: "Usuário criado",
+        description: "Usuário criado com sucesso",
+        variant: "default"
       });
-      return { error: "Erro desconhecido" };
 
-    } catch (error: any) {
+      return { data: data.data };
+    } catch (error) {
       console.error('Error creating user:', error);
-      
       toast({
         title: "Erro ao criar usuário",
-        description: "Este email já está em uso por outro usuário",
+        description: "Erro interno do servidor",
         variant: "destructive"
       });
-      return { error: "Este email já está em uso por outro usuário" };
+      return { error: 'Erro interno do servidor' };
     } finally {
       setLoading(false);
     }

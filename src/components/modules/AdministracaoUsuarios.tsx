@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Edit, Pause, Trash2, Plus } from "lucide-react";
+import { Search, Edit, Pause, Trash2, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,27 +9,10 @@ import { EditarUsuarioModal } from "@/components/modals/EditarUsuarioModal";
 import { PausarUsuarioModal } from "@/components/modals/PausarUsuarioModal";
 import { DeletarUsuarioModal } from "@/components/modals/DeletarUsuarioModal";
 import { AdministracaoCargos } from "./AdministracaoCargos";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
-import { useCargos } from "@/hooks/useCargos";
-import { useToast } from "@/hooks/use-toast";
-
-// Usando o tipo da hook useSystemUsers
-interface SystemUser {
-  id: string;
-  name: string;
-  email: string;
-  profile: string;
-  status: string;
-  avatar?: string;
-  cargo_id?: string;
-  default_channel?: string;
-  created_at: string;
-  updated_at: string;
-}
-
+import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 export function AdministracaoUsuarios() {
+  const { loading, listUsers, createUser, updateUser, deleteUser } = useSystemUsers();
   const [users, setUsers] = useState<SystemUser[]>([]);
-  const [cargos, setCargos] = useState<Array<{id: string; nome: string; tipo: string}>>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -37,34 +20,18 @@ export function AdministracaoUsuarios() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SystemUser | undefined>(undefined);
   const [showCargos, setShowCargos] = useState(false);
-  
-  const { listUsers, createUser, updateUser, deleteUser, loading } = useSystemUsers();
-  const { listCargos } = useCargos();
-  const { toast } = useToast();
 
-  // Carregar usuários e cargos ao montar o componente
+  const refreshUsers = async () => {
+    const result = await listUsers();
+    if (result.data) {
+      setUsers(result.data);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      const [usersResult, cargosResult] = await Promise.all([
-        listUsers(),
-        listCargos()
-      ]);
-      
-      if (usersResult.data) {
-        setUsers(usersResult.data);
-      }
-      if (cargosResult.data) {
-        setCargos(cargosResult.data);
-      }
-    };
-    loadData();
+    refreshUsers();
   }, []);
-
-
-  const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -98,113 +65,38 @@ export function AdministracaoUsuarios() {
   const handleConfirmDelete = async () => {
     if (selectedUser) {
       const result = await deleteUser(selectedUser.id);
-      if (!result.error) {
-        // Recarregar lista de usuários
-        const usersResult = await listUsers();
-        if (usersResult.data) {
-          setUsers(usersResult.data);
-        }
+      if (result.success) {
+        await refreshUsers();
       }
     }
     setIsDeleteModalOpen(false);
     setSelectedUser(undefined);
   };
-
-  const handleAddUser = async (newUserData: {
-    name: string;
-    email: string;
-    profile: string;
-    status?: string;
-    avatar?: string;
-    cargo_id?: string;
-    senha: string;
-    default_channel?: string;
-  }) => {
-    try {
-      const result = await createUser({
-        name: newUserData.name,
-        email: newUserData.email,
-        profile: newUserData.profile,
-        status: newUserData.status || 'active',
-        senha: newUserData.senha,
-        cargo_id: newUserData.cargo_id || null,
-        default_channel: newUserData.default_channel || null
-      });
-      
-      if (!result.error && result.data) {
-        // Add the new user to local state instead of reloading all users
-        const newUser: SystemUser = {
-          id: result.data.id || crypto.randomUUID(),
-          name: newUserData.name,
-          email: newUserData.email,
-          profile: newUserData.profile,
-          status: newUserData.status || 'active',
-          cargo_id: newUserData.cargo_id,
-          default_channel: newUserData.default_channel,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        
-        setUsers(prev => [...prev, newUser]);
-        setIsAddModalOpen(false);
-        
-        toast({
-          title: "Usuário criado com sucesso!",
-          description: `O usuário ${newUserData.name} foi adicionado ao sistema.`,
-        });
-      } else {
-        console.error('Error creating user:', result.error);
-        toast({
-          variant: "destructive",
-          title: "Erro ao criar usuário",
-          description: "Ocorreu um erro ao tentar criar o usuário. Tente novamente.",
-        });
-      }
-    } catch (error) {
-      console.error('Error creating user:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao criar usuário", 
-        description: "Ocorreu um erro ao tentar criar o usuário. Tente novamente.",
-      });
+  const handleAddUser = async (newUser: Omit<SystemUser, "id" | "created_at" | "updated_at" | "cargo_id">) => {
+    const result = await createUser({
+      name: newUser.name,
+      email: newUser.email,
+      profile: newUser.profile,
+      status: newUser.status,
+      senha: "123456" // Password default
+    });
+    if (result.data) {
+      await refreshUsers();
     }
   };
-
-  // Função para adaptar SystemUser para o formato esperado pelo modal
-  const adaptUserForModal = (user: SystemUser) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email || '',
-    profile: (user.profile === 'admin' || user.profile === 'user') ? user.profile as "admin" | "user" : "user" as const,
-    status: (user.status === 'active' || user.status === 'inactive') ? user.status as "active" | "inactive" : "active" as const,
-    cargo_id: user.cargo_id, // Incluir o cargo_id
-    default_channel: user.default_channel, // Incluir o canal padrão
-  });
-
-  const handleUpdateUser = async (updatedUserData: {
-    id: string;
-    name: string;
-    email: string;
-    profile: "admin" | "user";
-    status: "active" | "inactive";
-  }) => {
+  const handleUpdateUser = async (updatedUser: SystemUser) => {
     const result = await updateUser({
-      id: updatedUserData.id,
-      name: updatedUserData.name,
-      email: updatedUserData.email,
-      profile: updatedUserData.profile,
-      status: updatedUserData.status
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      profile: updatedUser.profile,
+      status: updatedUser.status
     });
-    
-    if (!result.error) {
-      // Recarregar lista de usuários
-      const usersResult = await listUsers();
-      if (usersResult.data) {
-        setUsers(usersResult.data);
-      }
-      setIsEditModalOpen(false);
-      setSelectedUser(undefined);
+    if (result.data) {
+      await refreshUsers();
     }
+    setIsEditModalOpen(false);
+    setSelectedUser(undefined);
   };
   const handleGerenciarCargos = () => {
     setShowCargos(true);
@@ -253,7 +145,7 @@ export function AdministracaoUsuarios() {
             </TableRow>
           </TableHeader>
           <TableBody>
-             {filteredUsers.map(user => <TableRow key={user.id} className="border-b border-border hover:bg-muted/50">
+            {filteredUsers.map(user => <TableRow key={user.id} className="border-b border-border hover:bg-muted/50">
                 <TableCell className="text-center">
                   <span className="text-foreground font-medium">
                     {user.name}
@@ -269,12 +161,11 @@ export function AdministracaoUsuarios() {
                 </TableCell>
                 <TableCell>
                   <Badge 
-                    variant="secondary" 
-                    className={`rounded-full px-3 py-1 ${
-                      user.status === 'active' 
-                        ? 'bg-brand-yellow text-black hover:bg-brand-yellow-hover' 
-                        : 'bg-gray-200 text-gray-700'
-                    }`}
+                    variant={user.status === 'active' ? 'secondary' : 'outline'} 
+                    className={user.status === 'active' 
+                      ? "bg-brand-yellow text-black hover:bg-brand-yellow-hover rounded-full px-3 py-1" 
+                      : "border-destructive text-destructive rounded-full px-3 py-1"
+                    }
                   >
                     {user.status === 'active' ? 'Ativo' : 'Inativo'}
                   </Badge>
@@ -296,24 +187,28 @@ export function AdministracaoUsuarios() {
           </TableBody>
         </Table>
 
-        {filteredUsers.length === 0 && <div className="text-center py-8 text-muted-foreground">
+        {loading && (
+          <div className="text-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+            <p className="text-muted-foreground mt-2">Carregando usuários...</p>
+          </div>
+        )}
+        
+        {!loading && filteredUsers.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
             Nenhum usuário encontrado
-          </div>}
+          </div>
+        )}
       </div>
 
       {/* Modal de adicionar usuário */}
       <AdicionarUsuarioModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAddUser={handleAddUser} />
 
       {/* Modal de editar usuário */}
-      <EditarUsuarioModal 
-        isOpen={isEditModalOpen} 
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setSelectedUser(undefined);
-        }} 
-        onEditUser={handleUpdateUser} 
-        user={selectedUser ? adaptUserForModal(selectedUser) : undefined} 
-      />
+      <EditarUsuarioModal isOpen={isEditModalOpen} onClose={() => {
+      setIsEditModalOpen(false);
+      setSelectedUser(undefined);
+    }} onEditUser={handleUpdateUser} user={selectedUser} />
 
       {/* Modal de pausar usuário */}
       <PausarUsuarioModal isOpen={isPauseModalOpen} onClose={() => {
