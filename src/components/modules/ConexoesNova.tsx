@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X } from 'lucide-react';
+import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star } from 'lucide-react';
 
 interface Connection {
   name: string;
@@ -20,8 +20,6 @@ interface Connection {
 export default function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [currentQrConnection, setCurrentQrConnection] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [formData, setFormData] = useState({ nome: '', token: '', evolutionUrl: '' });
@@ -68,48 +66,6 @@ export default function ConexoesNova() {
     }
   }, [defaultOrgId]);
 
-  // Subscribe to realtime updates for channels
-  useEffect(() => {
-    if (!defaultOrgId) return;
-
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'channels',
-          filter: `org_id=eq.${defaultOrgId}`
-        },
-        (payload) => {
-          console.log('📡 Realtime channel update:', payload);
-          
-          // Update the specific connection in state
-          if (payload.eventType === 'UPDATE' && payload.new) {
-            const updatedChannel = payload.new;
-            setConnections(current => 
-              current.map(conn => 
-                conn.instance === updatedChannel.instance 
-                  ? { 
-                      ...conn, 
-                      status: updatedChannel.status as 'connecting' | 'connected' | 'disconnected',
-                      // Clear QR code if connected
-                      qrCode: updatedChannel.status === 'connected' ? undefined : conn.qrCode
-                    }
-                  : conn
-              )
-            );
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [defaultOrgId]);
-
   const loadConnections = async () => {
     try {
       const { data } = await supabase.functions.invoke('manage-evolution-connections', {
@@ -133,7 +89,7 @@ export default function ConexoesNova() {
   };
 
   const handleAddConexao = async () => {
-    if (!formData.nome.trim() || !formData.token.trim() || !formData.evolutionUrl.trim()) return;
+    if (!formData.nome.trim() || !formData.token.trim()) return;
 
     try {
       setLoading(true);
@@ -144,7 +100,7 @@ export default function ConexoesNova() {
           orgId: defaultOrgId,
           instanceName: formData.nome.trim(),
           instanceToken: formData.token.trim(),
-          evolutionUrl: formData.evolutionUrl.trim()
+          evolutionUrl: formData.evolutionUrl.trim() || undefined
         }
       });
 
@@ -179,8 +135,6 @@ export default function ConexoesNova() {
 
     try {
       setQrLoading(prev => ({ ...prev, [index]: true }));
-      setCurrentQrConnection(connection);
-      setQrModalOpen(true);
 
       const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
@@ -195,13 +149,11 @@ export default function ConexoesNova() {
       }
 
       // Update connection with QR code and connecting status
-      const updatedConnection = { ...connection, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const };
       setConnections(current => 
         current.map((c, i) => 
-          i === index ? updatedConnection : c
+          i === index ? { ...c, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const } : c
         )
       );
-      setCurrentQrConnection(updatedConnection);
 
       // Start polling for connection status
       const pollInterval = setInterval(async () => {
@@ -227,8 +179,6 @@ export default function ConexoesNova() {
               )
             );
             
-            setQrModalOpen(false);
-            setCurrentQrConnection(null);
             toast({ title: 'Conectado com sucesso!' });
           }
         } catch (error) {
@@ -254,8 +204,6 @@ export default function ConexoesNova() {
         description: error.message,
         variant: 'destructive'
       });
-      setQrModalOpen(false);
-      setCurrentQrConnection(null);
     } finally {
       setQrLoading(prev => ({ ...prev, [index]: false }));
     }
@@ -445,16 +393,15 @@ export default function ConexoesNova() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="evolutionUrl">URL da Evolution API</Label>
+                <Label htmlFor="evolutionUrl">URL da Evolution API (Opcional)</Label>
                 <Input
                   id="evolutionUrl"
                   value={formData.evolutionUrl}
                   onChange={(e) => setFormData(prev => ({ ...prev, evolutionUrl: e.target.value }))}
-                  placeholder="https://sua-evolution-api.com"
-                  required
+                  placeholder="Deixe vazio para usar configuração padrão"
                 />
                 <p className="text-sm text-muted-foreground">
-                  URL da sua instância da Evolution API
+                  Se não informado, será usada a URL configurada nas variáveis de ambiente
                 </p>
               </div>
               <div className="flex justify-end space-x-2">
@@ -467,7 +414,7 @@ export default function ConexoesNova() {
                 </Button>
                 <Button 
                   onClick={handleAddConexao}
-                  disabled={!formData.nome || !formData.token || !formData.evolutionUrl || loading}
+                  disabled={!formData.nome || !formData.token || loading}
                 >
                   {loading ? 'Adicionando...' : 'Adicionar'}
                 </Button>
@@ -484,15 +431,9 @@ export default function ConexoesNova() {
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span>{connection.name}</span>
-                  <Star 
-                    className={`h-4 w-4 cursor-pointer transition-colors ${
-                      connection.isDefault 
-                        ? 'text-yellow-500' 
-                        : 'text-muted-foreground hover:text-yellow-400'
-                    }`}
-                    fill={connection.isDefault ? 'currentColor' : 'none'}
-                    onClick={() => handleSetDefault(connection, index)}
-                  />
+                  {connection.isDefault && (
+                    <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
+                  )}
                 </div>
                 <span className={`text-sm font-normal ${getStatusColor(connection.status)}`}>
                   {getStatusText(connection.status)}
@@ -500,7 +441,43 @@ export default function ConexoesNova() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {connection.qrCode && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Abra o WhatsApp e escaneie este QR para conectar
+                  </p>
+                  <div className="flex justify-center">
+                    <img 
+                      src={connection.qrCode} 
+                      alt="QR Code" 
+                      className="w-48 h-48 border rounded"
+                    />
+                  </div>
+                </div>
+              )}
+              
               <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCheckStatus(connection, index)}
+                >
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                  Status
+                </Button>
+                
+                {connection.status !== 'connected' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleGetQr(connection, index)}
+                    disabled={qrLoading[index]}
+                  >
+                    <QrCode className="mr-1 h-3 w-3" />
+                    {connection.qrCode ? 'Atualizar QR' : 'Gerar QR'}
+                  </Button>
+                )}
+                
                 {connection.status === 'connected' ? (
                   <Button
                     size="sm"
@@ -514,11 +491,21 @@ export default function ConexoesNova() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleGetQr(connection, index)}
-                    disabled={qrLoading[index]}
+                    onClick={() => handleCheckStatus(connection, index)}
                   >
                     <Power className="mr-1 h-3 w-3" />
-                    {qrLoading[index] ? 'Conectando...' : 'Conectar'}
+                    Conectar
+                  </Button>
+                )}
+
+                {!connection.isDefault && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSetDefault(connection, index)}
+                  >
+                    <Star className="mr-1 h-3 w-3" />
+                    Definir Padrão
                   </Button>
                 )}
                 
@@ -545,76 +532,6 @@ export default function ConexoesNova() {
           </div>
         )}
       </div>
-
-      {/* QR Code Modal */}
-      <Dialog open={qrModalOpen} onOpenChange={(open) => {
-        setQrModalOpen(open);
-        if (!open) {
-          setCurrentQrConnection(null);
-        }
-      }}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Conectar WhatsApp - {currentQrConnection?.name}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setQrModalOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </DialogTitle>
-          </DialogHeader>
-          
-          {currentQrConnection && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Instruções */}
-              <div className="space-y-4">
-                <h4 className="font-semibold text-foreground">Passos para conectar</h4>
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex items-start gap-3">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">1</span>
-                    <span>Abra o <strong>WhatsApp</strong> no seu celular</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">2</span>
-                    <span>No Android toque em <strong>Menu ⋮</strong> ou no iPhone em <strong>Ajustes</strong></span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">3</span>
-                    <span>Toque em <strong>Dispositivos conectados</strong> e depois <strong>Conectar um dispositivo</strong></span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">4</span>
-                    <span>Escaneie o QR Code ao lado para confirmar</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* QR Code */}
-              <div className="flex flex-col items-center justify-center space-y-4">
-                {currentQrConnection.qrCode ? (
-                  <div className="bg-white p-4 rounded-lg border-2 border-border shadow-lg">
-                    <img 
-                      src={currentQrConnection.qrCode} 
-                      alt="QR Code para conectar WhatsApp" 
-                      className="w-64 h-64"
-                    />
-                  </div>
-                ) : (
-                  <div className="bg-white p-4 rounded-lg border-2 border-border shadow-lg w-64 h-64 flex items-center justify-center">
-                    <div className="text-center space-y-2">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                      <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
