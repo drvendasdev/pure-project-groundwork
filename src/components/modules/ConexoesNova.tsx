@@ -8,22 +8,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { toast } from '@/hooks/use-toast';
 import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star } from 'lucide-react';
 
-interface Conexao {
-  nome: string;
-  token: string;
+interface Connection {
+  name: string;
+  instance: string;
+  status: 'connecting' | 'connected' | 'disconnected';
   qrCode?: string;
-  status?: 'connecting' | 'connected' | 'disconnected';
   isDefault?: boolean;
+  created_at?: string;
 }
 
-const STORAGE_KEY = 'conexoes-whatsapp';
-
 export default function ConexoesNova() {
-  const [conexoes, setConexoes] = useState<Conexao[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
-  const [formData, setFormData] = useState({ nome: '', token: '' });
+  const [formData, setFormData] = useState({ nome: '', token: '', evolutionUrl: '' });
   const [defaultOrgId, setDefaultOrgId] = useState<string>('');
   const pollRefs = useRef<Record<string, any>>({});
 
@@ -34,38 +33,7 @@ export default function ConexoesNova() {
     };
   }, []);
 
-  // Load connections from localStorage and get default org
-  const loadConnections = async () => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        let parsedConexoes = JSON.parse(saved);
-        
-        // Get default instance to mark it if we have orgId
-        if (defaultOrgId) {
-          try {
-            const { data: defaultData } = await supabase.functions.invoke('get-default-instance', {
-              body: { orgId: defaultOrgId }
-            });
-            
-            if (defaultData?.defaultInstance) {
-              parsedConexoes = parsedConexoes.map((conexao: Conexao) => ({
-                ...conexao,
-                isDefault: conexao.nome === defaultData.defaultInstance
-              }));
-            }
-          } catch (error) {
-            console.error('Error loading default instance:', error);
-          }
-        }
-        
-        setConexoes(parsedConexoes);
-      }
-    } catch (error) {
-      console.error('Error loading connections:', error);
-    }
-  };
-
+  // Load default org ID
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -74,39 +42,49 @@ export default function ConexoesNova() {
           .from('orgs')
           .select('id')
           .limit(1)
-          .single();
+          .maybeSingle();
         
         if (orgData) {
           setDefaultOrgId(orgData.id);
+        } else {
+          // Use default org ID if no orgs exist
+          setDefaultOrgId('00000000-0000-0000-0000-000000000000');
         }
       } catch (error) {
         console.error('Error loading org:', error);
+        setDefaultOrgId('00000000-0000-0000-0000-000000000000');
       }
     };
     
     loadData();
   }, []);
 
-  // Load connections when defaultOrgId is available
+  // Load connections when org ID is available
   useEffect(() => {
     if (defaultOrgId) {
       loadConnections();
-    } else {
-      // Load connections without default marking if no orgId
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        setConexoes(JSON.parse(saved));
-      }
     }
   }, [defaultOrgId]);
 
-  // Utility function to save connections to localStorage
-  const saveConexoes = (newConexoes: Conexao[]) => {
-    setConexoes(newConexoes);
+  const loadConnections = async () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newConexoes));
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'list',
+          orgId: defaultOrgId
+        }
+      });
+
+      if (data?.success && data.connections) {
+        setConnections(data.connections);
+      }
     } catch (error) {
-      console.error('Error saving connections to localStorage:', error);
+      console.error('Error loading connections:', error);
+      toast({
+        title: 'Erro ao carregar conexões',
+        description: 'Não foi possível carregar as conexões salvas',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -116,35 +94,30 @@ export default function ConexoesNova() {
     try {
       setLoading(true);
       
-      const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
         body: {
-          action: 'status',
+          action: 'add_reference',
+          orgId: defaultOrgId,
           instanceName: formData.nome.trim(),
-          instanceToken: formData.token.trim()
+          instanceToken: formData.token.trim(),
+          evolutionUrl: formData.evolutionUrl.trim() || undefined
         }
       });
 
-      if (!statusResponse.data?.success) {
-        throw new Error(statusResponse.data?.error || 'Instância não encontrada ou token inválido');
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao adicionar conexão');
       }
 
-      const state = statusResponse.data?.status || statusResponse.data?.instance?.state;
-      const status: 'connecting' | 'connected' | 'disconnected' = state === 'open' ? 'connected' : 'connecting';
-
-      const novaConexao: Conexao = {
-        nome: formData.nome,
-        token: formData.token,
-        status
-      };
-
-      saveConexoes([...conexoes, novaConexao]);
-      setFormData({ nome: '', token: '' });
+      setFormData({ nome: '', token: '', evolutionUrl: '' });
       setDialogOpen(false);
-      toast({ title: 'Instância referenciada com sucesso!' });
+      toast({ title: 'Conexão adicionada com sucesso!' });
+      
+      // Reload connections
+      loadConnections();
     } catch (error: any) {
-      console.error('Erro ao referenciar instância:', error);
+      console.error('Erro ao adicionar conexão:', error);
       toast({ 
-        title: 'Erro ao referenciar instância',
+        title: 'Erro ao adicionar conexão',
         description: error.message,
         variant: 'destructive'
       });
@@ -153,11 +126,11 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleGetQr = async (conexao: Conexao, index: number) => {
+  const handleGetQr = async (connection: Connection, index: number) => {
     // Clear existing polling for this instance
-    if (pollRefs.current[conexao.nome]) {
-      clearInterval(pollRefs.current[conexao.nome]);
-      delete pollRefs.current[conexao.nome];
+    if (pollRefs.current[connection.name]) {
+      clearInterval(pollRefs.current[connection.name]);
+      delete pollRefs.current[connection.name];
     }
 
     try {
@@ -166,8 +139,8 @@ export default function ConexoesNova() {
       const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'get_qr',
-          instanceName: conexao.nome.trim(),
-          instanceToken: conexao.token.trim()
+          instanceName: connection.name,
+          orgId: defaultOrgId
         }
       });
 
@@ -176,10 +149,11 @@ export default function ConexoesNova() {
       }
 
       // Update connection with QR code and connecting status
-      const updatedConexoes = conexoes.map((c, i) => 
-        i === index ? { ...c, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const } : c
+      setConnections(current => 
+        current.map((c, i) => 
+          i === index ? { ...c, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const } : c
+        )
       );
-      saveConexoes(updatedConexoes);
 
       // Start polling for connection status
       const pollInterval = setInterval(async () => {
@@ -187,8 +161,8 @@ export default function ConexoesNova() {
           const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
             body: {
               action: 'status',
-              instanceName: conexao.nome.trim(),
-              instanceToken: conexao.token.trim()
+              instanceName: connection.name,
+              orgId: defaultOrgId
             }
           });
 
@@ -196,20 +170,14 @@ export default function ConexoesNova() {
           
           if (state === 'open') {
             // Connected! Clear QR and update status
-            clearInterval(pollRefs.current[conexao.nome]);
-            delete pollRefs.current[conexao.nome];
+            clearInterval(pollRefs.current[connection.name]);
+            delete pollRefs.current[connection.name];
             
-            setConexoes(current => {
-              const connectedConexoes = current.map((c, i) => 
+            setConnections(current => 
+              current.map((c, i) => 
                 i === index ? { ...c, qrCode: undefined, status: 'connected' as const } : c
-              );
-              try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(connectedConexoes));
-              } catch (error) {
-                console.error('Error saving connections to localStorage:', error);
-              }
-              return connectedConexoes;
-            });
+              )
+            );
             
             toast({ title: 'Conectado com sucesso!' });
           }
@@ -218,13 +186,13 @@ export default function ConexoesNova() {
         }
       }, 4000); // Poll every 4 seconds
 
-      pollRefs.current[conexao.nome] = pollInterval;
+      pollRefs.current[connection.name] = pollInterval;
 
       // Stop polling after 2 minutes
-      const timeoutId = setTimeout(() => {
-        if (pollRefs.current[conexao.nome]) {
-          clearInterval(pollRefs.current[conexao.nome]);
-          delete pollRefs.current[conexao.nome];
+      setTimeout(() => {
+        if (pollRefs.current[connection.name]) {
+          clearInterval(pollRefs.current[connection.name]);
+          delete pollRefs.current[connection.name];
           toast({ title: 'Tempo limite para conexão expirado', description: 'Tente gerar um novo QR code' });
         }
       }, 120000);
@@ -241,42 +209,44 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleCheckStatus = async (conexao: Conexao, index: number) => {
+  const handleCheckStatus = async (connection: Connection, index: number) => {
     try {
       const { data } = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'status',
-          instanceName: conexao.nome.trim(),
-          instanceToken: conexao.token.trim()
+          instanceName: connection.name,
+          orgId: defaultOrgId
         }
       });
 
       const state = data?.status || data?.instance?.state;
       const newStatus: 'connecting' | 'connected' | 'disconnected' = state === 'open' ? 'connected' : 'connecting';
       
-      const updatedConexoes = conexoes.map((c, i) => 
-        i === index ? { ...c, status: newStatus } : c
+      setConnections(current => 
+        current.map((c, i) => 
+          i === index ? { ...c, status: newStatus } : c
+        )
       );
-      saveConexoes(updatedConexoes);
     } catch (error) {
       console.error('Erro ao verificar status:', error);
     }
   };
 
-  const handleDisconnect = async (conexao: Conexao, index: number) => {
+  const handleDisconnect = async (connection: Connection, index: number) => {
     try {
       await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'disconnect',
-          instanceName: conexao.nome.trim(),
-          instanceToken: conexao.token.trim()
+          instanceName: connection.name,
+          orgId: defaultOrgId
         }
       });
 
-      const updatedConexoes = conexoes.map((c, i) => 
-        i === index ? { ...c, status: 'disconnected' as const } : c
+      setConnections(current => 
+        current.map((c, i) => 
+          i === index ? { ...c, status: 'disconnected' as const } : c
+        )
       );
-      saveConexoes(updatedConexoes);
       
       toast({ title: 'Instância desconectada!' });
     } catch (error) {
@@ -288,7 +258,7 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleSetDefault = async (conexao: Conexao, index: number) => {
+  const handleSetDefault = async (connection: Connection, index: number) => {
     if (!defaultOrgId) {
       toast({
         title: 'Erro ao definir padrão',
@@ -302,18 +272,19 @@ export default function ConexoesNova() {
       const { error } = await supabase.functions.invoke('set-default-instance', {
         body: {
           orgId: defaultOrgId,
-          instance: conexao.nome
+          instance: connection.name
         }
       });
 
       if (error) throw error;
 
       // Update local state to mark this as default
-      const updatedConexoes = conexoes.map((c, i) => ({
-        ...c,
-        isDefault: i === index
-      }));
-      saveConexoes(updatedConexoes);
+      setConnections(current => 
+        current.map((c, i) => ({
+          ...c,
+          isDefault: i === index
+        }))
+      );
 
       toast({ title: 'Conexão definida como padrão!' });
     } catch (error: any) {
@@ -326,18 +297,37 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleDelete = (index: number) => {
-    const conexao = conexoes[index];
-    
+  const handleDelete = async (connection: Connection, index: number) => {
     // Clear polling if exists
-    if (pollRefs.current[conexao.nome]) {
-      clearInterval(pollRefs.current[conexao.nome]);
-      delete pollRefs.current[conexao.nome];
+    if (pollRefs.current[connection.name]) {
+      clearInterval(pollRefs.current[connection.name]);
+      delete pollRefs.current[connection.name];
     }
     
-    const updatedConexoes = conexoes.filter((_, i) => i !== index);
-    saveConexoes(updatedConexoes);
-    toast({ title: 'Referência removida!' });
+    try {
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'delete_reference',
+          orgId: defaultOrgId,
+          instanceName: connection.name
+        }
+      });
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao remover conexão');
+      }
+
+      // Remove from local state
+      setConnections(current => current.filter((_, i) => i !== index));
+      toast({ title: 'Conexão removida com sucesso!' });
+    } catch (error: any) {
+      console.error('Erro ao remover conexão:', error);
+      toast({
+        title: 'Erro ao remover conexão',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
   };
 
   const getStatusColor = (status?: string) => {
@@ -364,10 +354,7 @@ export default function ConexoesNova() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Conexões</h1>
           <p className="text-muted-foreground">
-            Gerencie suas conexões do WhatsApp
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Estas referências ficam salvas apenas neste navegador
+            Gerencie suas conexões do WhatsApp salvos no sistema
           </p>
         </div>
         
@@ -375,14 +362,14 @@ export default function ConexoesNova() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Criar Canal de Atendimento
+              Adicionar Conexão
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Nome da Instância</DialogTitle>
+              <DialogTitle>Adicionar Conexão WhatsApp</DialogTitle>
               <DialogDescription>
-                Insira uma instância existente do Evolution API
+                Adicione uma instância existente do Evolution API
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -405,6 +392,15 @@ export default function ConexoesNova() {
                   type="password"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="evolutionUrl">URL da Evolution API (Opcional)</Label>
+                <Input
+                  id="evolutionUrl"
+                  value={formData.evolutionUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, evolutionUrl: e.target.value }))}
+                  placeholder="https://api.evolution.com"
+                />
+              </div>
               <div className="flex justify-end space-x-2">
                 <Button 
                   variant="outline" 
@@ -417,7 +413,7 @@ export default function ConexoesNova() {
                   onClick={handleAddConexao}
                   disabled={!formData.nome || !formData.token || loading}
                 >
-                  {loading ? 'Referenciando...' : 'Referenciar'}
+                  {loading ? 'Adicionando...' : 'Adicionar'}
                 </Button>
               </div>
             </div>
@@ -426,30 +422,30 @@ export default function ConexoesNova() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {conexoes.map((conexao, index) => (
+        {connections.map((connection, index) => (
           <Card key={index}>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span>{conexao.nome}</span>
-                  {conexao.isDefault && (
+                  <span>{connection.name}</span>
+                  {connection.isDefault && (
                     <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
                   )}
                 </div>
-                <span className={`text-sm font-normal ${getStatusColor(conexao.status)}`}>
-                  {getStatusText(conexao.status)}
+                <span className={`text-sm font-normal ${getStatusColor(connection.status)}`}>
+                  {getStatusText(connection.status)}
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {conexao.qrCode && (
+              {connection.qrCode && (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground text-center">
                     Abra o WhatsApp e escaneie este QR para conectar
                   </p>
                   <div className="flex justify-center">
                     <img 
-                      src={conexao.qrCode} 
+                      src={connection.qrCode} 
                       alt="QR Code" 
                       className="w-48 h-48 border rounded"
                     />
@@ -461,29 +457,29 @@ export default function ConexoesNova() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => handleCheckStatus(conexao, index)}
+                  onClick={() => handleCheckStatus(connection, index)}
                 >
                   <RefreshCw className="mr-1 h-3 w-3" />
                   Status
                 </Button>
                 
-                {conexao.status !== 'connected' && (
+                {connection.status !== 'connected' && (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleGetQr(conexao, index)}
+                    onClick={() => handleGetQr(connection, index)}
                     disabled={qrLoading[index]}
                   >
                     <QrCode className="mr-1 h-3 w-3" />
-                    {conexao.qrCode ? 'Atualizar QR' : 'Gerar QR'}
+                    {connection.qrCode ? 'Atualizar QR' : 'Gerar QR'}
                   </Button>
                 )}
                 
-                {conexao.status === 'connected' ? (
+                {connection.status === 'connected' ? (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleDisconnect(conexao, index)}
+                    onClick={() => handleDisconnect(connection, index)}
                   >
                     <PowerOff className="mr-1 h-3 w-3" />
                     Desconectar
@@ -492,18 +488,18 @@ export default function ConexoesNova() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleCheckStatus(conexao, index)}
+                    onClick={() => handleCheckStatus(connection, index)}
                   >
                     <Power className="mr-1 h-3 w-3" />
                     Conectar
                   </Button>
                 )}
 
-                {!conexao.isDefault && (
+                {!connection.isDefault && (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleSetDefault(conexao, index)}
+                    onClick={() => handleSetDefault(connection, index)}
                   >
                     <Star className="mr-1 h-3 w-3" />
                     Definir Padrão
@@ -513,7 +509,7 @@ export default function ConexoesNova() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleDelete(index)}
+                  onClick={() => handleDelete(connection, index)}
                 >
                   <Trash2 className="mr-1 h-3 w-3" />
                   Remover
@@ -523,12 +519,12 @@ export default function ConexoesNova() {
           </Card>
         ))}
         
-        {conexoes.length === 0 && (
+        {connections.length === 0 && (
           <div className="col-span-full text-center py-12">
             <QrCode className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-4 text-lg font-semibold">Nenhuma conexão</h3>
             <p className="text-muted-foreground">
-              Referencie sua primeira instância WhatsApp
+              Adicione sua primeira conexão WhatsApp
             </p>
           </div>
         )}

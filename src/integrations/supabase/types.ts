@@ -534,6 +534,33 @@ export type Database = {
           },
         ]
       }
+      evolution_instance_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          instance_name: string
+          org_id: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_name: string
+          org_id?: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_name?: string
+          org_id?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       instance_user_assignments: {
         Row: {
           created_at: string

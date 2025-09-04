@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,7 +19,28 @@ serve(async (req) => {
     const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'default-secret';
 
     // For operations with instanceToken, we can skip global credentials check
-    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret } = await req.json();
+    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret, orgId } = await req.json();
+    
+    // Try to get token from database if not provided
+    let finalToken = instanceToken;
+    if (!finalToken && action !== 'create') {
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      const { data: tokenData } = await supabaseClient
+        .from('evolution_instance_tokens')
+        .select('token')
+        .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
+        .eq('instance_name', instanceName)
+        .single();
+
+      if (tokenData?.token) {
+        finalToken = tokenData.token;
+        console.log('Token encontrado no banco de dados');
+      }
+    }
     
     // Operations that require instance token
     const tokenOnlyActions = ['get_qr', 'status', 'disconnect', 'delete'];
@@ -33,8 +55,8 @@ serve(async (req) => {
       });
     }
     
-    // For token-only operations, validate instanceToken
-    if (tokenOnlyActions.includes(action) && !instanceToken) {
+    // For token-only operations, validate finalToken
+    if (tokenOnlyActions.includes(action) && !finalToken) {
       return new Response(JSON.stringify({
         success: false,
         error: 'Token da instância é obrigatório para esta operação.'
@@ -48,7 +70,7 @@ serve(async (req) => {
     async function makeAuthenticatedRequest(url: string, options: RequestInit = {}, tokenOverride?: string) {
       console.log(`Fazendo requisição para: ${url}`);
       
-      const authToken = tokenOverride || evolutionApiKey;
+      const authToken = tokenOverride || finalToken || evolutionApiKey;
       
       // First try with apikey header
       let response = await fetch(url, {
@@ -84,7 +106,7 @@ serve(async (req) => {
     switch (action) {
       case 'create':
         // Validar se o token da instância foi fornecido
-        if (!instanceToken) {
+        if (!finalToken) {
           return new Response(JSON.stringify({
             success: false,
             error: 'Token da instância é obrigatório para criar uma nova conexão.',
@@ -100,7 +122,7 @@ serve(async (req) => {
           method: 'POST',
           body: JSON.stringify({
             instanceName: instanceName,
-            token: instanceToken,
+            token: finalToken,
             qrcode: true,
             number: '',
             business: {
@@ -132,7 +154,7 @@ serve(async (req) => {
               'NEW_JWT_TOKEN'
             ]
           }),
-        }, instanceToken);
+        }, finalToken);
 
         let createData;
         try {
@@ -171,7 +193,7 @@ serve(async (req) => {
                 'CONNECTION_UPDATE'
               ]
             }),
-          }, instanceToken);
+          }, finalToken);
         } catch (webhookError) {
           console.warn('Erro ao configurar webhook:', webhookError);
         }
@@ -186,7 +208,7 @@ serve(async (req) => {
       case 'get_qr':
         const qrResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connect/${instanceName}`, {
           method: 'GET',
-        }, instanceToken);
+        }, finalToken);
 
         let qrData;
         try {
@@ -220,7 +242,7 @@ serve(async (req) => {
       case 'status':
         const statusResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/connectionState/${instanceName}`, {
           method: 'GET',
-        }, instanceToken);
+        }, finalToken);
 
         let statusData;
         try {
@@ -254,7 +276,7 @@ serve(async (req) => {
       case 'disconnect':
         const disconnectResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/logout/${instanceName}`, {
           method: 'DELETE',
-        }, instanceToken);
+        }, finalToken);
 
         let disconnectData;
         try {
@@ -274,7 +296,7 @@ serve(async (req) => {
       case 'delete':
         const deleteResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/delete/${instanceName}`, {
           method: 'DELETE',
-        }, instanceToken);
+        }, finalToken);
 
         let deleteData;
         try {
