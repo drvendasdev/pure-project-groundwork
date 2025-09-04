@@ -398,8 +398,11 @@ export default function ConexoesNova() {
                   id="evolutionUrl"
                   value={formData.evolutionUrl}
                   onChange={(e) => setFormData(prev => ({ ...prev, evolutionUrl: e.target.value }))}
-                  placeholder="https://api.evolution.com"
+                  placeholder="Deixe vazio para usar configuração padrão"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Se não informado, será usada a URL configurada nas variáveis de ambiente
+                </p>
               </div>
               <div className="flex justify-end space-x-2">
                 <Button 

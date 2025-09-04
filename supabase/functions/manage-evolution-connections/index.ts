@@ -23,40 +23,89 @@ serve(async (req) => {
 
     switch (action) {
       case 'add_reference': {
-        if (!instanceName || !instanceToken || !evolutionUrl) {
+        if (!instanceName || !instanceToken) {
           return new Response(
-            JSON.stringify({ success: false, error: 'instanceName, instanceToken e evolutionUrl são obrigatórios' }),
+            JSON.stringify({ success: false, error: 'instanceName e instanceToken são obrigatórios' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        // Validate instance by testing connection to Evolution API
+        // Get Evolution URL from parameter or environment
+        let apiUrl = evolutionUrl;
+        if (!apiUrl) {
+          apiUrl = Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL');
+        }
+        
+        if (!apiUrl) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Evolution API URL não configurada. Configure nas secrets ou informe na requisição.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Optional validation - try to test connection but don't fail if instance doesn't exist yet
         try {
-          const testResponse = await fetch(`${evolutionUrl}/instance/connectionState/${instanceName}`, {
+          const testResponse = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
             method: 'GET',
             headers: {
               'apikey': instanceToken,
             },
           });
           
-          if (!testResponse.ok) {
-            throw new Error(`API returned ${testResponse.status}`);
+          if (!testResponse.ok && testResponse.status !== 404) {
+            // Try with Authorization header if apikey failed
+            const testResponse2 = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${instanceToken}`,
+              },
+            });
+            
+            if (!testResponse2.ok && testResponse2.status !== 404) {
+              console.warn('Instance validation failed but proceeding:', { status: testResponse2.status, instanceName });
+            }
           }
         } catch (error) {
-          console.error('Failed to validate instance:', error);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Falha ao validar instância. Verifique o nome da instância e token.' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          console.warn('Instance validation failed but proceeding:', error);
+          // Don't fail - instance might not exist yet, user can create via QR
         }
 
-        // Store token securely
+        const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
+
+        // Ensure organization exists
+        const { data: orgExists } = await supabaseClient
+          .from('orgs')
+          .select('id')
+          .eq('id', finalOrgId)
+          .single();
+
+        if (!orgExists) {
+          // Create default organization if it doesn't exist
+          const { error: orgError } = await supabaseClient
+            .from('orgs')
+            .insert({
+              id: finalOrgId,
+              name: 'Default Organization'
+            });
+
+          if (orgError) {
+            console.error('Error creating default organization:', orgError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao criar organização padrão' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
+        // Store token securely with proper conflict resolution
         const { error: tokenError } = await supabaseClient
           .from('evolution_instance_tokens')
           .upsert({
-            org_id: orgId || '00000000-0000-0000-0000-000000000000',
+            org_id: finalOrgId,
             instance_name: instanceName,
             token: instanceToken
+          }, {
+            onConflict: 'org_id,instance_name'
           });
 
         if (tokenError) {
@@ -72,12 +121,14 @@ serve(async (req) => {
         const { error: channelError } = await supabaseClient
           .from('channels')
           .upsert({
-            org_id: orgId || '00000000-0000-0000-0000-000000000000',
+            org_id: finalOrgId,
             name: instanceName,
             number: '', // Will be updated when connected
             instance: instanceName,
             status: 'disconnected',
             webhook_secret: webhookSecret
+          }, {
+            onConflict: 'org_id,instance'
           });
 
         if (channelError) {
