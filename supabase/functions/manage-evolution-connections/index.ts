@@ -107,30 +107,8 @@ serve(async (req) => {
           );
         }
 
-        // Get initial status from Evolution API
-        let initialStatus = 'disconnected';
-        try {
-          const statusResponse = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
-            method: 'GET',
-            headers: {
-              'apikey': instanceToken,
-            },
-          });
-
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json();
-            const state = statusData.instance?.state || statusData.state;
-            if (state === 'open') {
-              initialStatus = 'connected';
-            } else if (state === 'connecting' || state === 'close') {
-              initialStatus = 'connecting';
-            }
-          }
-        } catch (error) {
-          console.warn('Could not get initial status, using disconnected:', error);
-        }
-
-        // Create/update channel record with initial status
+        // Create/update channel record with initial disconnected status
+        // Status will be updated later when user connects via QR
         const webhookSecret = crypto.randomUUID();
         const { error: channelError } = await supabaseClient
           .from('channels')
@@ -139,7 +117,7 @@ serve(async (req) => {
             name: instanceName,
             number: '', // Will be updated when connected
             instance: instanceName,
-            status: initialStatus,
+            status: 'disconnected',
             webhook_secret: webhookSecret,
             last_state_at: new Date().toISOString()
           }, {

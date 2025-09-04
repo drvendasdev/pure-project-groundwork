@@ -277,19 +277,29 @@ serve(async (req) => {
           dbStatus = 'connecting';
         }
 
-        // Update database with current status
+        // Update database with current status using org_id + instance filters
         const supabaseClient = createClient(
           Deno.env.get('SUPABASE_URL') ?? '',
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
-        await supabaseClient
+        console.log(`🔄 Atualizando status do canal: { org_id: "${orgId || '00000000-0000-0000-0000-000000000000'}", instance: "${instanceName}", status: "${dbStatus}" }`);
+
+        const { data: updateResult, error: updateError } = await supabaseClient
           .from('channels')
           .update({
             status: dbStatus,
             last_state_at: new Date().toISOString()
           })
-          .eq('instance', instanceName);
+          .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
+          .eq('instance', instanceName)
+          .select();
+
+        if (updateError) {
+          console.error('❌ Erro ao atualizar status do canal:', updateError);
+        } else {
+          console.log(`✅ Status do canal atualizado:`, updateResult);
+        }
 
         return new Response(JSON.stringify({
           success: true,
