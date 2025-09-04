@@ -534,7 +534,7 @@ serve(async (req) => {
               org_id: finalOrgId,
               instance_name: instanceName,
               token: instanceToken,
-              evolution_url: evolutionApiUrl
+              evolution_url: config.evolutionApiUrl
             });
 
           if (tokenError) {
@@ -546,7 +546,7 @@ serve(async (req) => {
           }
 
           // Create channel record
-          const webhookSecret = crypto.randomUUID();
+          const newChannelWebhookSecret = crypto.randomUUID();
           const { error: channelError } = await supabaseClient
             .from('channels')
             .insert({
@@ -555,7 +555,7 @@ serve(async (req) => {
               number: '',
               instance: instanceName,
               status: qrCode ? 'connecting' : 'disconnected',
-              webhook_secret: webhookSecret,
+              webhook_secret: newChannelWebhookSecret,
               last_state_at: new Date().toISOString()
             });
 
