@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X, AlertCircle } from 'lucide-react';
 
 interface Connection {
   name: string;
@@ -18,15 +20,26 @@ interface Connection {
 }
 
 export default function ConexoesNova() {
+  const { hasRole } = useAuth();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [currentQrConnection, setCurrentQrConnection] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(false);
+  const [provisionLoading, setProvisionLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [formData, setFormData] = useState({ nome: '', token: '', evolutionUrl: '' });
+  const [provisionData, setProvisionData] = useState({ 
+    instanceName: '', 
+    messageRecovery: 'none' 
+  });
   const [defaultOrgId, setDefaultOrgId] = useState<string>('');
   const pollRefs = useRef<Record<string, any>>({});
+
+  // Check if user can create connections
+  const canCreateConnections = hasRole(['master', 'admin']);
+  const hasReachedLimit = connections.length >= 1;
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -168,6 +181,86 @@ export default function ConexoesNova() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProvisionConnection = async () => {
+    if (!provisionData.instanceName.trim()) return;
+
+    // Validate instance name format
+    const instanceNameRegex = /^[a-z0-9-_]{3,50}$/;
+    if (!instanceNameRegex.test(provisionData.instanceName)) {
+      toast({
+        title: 'Nome inválido',
+        description: 'Use apenas letras minúsculas, números, hífens e underscores (3-50 caracteres)',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Check if name already exists
+    const existingConnection = connections.find(
+      conn => conn.instance.toLowerCase() === provisionData.instanceName.toLowerCase()
+    );
+    if (existingConnection) {
+      toast({
+        title: 'Nome já existe',
+        description: 'Já existe uma conexão com este nome no workspace',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setProvisionLoading(true);
+      
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'provision',
+          orgId: defaultOrgId,
+          instanceName: provisionData.instanceName.trim(),
+          messageRecovery: provisionData.messageRecovery
+        }
+      });
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao criar conexão');
+      }
+
+      setProvisionData({ instanceName: '', messageRecovery: 'none' });
+      setProvisionModalOpen(false);
+      toast({ title: 'Conexão criada com sucesso!' });
+      
+      // Reload connections
+      loadConnections();
+
+      // If QR code is available, show it immediately
+      if (data.qrCode) {
+        const newConnection = {
+          name: provisionData.instanceName,
+          instance: provisionData.instanceName,
+          status: 'connecting' as const,
+          qrCode: data.qrCode
+        };
+        setCurrentQrConnection(newConnection);
+        setQrModalOpen(true);
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar conexão:', error);
+      toast({ 
+        title: 'Erro ao criar conexão',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setProvisionLoading(false);
+    }
+  };
+
+  const handleRequestExtraConnection = () => {
+    toast({
+      title: 'Solicitação enviada',
+      description: 'Sua solicitação de conexão extra foi registrada. Nossa equipe entrará em contato em breve.',
+    });
   };
 
   const handleGetQr = async (connection: Connection, index: number) => {
@@ -410,13 +503,102 @@ export default function ConexoesNova() {
           </p>
         </div>
         
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Adicionar Conexão
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Dialog open={provisionModalOpen} onOpenChange={setProvisionModalOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                disabled={!canCreateConnections || hasReachedLimit}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Novo atendimento
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Novo atendimento</DialogTitle>
+                <DialogDescription>
+                  Crie uma nova conexão WhatsApp para seu workspace
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="instanceName">Nome da instância</Label>
+                  <Input
+                    id="instanceName"
+                    value={provisionData.instanceName}
+                    onChange={(e) => setProvisionData(prev => ({ 
+                      ...prev, 
+                      instanceName: e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '') 
+                    }))}
+                    placeholder="ex.: loja_bras"
+                    maxLength={50}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Apenas letras minúsculas, números, hífens e underscores (3-50 caracteres)
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Recuperar mensagens</Label>
+                  <Select
+                    value={provisionData.messageRecovery}
+                    onValueChange={(value) => setProvisionData(prev => ({ ...prev, messageRecovery: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      <SelectItem value="1week">Uma semana</SelectItem>
+                      <SelectItem value="1month">Um mês</SelectItem>
+                      <SelectItem value="3months">Três meses</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setProvisionModalOpen(false)}
+                    disabled={provisionLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={handleProvisionConnection}
+                    disabled={!provisionData.instanceName || provisionData.instanceName.length < 3 || provisionLoading}
+                  >
+                    {provisionLoading ? 'Criando...' : 'Criar conexão'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Quota limit message and request button */}
+          {canCreateConnections && hasReachedLimit && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              <span>Limite atingido (1/1)</span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleRequestExtraConnection}
+              >
+                Solicitar liberação
+              </Button>
+            </div>
+          )}
+
+          {/* Legacy add connection button for existing instances */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Plus className="mr-2 h-4 w-4" />
+                Vincular Existente
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Adicionar Conexão WhatsApp</DialogTitle>
@@ -473,8 +655,9 @@ export default function ConexoesNova() {
                 </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

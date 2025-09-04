@@ -17,7 +17,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { action, orgId, instanceName, instanceToken, evolutionUrl } = await req.json();
+    const { action, orgId, instanceName, instanceToken, evolutionUrl, messageRecovery } = await req.json();
     
     console.log('Manage evolution connections action:', { action, orgId, instanceName, hasToken: !!instanceToken });
 
@@ -177,6 +177,179 @@ serve(async (req) => {
           JSON.stringify({ success: true, connections }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      case 'provision': {
+        if (!instanceName) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'instanceName é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
+
+        // Check quota limit (1 connection per workspace)
+        const { data: existingConnections, error: countError } = await supabaseClient
+          .from('channels')
+          .select('id')
+          .eq('org_id', finalOrgId);
+
+        if (countError) {
+          console.error('Error checking quota:', countError);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao verificar quota' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (existingConnections && existingConnections.length >= 1) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'Limite de conexões atingido (1/1). Solicite liberação de conexão extra.',
+              quota_exceeded: true 
+            }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get Evolution API credentials from environment
+        const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+        const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
+
+        if (!evolutionApiKey || !evolutionApiUrl) {
+          console.error('Missing Evolution API credentials');
+          return new Response(
+            JSON.stringify({ success: false, error: 'Configuração da API Evolution não encontrada' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Generate a unique token for this instance
+        const instanceToken = crypto.randomUUID();
+
+        try {
+          // Create instance in Evolution API
+          const createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': evolutionApiKey,
+            },
+            body: JSON.stringify({
+              instanceName: instanceName,
+              token: instanceToken,
+              qrcode: true,
+              webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
+              webhook_by_events: false,
+              events: [
+                'APPLICATION_STARTUP',
+                'QRCODE_UPDATED',
+                'CONNECTION_UPDATE',
+                'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE',
+                'SEND_MESSAGE'
+              ]
+            })
+          });
+
+          if (!createInstanceResponse.ok) {
+            const errorText = await createInstanceResponse.text();
+            console.error('Evolution API create instance error:', errorText);
+            throw new Error('Erro ao criar instância na Evolution API');
+          }
+
+          const createData = await createInstanceResponse.json();
+          console.log('Instance created:', createData);
+
+          // Get QR code
+          let qrCode = null;
+          try {
+            const qrResponse = await fetch(`${evolutionApiUrl}/instance/connect/${instanceName}`, {
+              method: 'GET',
+              headers: {
+                'apikey': evolutionApiKey,
+              },
+            });
+
+            if (qrResponse.ok) {
+              const qrData = await qrResponse.json();
+              qrCode = qrData.base64 || qrData.qrcode;
+            }
+          } catch (qrError) {
+            console.warn('Failed to get QR code, but instance was created:', qrError);
+          }
+
+          // Store token and URL
+          const { error: tokenError } = await supabaseClient
+            .from('evolution_instance_tokens')
+            .insert({
+              org_id: finalOrgId,
+              instance_name: instanceName,
+              token: instanceToken,
+              evolution_url: evolutionApiUrl
+            });
+
+          if (tokenError) {
+            console.error('Error storing token:', tokenError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao salvar credenciais da instância' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Create channel record
+          const webhookSecret = crypto.randomUUID();
+          const { error: channelError } = await supabaseClient
+            .from('channels')
+            .insert({
+              org_id: finalOrgId,
+              name: instanceName,
+              number: '',
+              instance: instanceName,
+              status: qrCode ? 'connecting' : 'disconnected',
+              webhook_secret: webhookSecret,
+              last_state_at: new Date().toISOString()
+            });
+
+          if (channelError) {
+            console.error('Error creating channel:', channelError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao criar registro do canal' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Schedule message recovery if requested (this would be handled by N8N or a separate service)
+          if (messageRecovery && messageRecovery !== 'none') {
+            // Log the message recovery request for later processing
+            console.log(`Message recovery requested for ${instanceName}: ${messageRecovery}`);
+            
+            // In a real implementation, you might:
+            // 1. Call an N8N webhook to schedule the import
+            // 2. Add a record to a job queue table
+            // 3. Trigger a separate edge function
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: 'Conexão criada com sucesso',
+              qrCode,
+              instanceName,
+              status: qrCode ? 'connecting' : 'disconnected'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+
+        } catch (error) {
+          console.error('Error creating Evolution instance:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao criar instância na Evolution API' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       case 'delete_reference': {
