@@ -13,11 +13,7 @@ serve(async (req) => {
 
   try {
     // Try multiple secret name variants
-<<<<<<< HEAD
-    const evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
-=======
     let evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
->>>>>>> 414ddc29f8259c112e2164c380519403f342182e
     const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
     const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.functions.supabase.co/functions/v1/evolution-webhook';
     const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'default-secret';
@@ -35,23 +31,16 @@ serve(async (req) => {
 
       const { data: tokenData } = await supabaseClient
         .from('evolution_instance_tokens')
-<<<<<<< HEAD
-        .select('token')
-=======
         .select('token, evolution_url')
->>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
         .eq('instance_name', instanceName)
         .single();
 
       if (tokenData?.token) {
         finalToken = tokenData.token;
-<<<<<<< HEAD
-=======
         if (tokenData.evolution_url) {
           evolutionApiUrl = tokenData.evolution_url;
         }
->>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         console.log('Token encontrado no banco de dados');
       }
     }
@@ -279,11 +268,6 @@ serve(async (req) => {
           });
         }
 
-<<<<<<< HEAD
-        return new Response(JSON.stringify({
-          success: true,
-          status: statusData.instance?.state || statusData.state || 'unknown',
-=======
         // Update channel status in database
         const statusState = statusData.instance?.state || statusData.state || 'unknown';
         let dbStatus = 'disconnected';
@@ -310,7 +294,6 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           status: statusState,
->>>>>>> 414ddc29f8259c112e2164c380519403f342182e
           data: statusData
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
