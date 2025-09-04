@@ -1,5 +1,11 @@
 project_id = "zldeaozqxjwvzgrblyrh"
 
+[functions.delete-cargo]
+verify_jwt = false
+
+[functions.check-cargo-usage]
+verify_jwt = false
+
 [functions.evolution-instance-actions]
 verify_jwt = false
 

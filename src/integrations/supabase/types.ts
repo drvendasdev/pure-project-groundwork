@@ -867,11 +867,55 @@ export type Database = {
         }
         Relationships: []
       }
+      system_user_cargos: {
+        Row: {
+          cargo_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          cargo_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          cargo_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_user_cargos_cargo_id_fkey"
+            columns: ["cargo_id"]
+            isOneToOne: false
+            referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_user_cargos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_user_cargos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_users: {
         Row: {
           avatar: string | null
           cargo_id: string | null
           created_at: string
+          default_channel: string | null
           email: string | null
           id: string
           name: string
@@ -884,6 +928,7 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string
+          default_channel?: string | null
           email?: string | null
           id?: string
           name: string
@@ -896,6 +941,7 @@ export type Database = {
           avatar?: string | null
           cargo_id?: string | null
           created_at?: string
+          default_channel?: string | null
           email?: string | null
           id?: string
           name?: string
@@ -917,6 +963,20 @@ export type Database = {
             columns: ["cargo_id"]
             isOneToOne: false
             referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels_view"
             referencedColumns: ["id"]
           },
         ]
@@ -1034,35 +1094,15 @@ export type Database = {
         Row: {
           avatar: string | null
           cargo_id: string | null
+          cargo_ids: string[] | null
           created_at: string | null
+          default_channel: string | null
           email: string | null
           id: string | null
           name: string | null
           profile: string | null
           status: string | null
           updated_at: string | null
-        }
-        Insert: {
-          avatar?: string | null
-          cargo_id?: string | null
-          created_at?: string | null
-          email?: string | null
-          id?: string | null
-          name?: string | null
-          profile?: string | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          avatar?: string | null
-          cargo_id?: string | null
-          created_at?: string | null
-          email?: string | null
-          id?: string | null
-          name?: string | null
-          profile?: string | null
-          status?: string | null
-          updated_at?: string | null
         }
         Relationships: [
           {
@@ -1077,6 +1117,20 @@ export type Database = {
             columns: ["cargo_id"]
             isOneToOne: false
             referencedRelation: "cargos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_users_default_channel_fkey"
+            columns: ["default_channel"]
+            isOneToOne: false
+            referencedRelation: "channels_view"
             referencedColumns: ["id"]
           },
         ]

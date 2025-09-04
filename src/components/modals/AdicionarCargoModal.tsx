@@ -10,7 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 interface AdicionarCargoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddCargo: (cargo: { nome: string; tipo: string }) => void;
+  onAddCargo: (cargo: { nome: string; tipo: string; funcao: string }) => void;
 }
 
 const permissoes = [
@@ -94,7 +94,17 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo }: AdicionarCa
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (nome && tipo) {
-      onAddCargo({ nome, tipo });
+      // Extrair função do tipo selecionado
+      let funcao = "";
+      if (tipo.includes("(") && tipo.includes(")")) {
+        // Se o tipo tem parênteses, extrair o que está dentro
+        funcao = tipo.split("(")[1].split(")")[0];
+      } else {
+        // Se não tem parênteses, usar o próprio tipo
+        funcao = tipo;
+      }
+      
+      onAddCargo({ nome, tipo, funcao });
       setNome("");
       setTipo("");
       setSelectedPermissions({});
