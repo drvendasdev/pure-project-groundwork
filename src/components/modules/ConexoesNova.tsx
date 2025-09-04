@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star } from 'lucide-react';
+import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X } from 'lucide-react';
 
 interface Connection {
   name: string;
@@ -20,6 +20,8 @@ interface Connection {
 export default function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [currentQrConnection, setCurrentQrConnection] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [formData, setFormData] = useState({ nome: '', token: '', evolutionUrl: '' });
@@ -177,6 +179,8 @@ export default function ConexoesNova() {
 
     try {
       setQrLoading(prev => ({ ...prev, [index]: true }));
+      setCurrentQrConnection(connection);
+      setQrModalOpen(true);
 
       const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
@@ -191,11 +195,13 @@ export default function ConexoesNova() {
       }
 
       // Update connection with QR code and connecting status
+      const updatedConnection = { ...connection, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const };
       setConnections(current => 
         current.map((c, i) => 
-          i === index ? { ...c, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const } : c
+          i === index ? updatedConnection : c
         )
       );
+      setCurrentQrConnection(updatedConnection);
 
       // Start polling for connection status
       const pollInterval = setInterval(async () => {
@@ -221,6 +227,8 @@ export default function ConexoesNova() {
               )
             );
             
+            setQrModalOpen(false);
+            setCurrentQrConnection(null);
             toast({ title: 'Conectado com sucesso!' });
           }
         } catch (error) {
@@ -246,6 +254,8 @@ export default function ConexoesNova() {
         description: error.message,
         variant: 'destructive'
       });
+      setQrModalOpen(false);
+      setCurrentQrConnection(null);
     } finally {
       setQrLoading(prev => ({ ...prev, [index]: false }));
     }
@@ -490,41 +500,6 @@ export default function ConexoesNova() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {connection.qrCode && (
-                <div className="bg-muted/50 rounded-lg p-4 space-y-4">
-                  <div className="text-center">
-                    <h4 className="font-semibold text-foreground mb-3">Passos para conectar</h4>
-                    <div className="space-y-2 text-sm text-muted-foreground text-left">
-                      <div className="flex items-start gap-2">
-                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">1</span>
-                        <span>Abra o <strong>WhatsApp</strong> no seu celular</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">2</span>
-                        <span>No Android toque em <strong>Menu</strong> : ou no iPhone em <strong>Ajustes</strong></span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">3</span>
-                        <span>Toque em <strong>Dispositivos conectados</strong> e depois <strong>Conectar um dispositivo</strong></span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <span className="bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">4</span>
-                        <span>Escaneie o QR Code à direita para confirmar</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-center">
-                    <div className="bg-white p-3 rounded-lg border-2 border-border">
-                      <img 
-                        src={connection.qrCode} 
-                        alt="QR Code para conectar WhatsApp" 
-                        className="w-48 h-48"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-              
               <div className="flex flex-wrap gap-2">
                 {connection.status === 'connected' ? (
                   <Button
@@ -570,6 +545,76 @@ export default function ConexoesNova() {
           </div>
         )}
       </div>
+
+      {/* QR Code Modal */}
+      <Dialog open={qrModalOpen} onOpenChange={(open) => {
+        setQrModalOpen(open);
+        if (!open) {
+          setCurrentQrConnection(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Conectar WhatsApp - {currentQrConnection?.name}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setQrModalOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {currentQrConnection && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Instruções */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-foreground">Passos para conectar</h4>
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-3">
+                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">1</span>
+                    <span>Abra o <strong>WhatsApp</strong> no seu celular</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">2</span>
+                    <span>No Android toque em <strong>Menu ⋮</strong> ou no iPhone em <strong>Ajustes</strong></span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">3</span>
+                    <span>Toque em <strong>Dispositivos conectados</strong> e depois <strong>Conectar um dispositivo</strong></span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">4</span>
+                    <span>Escaneie o QR Code ao lado para confirmar</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* QR Code */}
+              <div className="flex flex-col items-center justify-center space-y-4">
+                {currentQrConnection.qrCode ? (
+                  <div className="bg-white p-4 rounded-lg border-2 border-border shadow-lg">
+                    <img 
+                      src={currentQrConnection.qrCode} 
+                      alt="QR Code para conectar WhatsApp" 
+                      className="w-64 h-64"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white p-4 rounded-lg border-2 border-border shadow-lg w-64 h-64 flex items-center justify-center">
+                    <div className="text-center space-y-2">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                      <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
