@@ -6,7 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
+<<<<<<< HEAD
+import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star } from 'lucide-react';
+=======
 import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X } from 'lucide-react';
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
 interface Connection {
   name: string;
@@ -20,8 +24,11 @@ interface Connection {
 export default function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+<<<<<<< HEAD
+=======
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [currentQrConnection, setCurrentQrConnection] = useState<Connection | null>(null);
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [formData, setFormData] = useState({ nome: '', token: '', evolutionUrl: '' });
@@ -68,6 +75,8 @@ export default function ConexoesNova() {
     }
   }, [defaultOrgId]);
 
+<<<<<<< HEAD
+=======
   // Subscribe to realtime updates for channels
   useEffect(() => {
     if (!defaultOrgId) return;
@@ -110,6 +119,7 @@ export default function ConexoesNova() {
     };
   }, [defaultOrgId]);
 
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
   const loadConnections = async () => {
     try {
       const { data } = await supabase.functions.invoke('manage-evolution-connections', {
@@ -133,7 +143,11 @@ export default function ConexoesNova() {
   };
 
   const handleAddConexao = async () => {
+<<<<<<< HEAD
+    if (!formData.nome.trim() || !formData.token.trim()) return;
+=======
     if (!formData.nome.trim() || !formData.token.trim() || !formData.evolutionUrl.trim()) return;
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
     try {
       setLoading(true);
@@ -144,7 +158,11 @@ export default function ConexoesNova() {
           orgId: defaultOrgId,
           instanceName: formData.nome.trim(),
           instanceToken: formData.token.trim(),
+<<<<<<< HEAD
+          evolutionUrl: formData.evolutionUrl.trim() || undefined
+=======
           evolutionUrl: formData.evolutionUrl.trim()
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
         }
       });
 
@@ -179,8 +197,11 @@ export default function ConexoesNova() {
 
     try {
       setQrLoading(prev => ({ ...prev, [index]: true }));
+<<<<<<< HEAD
+=======
       setCurrentQrConnection(connection);
       setQrModalOpen(true);
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
       const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
@@ -195,6 +216,13 @@ export default function ConexoesNova() {
       }
 
       // Update connection with QR code and connecting status
+<<<<<<< HEAD
+      setConnections(current => 
+        current.map((c, i) => 
+          i === index ? { ...c, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const } : c
+        )
+      );
+=======
       const updatedConnection = { ...connection, qrCode: qrResponse.data?.qrcode, status: 'connecting' as const };
       setConnections(current => 
         current.map((c, i) => 
@@ -202,6 +230,7 @@ export default function ConexoesNova() {
         )
       );
       setCurrentQrConnection(updatedConnection);
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
       // Start polling for connection status
       const pollInterval = setInterval(async () => {
@@ -227,8 +256,11 @@ export default function ConexoesNova() {
               )
             );
             
+<<<<<<< HEAD
+=======
             setQrModalOpen(false);
             setCurrentQrConnection(null);
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
             toast({ title: 'Conectado com sucesso!' });
           }
         } catch (error) {
@@ -254,8 +286,11 @@ export default function ConexoesNova() {
         description: error.message,
         variant: 'destructive'
       });
+<<<<<<< HEAD
+=======
       setQrModalOpen(false);
       setCurrentQrConnection(null);
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
     } finally {
       setQrLoading(prev => ({ ...prev, [index]: false }));
     }
@@ -445,16 +480,27 @@ export default function ConexoesNova() {
                 />
               </div>
               <div className="space-y-2">
+<<<<<<< HEAD
+                <Label htmlFor="evolutionUrl">URL da Evolution API (Opcional)</Label>
+=======
                 <Label htmlFor="evolutionUrl">URL da Evolution API</Label>
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
                 <Input
                   id="evolutionUrl"
                   value={formData.evolutionUrl}
                   onChange={(e) => setFormData(prev => ({ ...prev, evolutionUrl: e.target.value }))}
+<<<<<<< HEAD
+                  placeholder="Deixe vazio para usar configuração padrão"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Se não informado, será usada a URL configurada nas variáveis de ambiente
+=======
                   placeholder="https://sua-evolution-api.com"
                   required
                 />
                 <p className="text-sm text-muted-foreground">
                   URL da sua instância da Evolution API
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
                 </p>
               </div>
               <div className="flex justify-end space-x-2">
@@ -467,7 +513,11 @@ export default function ConexoesNova() {
                 </Button>
                 <Button 
                   onClick={handleAddConexao}
+<<<<<<< HEAD
+                  disabled={!formData.nome || !formData.token || loading}
+=======
                   disabled={!formData.nome || !formData.token || !formData.evolutionUrl || loading}
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
                 >
                   {loading ? 'Adicionando...' : 'Adicionar'}
                 </Button>
@@ -484,6 +534,11 @@ export default function ConexoesNova() {
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span>{connection.name}</span>
+<<<<<<< HEAD
+                  {connection.isDefault && (
+                    <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
+                  )}
+=======
                   <Star 
                     className={`h-4 w-4 cursor-pointer transition-colors ${
                       connection.isDefault 
@@ -493,6 +548,7 @@ export default function ConexoesNova() {
                     fill={connection.isDefault ? 'currentColor' : 'none'}
                     onClick={() => handleSetDefault(connection, index)}
                   />
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
                 </div>
                 <span className={`text-sm font-normal ${getStatusColor(connection.status)}`}>
                   {getStatusText(connection.status)}
@@ -500,7 +556,47 @@ export default function ConexoesNova() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+<<<<<<< HEAD
+              {connection.qrCode && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Abra o WhatsApp e escaneie este QR para conectar
+                  </p>
+                  <div className="flex justify-center">
+                    <img 
+                      src={connection.qrCode} 
+                      alt="QR Code" 
+                      className="w-48 h-48 border rounded"
+                    />
+                  </div>
+                </div>
+              )}
+              
               <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleCheckStatus(connection, index)}
+                >
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                  Status
+                </Button>
+                
+                {connection.status !== 'connected' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleGetQr(connection, index)}
+                    disabled={qrLoading[index]}
+                  >
+                    <QrCode className="mr-1 h-3 w-3" />
+                    {connection.qrCode ? 'Atualizar QR' : 'Gerar QR'}
+                  </Button>
+                )}
+                
+=======
+              <div className="flex flex-wrap gap-2">
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
                 {connection.status === 'connected' ? (
                   <Button
                     size="sm"
@@ -514,11 +610,29 @@ export default function ConexoesNova() {
                   <Button
                     size="sm"
                     variant="outline"
+<<<<<<< HEAD
+                    onClick={() => handleCheckStatus(connection, index)}
+                  >
+                    <Power className="mr-1 h-3 w-3" />
+                    Conectar
+                  </Button>
+                )}
+
+                {!connection.isDefault && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSetDefault(connection, index)}
+                  >
+                    <Star className="mr-1 h-3 w-3" />
+                    Definir Padrão
+=======
                     onClick={() => handleGetQr(connection, index)}
                     disabled={qrLoading[index]}
                   >
                     <Power className="mr-1 h-3 w-3" />
                     {qrLoading[index] ? 'Conectando...' : 'Conectar'}
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
                   </Button>
                 )}
                 
@@ -545,6 +659,8 @@ export default function ConexoesNova() {
           </div>
         )}
       </div>
+<<<<<<< HEAD
+=======
 
       {/* QR Code Modal */}
       <Dialog open={qrModalOpen} onOpenChange={(open) => {
@@ -615,6 +731,7 @@ export default function ConexoesNova() {
           )}
         </DialogContent>
       </Dialog>
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
     </div>
   );
 }

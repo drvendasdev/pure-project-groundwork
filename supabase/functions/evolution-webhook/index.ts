@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+<<<<<<< HEAD
+=======
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,6 +89,8 @@ function extractMetadata(data: any) {
   }
 
   return metadata;
+<<<<<<< HEAD
+=======
 }
 
 // Map Evolution API states to internal status
@@ -128,6 +133,7 @@ async function updateChannelStatus(supabaseClient: any, instanceName: string, st
   } catch (error) {
     console.error('Error in updateChannelStatus:', error);
   }
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
 }
 
 serve(async (req) => {
@@ -169,6 +175,8 @@ serve(async (req) => {
         fromMe: metadata.fromMe
       });
 
+<<<<<<< HEAD
+=======
       // Initialize Supabase client for status updates
       const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -192,6 +200,7 @@ serve(async (req) => {
         }
       }
 
+>>>>>>> 414ddc29f8259c112e2164c380519403f342182e
       const n8nUrl = Deno.env.get('N8N_WEBHOOK_URL');
       if (n8nUrl) {
         try {

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export interface Cargo {
+interface Cargo {
   id: string;
   nome: string;
   tipo: string;
@@ -11,125 +11,172 @@ export interface Cargo {
   updated_at: string;
 }
 
+interface CreateCargoData {
+  nome: string;
+  tipo: string;
+  funcao: string;
+}
+
+interface UpdateCargoData {
+  id: string;
+  nome?: string;
+  tipo?: string;
+  funcao?: string;
+}
+
 export const useCargos = () => {
-  const [cargos, setCargos] = useState<Cargo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // Fetch cargos from Supabase
-  const fetchCargos = async () => {
+  const listCargos = async (): Promise<{ data?: Cargo[], error?: string }> => {
+    setLoading(true);
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('cargos')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('nome');
 
-      if (error) throw error;
-      setCargos(data || []);
+      if (error) {
+        console.error('Error listing cargos:', error);
+        return { error: error.message };
+      }
+
+      return { data: data || [] };
     } catch (error) {
-      console.error('Error fetching cargos:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar cargos",
-        variant: "destructive"
-      });
+      console.error('Error listing cargos:', error);
+      return { error: 'Erro interno do servidor' };
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchCargos();
-  }, []);
-
-  const addCargo = async (newCargoData: { nome: string; tipo: string; funcao: string }) => {
+  const createCargo = async (cargoData: CreateCargoData) => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('cargos')
-        .insert([newCargoData])
+        .insert(cargoData)
         .select()
         .single();
 
-      if (error) throw error;
-      
-      setCargos(prev => [data, ...prev]);
+      if (error) {
+        console.error('Error creating cargo:', error);
+        toast({
+          title: "Erro ao criar cargo",
+          description: error.message,
+          variant: "destructive"
+        });
+        return { error: error.message };
+      }
+
       toast({
-        title: "Sucesso",
-        description: "Cargo adicionado com sucesso"
+        title: "Cargo criado",
+        description: "Cargo criado com sucesso",
+        variant: "default"
       });
+
+      return { data };
     } catch (error) {
-      console.error('Error adding cargo:', error);
+      console.error('Error creating cargo:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao adicionar cargo",
+        title: "Erro ao criar cargo",
+        description: "Erro interno do servidor",
         variant: "destructive"
       });
+      return { error: 'Erro interno do servidor' };
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateCargo = async (updatedCargo: Cargo) => {
+  const updateCargo = async (cargoData: UpdateCargoData) => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('cargos')
         .update({
-          nome: updatedCargo.nome,
-          tipo: updatedCargo.tipo,
-          funcao: updatedCargo.funcao
+          nome: cargoData.nome,
+          tipo: cargoData.tipo,
+          funcao: cargoData.funcao,
+          updated_at: new Date().toISOString()
         })
-        .eq('id', updatedCargo.id)
+        .eq('id', cargoData.id)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating cargo:', error);
+        toast({
+          title: "Erro ao atualizar cargo",
+          description: error.message,
+          variant: "destructive"
+        });
+        return { error: error.message };
+      }
 
-      setCargos(prev => prev.map(cargo => 
-        cargo.id === updatedCargo.id ? data : cargo
-      ));
       toast({
-        title: "Sucesso",
-        description: "Cargo atualizado com sucesso"
+        title: "Cargo atualizado",
+        description: "Cargo atualizado com sucesso",
+        variant: "default"
       });
+
+      return { data };
     } catch (error) {
       console.error('Error updating cargo:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao atualizar cargo",
+        title: "Erro ao atualizar cargo",
+        description: "Erro interno do servidor",
         variant: "destructive"
       });
+      return { error: 'Erro interno do servidor' };
+    } finally {
+      setLoading(false);
     }
   };
 
   const deleteCargo = async (cargoId: string) => {
+    setLoading(true);
     try {
       const { error } = await supabase
         .from('cargos')
         .delete()
         .eq('id', cargoId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting cargo:', error);
+        toast({
+          title: "Erro ao deletar cargo",
+          description: error.message,
+          variant: "destructive"
+        });
+        return { error: error.message };
+      }
 
-      setCargos(prev => prev.filter(cargo => cargo.id !== cargoId));
       toast({
-        title: "Sucesso",
-        description: "Cargo excluído com sucesso"
+        title: "Cargo deletado",
+        description: "Cargo deletado com sucesso",
+        variant: "default"
       });
+
+      return { success: true };
     } catch (error) {
       console.error('Error deleting cargo:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao excluir cargo",
+        title: "Erro ao deletar cargo",
+        description: "Erro interno do servidor",
         variant: "destructive"
       });
+      return { error: 'Erro interno do servidor' };
+    } finally {
+      setLoading(false);
     }
   };
 
   return {
-    cargos,
-    loading,
-    addCargo,
+    listCargos,
+    createCargo,
     updateCargo,
     deleteCargo,
-    refetch: fetchCargos
+    loading
   };
 };
