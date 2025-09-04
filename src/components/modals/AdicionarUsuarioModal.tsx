@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
-import { useCargos } from "@/hooks/useCargos";
-import { useChannels } from "@/hooks/useChannels";
+import { useInstances } from "@/hooks/useInstances";
+import { useSystemUsers } from "@/hooks/useSystemUsers";
 
 
 interface AdicionarUsuarioModalProps {
@@ -12,13 +13,9 @@ interface AdicionarUsuarioModalProps {
   onClose: () => void;
   onAddUser: (user: {
     name: string;
-    email: string; // Agora obrigatório
-    profile: string;
-    status?: string;
-    avatar?: string;
-    cargo_id?: string;
-    senha: string; // Agora obrigatório
-    default_channel?: string; // Canal padrão opcional
+    email: string;
+    profile: "admin" | "user";
+    status: "active" | "inactive";
   }) => void;
 }
 
@@ -35,6 +32,12 @@ const mockRoles = [
   { value: "role3", label: "Gerente" },
 ];
 
+const mockChannels = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "chat", label: "Chat Web" },
+  { value: "email", label: "Email" },
+];
+
 const mockPhones = [
   { value: "phone1", label: "+55 11 99999-9999" },
   { value: "phone2", label: "+55 11 88888-8888" },
@@ -42,12 +45,12 @@ const mockPhones = [
 ];
 
 export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarUsuarioModalProps) {
-  const { listCargos } = useCargos();
-  const { channels, loading: channelsLoading } = useChannels();
-  const [cargos, setCargos] = useState<Array<{id: string; nome: string; tipo: string; funcao: string}>>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [defaultInstance, setDefaultInstance] = useState<string>("");
+  const { instances, isLoading: instancesLoading } = useInstances();
+  const { createUser, loading } = useSystemUsers();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -70,83 +73,45 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     defaultPhone: false,
   });
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Load cargos when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      const loadCargos = async () => {
-        const result = await listCargos();
-        if (result.data) {
-          setCargos(result.data);
-        }
-      };
-      loadCargos();
-    }
-  }, [isOpen, listCargos]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowRoleDropdown(false);
-      }
-    };
-
-    if (showRoleDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.email || !formData.password) {
+      return;
     }
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showRoleDropdown]);
-
-  // Reset dropdown when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setShowRoleDropdown(false);
-    }
-  }, [isOpen]);
-
-  // Form validation - campos obrigatórios: nome, email, senha
-  const isFormValid = formData.name.trim() !== "" && 
-                     formData.email.trim() !== "" && 
-                     formData.password.trim() !== "" &&
-                     formData.profile !== "";
-
-  const handleSubmit = () => {
-    if (!isFormValid) return;
-
-    const selectedCargo = selectedRoles.length > 0 
-      ? cargos.find(cargo => cargo.nome === selectedRoles[0])
-      : undefined;
-
-    onAddUser({
+    const result = await createUser({
       name: formData.name,
       email: formData.email,
       profile: formData.profile,
       status: "active",
-      cargo_id: selectedCargo?.id,
-      senha: formData.password,
-      default_channel: formData.defaultChannel || undefined
+      senha: formData.password
     });
-    
-    // Reset form
-    setFormData({
-      name: "",
-      email: "",
-      profile: "user",
-      password: "",
-      temporaryPassword: false,
-      queues: "",
-      roles: "",
-      defaultChannel: "",
-      defaultPhone: "",
-    });
-    setShowPassword(false);
-    setSelectedRoles([]);
-    onClose();
+
+    if (result.data) {
+      onAddUser({
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile as "admin" | "user",
+        status: "active",
+      });
+      
+      // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        profile: "user",
+        password: "",
+        temporaryPassword: false,
+        queues: "",
+        roles: "",
+        defaultChannel: "",
+        defaultPhone: "",
+      });
+      setShowPassword(false);
+      setSelectedRoles([]);
+      setSelectedInstances([]);
+      setDefaultInstance("");
+      onClose();
+    }
   };
 
   const handleCancel = () => {
@@ -163,6 +128,8 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     });
     setShowPassword(false);
     setSelectedRoles([]);
+    setSelectedInstances([]);
+    setDefaultInstance("");
     onClose();
   };
 
@@ -179,14 +146,34 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
     // TODO: Implementar vinculação com Google
   };
 
-  const addRole = (roleName: string) => {
-    if (!selectedRoles.includes(roleName)) {
-      setSelectedRoles([...selectedRoles, roleName]);
+  const addRole = (roleValue: string) => {
+    const role = mockRoles.find(r => r.value === roleValue);
+    if (role && !selectedRoles.some(r => r === role.label)) {
+      setSelectedRoles([...selectedRoles, role.label]);
     }
   };
 
   const removeRole = (roleName: string) => {
     setSelectedRoles(selectedRoles.filter(r => r !== roleName));
+  };
+
+  const handleInstanceToggle = (instanceId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedInstances([...selectedInstances, instanceId]);
+    } else {
+      setSelectedInstances(selectedInstances.filter(id => id !== instanceId));
+      // Remove as default if unchecked
+      if (defaultInstance === instanceId) {
+        setDefaultInstance("");
+      }
+    }
+  };
+
+  const handleDefaultInstanceChange = (instanceId: string) => {
+    // Only allow setting as default if it's selected
+    if (selectedInstances.includes(instanceId)) {
+      setDefaultInstance(instanceId);
+    }
   };
 
   return (
@@ -250,9 +237,9 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
-                >
-                  Nome *
-                </label>
+              >
+                Nome
+              </label>
             </div>
 
             {/* Email and Perfil side by side */}
@@ -274,7 +261,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                       : 'text-sm text-gray-500 top-3'
                   }`}
                 >
-                  Email *
+                  Email
                 </label>
               </div>
 
@@ -334,9 +321,9 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                     ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
-                >
-                  Senha *
-                </label>
+              >
+                Trocar Senha
+              </label>
             </div>
 
             {/* Temporary password switch */}
@@ -355,8 +342,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('queues', e.target.value)}
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -379,52 +365,32 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             </div>
 
             {/* Cargos with Adicionar button */}
-            <div className="relative">
+            <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-base font-normal text-gray-900">Cargos</p>
-                <button
+                <span className="text-sm text-gray-700">Cargos</span>
+                <Button
                   type="button"
-                  onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                  className="inline-flex items-center justify-center p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    // Add first available role for demonstration
+                    const availableRole = mockRoles.find(role => 
+                      !selectedRoles.includes(role.label)
+                    );
+                    if (availableRole) {
+                      addRole(availableRole.value);
+                    }
+                  }}
+                  className="flex items-center gap-1 text-gray-700 hover:bg-gray-100 p-1 h-auto"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    <Plus className="h-4 w-4 text-gray-600" />
-                    <span className="text-sm text-gray-600">Adicionar</span>
-                  </span>
-                </button>
+                  <Plus className="h-4 w-4" />
+                  <span className="text-xs">Adicionar</span>
+                </Button>
               </div>
-
-              {/* Dropdown with role options */}
-              {showRoleDropdown && (
-                <div ref={dropdownRef} className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
-                  <div className="py-1">
-                    {cargos
-                      .filter(cargo => !selectedRoles.includes(cargo.nome))
-                      .map((cargo) => (
-                        <button
-                          key={cargo.id}
-                          type="button"
-                          onClick={() => {
-                            addRole(cargo.nome);
-                            setShowRoleDropdown(false);
-                          }}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                        >
-                          {cargo.nome}
-                        </button>
-                      ))}
-                    {cargos.filter(cargo => !selectedRoles.includes(cargo.nome)).length === 0 && (
-                      <div className="px-4 py-2 text-sm text-gray-500">
-                        Todos os cargos já foram adicionados
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
               
               {/* Selected roles as pill tags */}
               {selectedRoles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex flex-wrap gap-2">
                   {selectedRoles.map((role, index) => (
                     <div 
                       key={index} 
@@ -448,21 +414,15 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-                disabled={channelsLoading || channels.length === 0}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
-                 {channels.map((channel) => (
-                   <option key={channel.id} value={channel.id}>
-                     {channel.name}{channel.number ? ` (${channel.number})` : ''}
-                   </option>
-                 ))}
-                {channels.length === 0 && !channelsLoading && (
-                  <option value="" disabled>
-                    Nenhum canal disponível
+                {mockChannels.map((channel) => (
+                  <option key={channel.value} value={channel.value}>
+                    {channel.label}
                   </option>
-                )}
+                ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               <label
@@ -483,8 +443,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onChange={(e) => updateFormData('defaultPhone', e.target.value)}
                 onFocus={() => updateFocus('defaultPhone', true)}
                 onBlur={() => updateFocus('defaultPhone', false)}
-                disabled={true}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 opacity-50 cursor-not-allowed"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -504,6 +463,67 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
               >
                 Telefone padrão
               </label>
+            </div>
+
+            {/* Instâncias/Canais de Atendimento */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-700 font-medium">Instâncias (Canais)</span>
+                <span className="text-xs text-gray-500">
+                  {selectedInstances.length} selecionada(s)
+                </span>
+              </div>
+              
+              {instancesLoading ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Carregando instâncias...
+                </div>
+              ) : instances.length === 0 ? (
+                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
+                  Nenhuma instância encontrada
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
+                  {instances.map((instance) => (
+                    <div key={instance.instance} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`instance-${instance.instance}`}
+                          checked={selectedInstances.includes(instance.instance)}
+                          onCheckedChange={(checked) => 
+                            handleInstanceToggle(instance.instance, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`instance-${instance.instance}`}
+                          className="text-sm text-gray-700 cursor-pointer flex-1"
+                        >
+                          {instance.displayName || instance.instance}
+                        </label>
+                      </div>
+                      
+                      {selectedInstances.includes(instance.instance) && (
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="radio"
+                            id={`default-${instance.instance}`}
+                            name="defaultInstance"
+                            checked={defaultInstance === instance.instance}
+                            onChange={() => handleDefaultInstanceChange(instance.instance)}
+                            className="h-3 w-3"
+                          />
+                          <label 
+                            htmlFor={`default-${instance.instance}`}
+                            className="text-xs text-gray-500 cursor-pointer"
+                          >
+                            Padrão
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Google Button */}
@@ -538,10 +558,10 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
             <Button
               type="submit"
               onClick={handleSubmit}
-              disabled={!isFormValid}
-              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || !formData.name || !formData.email || !formData.password}
+              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50"
             >
-              Adicionar
+              {loading ? "Salvando..." : "Adicionar"}
             </Button>
           </div>
         </div>

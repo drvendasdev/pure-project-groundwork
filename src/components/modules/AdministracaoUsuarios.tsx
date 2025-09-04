@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Search, Edit, Pause, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,62 +9,57 @@ import { EditarUsuarioModal } from "@/components/modals/EditarUsuarioModal";
 import { PausarUsuarioModal } from "@/components/modals/PausarUsuarioModal";
 import { DeletarUsuarioModal } from "@/components/modals/DeletarUsuarioModal";
 import { AdministracaoCargos } from "./AdministracaoCargos";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
-import { useCargos } from "@/hooks/useCargos";
-import { useToast } from "@/hooks/use-toast";
-
-// Usando o tipo da hook useSystemUsers
-interface SystemUser {
+interface User {
   id: string;
   name: string;
   email: string;
-  profile: string;
-  status: string;
+  profile: "admin" | "user";
+  status: "active" | "inactive";
   avatar?: string;
-  cargo_id?: string;
-  default_channel?: string;
-  created_at: string;
-  updated_at: string;
 }
 
+// Mock data baseado nas imagens
+const mockUsers: User[] = [{
+  id: "1",
+  name: "Sergio Ricardo Rocha",
+  email: "sergioricardo@drvendas.com.br",
+  profile: "admin",
+  status: "active"
+}, {
+  id: "2",
+  name: "Luciano",
+  email: "luciano@drvendastreinamentos.com.br",
+  profile: "admin",
+  status: "active"
+}, {
+  id: "3",
+  name: "Kamila Oliveira",
+  email: "kamila@drvendas.com.br",
+  profile: "admin",
+  status: "active"
+}, {
+  id: "4",
+  name: "CDE - Centro de Desenvolvimento Empresarial",
+  email: "cde@drvendas.com.br",
+  profile: "admin",
+  status: "active"
+}, {
+  id: "5",
+  name: "Dr Vendas",
+  email: "ferramentas@drvendas.com.br",
+  profile: "admin",
+  status: "active"
+}];
 export function AdministracaoUsuarios() {
-  const [users, setUsers] = useState<SystemUser[]>([]);
-  const [cargos, setCargos] = useState<Array<{id: string; nome: string; tipo: string}>>([]);
+  const [users, setUsers] = useState<User[]>(mockUsers);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<SystemUser | undefined>(undefined);
+  const [selectedUser, setSelectedUser] = useState<User | undefined>(undefined);
   const [showCargos, setShowCargos] = useState(false);
-  
-  const { listUsers, createUser, updateUser, deleteUser, loading } = useSystemUsers();
-  const { listCargos } = useCargos();
-  const { toast } = useToast();
-
-  // Carregar usuários e cargos ao montar o componente
-  useEffect(() => {
-    const loadData = async () => {
-      const [usersResult, cargosResult] = await Promise.all([
-        listUsers(),
-        listCargos()
-      ]);
-      
-      if (usersResult.data) {
-        setUsers(usersResult.data);
-      }
-      if (cargosResult.data) {
-        setCargos(cargosResult.data);
-      }
-    };
-    loadData();
-  }, []);
-
-
-  const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()));
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -95,116 +90,25 @@ export function AdministracaoUsuarios() {
       setIsDeleteModalOpen(true);
     }
   };
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = () => {
     if (selectedUser) {
-      const result = await deleteUser(selectedUser.id);
-      if (!result.error) {
-        // Recarregar lista de usuários
-        const usersResult = await listUsers();
-        if (usersResult.data) {
-          setUsers(usersResult.data);
-        }
-      }
+      setUsers(users.filter(user => user.id !== selectedUser.id));
+      console.log("Usuário excluído:", selectedUser.id);
     }
     setIsDeleteModalOpen(false);
     setSelectedUser(undefined);
   };
-
-  const handleAddUser = async (newUserData: {
-    name: string;
-    email: string;
-    profile: string;
-    status?: string;
-    avatar?: string;
-    cargo_id?: string;
-    senha: string;
-    default_channel?: string;
-  }) => {
-    try {
-      const result = await createUser({
-        name: newUserData.name,
-        email: newUserData.email,
-        profile: newUserData.profile,
-        status: newUserData.status || 'active',
-        senha: newUserData.senha,
-        cargo_id: newUserData.cargo_id || null,
-        default_channel: newUserData.default_channel || null
-      });
-      
-      if (!result.error && result.data) {
-        // Add the new user to local state instead of reloading all users
-        const newUser: SystemUser = {
-          id: result.data.id || crypto.randomUUID(),
-          name: newUserData.name,
-          email: newUserData.email,
-          profile: newUserData.profile,
-          status: newUserData.status || 'active',
-          cargo_id: newUserData.cargo_id,
-          default_channel: newUserData.default_channel,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        
-        setUsers(prev => [...prev, newUser]);
-        setIsAddModalOpen(false);
-        
-        toast({
-          title: "Usuário criado com sucesso!",
-          description: `O usuário ${newUserData.name} foi adicionado ao sistema.`,
-        });
-      } else {
-        console.error('Error creating user:', result.error);
-        toast({
-          variant: "destructive",
-          title: "Erro ao criar usuário",
-          description: "Ocorreu um erro ao tentar criar o usuário. Tente novamente.",
-        });
-      }
-    } catch (error) {
-      console.error('Error creating user:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao criar usuário", 
-        description: "Ocorreu um erro ao tentar criar o usuário. Tente novamente.",
-      });
-    }
+  const handleAddUser = (newUser: Omit<User, "id">) => {
+    const user: User = {
+      id: Date.now().toString(),
+      ...newUser
+    };
+    setUsers([...users, user]);
   };
-
-  // Função para adaptar SystemUser para o formato esperado pelo modal
-  const adaptUserForModal = (user: SystemUser) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email || '',
-    profile: (user.profile === 'admin' || user.profile === 'user') ? user.profile as "admin" | "user" : "user" as const,
-    status: (user.status === 'active' || user.status === 'inactive') ? user.status as "active" | "inactive" : "active" as const,
-    cargo_id: user.cargo_id, // Incluir o cargo_id
-    default_channel: user.default_channel, // Incluir o canal padrão
-  });
-
-  const handleUpdateUser = async (updatedUserData: {
-    id: string;
-    name: string;
-    email: string;
-    profile: "admin" | "user";
-    status: "active" | "inactive";
-  }) => {
-    const result = await updateUser({
-      id: updatedUserData.id,
-      name: updatedUserData.name,
-      email: updatedUserData.email,
-      profile: updatedUserData.profile,
-      status: updatedUserData.status
-    });
-    
-    if (!result.error) {
-      // Recarregar lista de usuários
-      const usersResult = await listUsers();
-      if (usersResult.data) {
-        setUsers(usersResult.data);
-      }
-      setIsEditModalOpen(false);
-      setSelectedUser(undefined);
-    }
+  const handleUpdateUser = (updatedUser: User) => {
+    setUsers(users.map(user => user.id === updatedUser.id ? updatedUser : user));
+    setIsEditModalOpen(false);
+    setSelectedUser(undefined);
   };
   const handleGerenciarCargos = () => {
     setShowCargos(true);
@@ -253,7 +157,7 @@ export function AdministracaoUsuarios() {
             </TableRow>
           </TableHeader>
           <TableBody>
-             {filteredUsers.map(user => <TableRow key={user.id} className="border-b border-border hover:bg-muted/50">
+            {filteredUsers.map(user => <TableRow key={user.id} className="border-b border-border hover:bg-muted/50">
                 <TableCell className="text-center">
                   <span className="text-foreground font-medium">
                     {user.name}
@@ -268,15 +172,8 @@ export function AdministracaoUsuarios() {
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Badge 
-                    variant="secondary" 
-                    className={`rounded-full px-3 py-1 ${
-                      user.status === 'active' 
-                        ? 'bg-brand-yellow text-black hover:bg-brand-yellow-hover' 
-                        : 'bg-gray-200 text-gray-700'
-                    }`}
-                  >
-                    {user.status === 'active' ? 'Ativo' : 'Inativo'}
+                  <Badge variant="secondary" className="bg-brand-yellow text-black hover:bg-brand-yellow-hover rounded-full px-3 py-1">
+                    Ativo
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -305,15 +202,10 @@ export function AdministracaoUsuarios() {
       <AdicionarUsuarioModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAddUser={handleAddUser} />
 
       {/* Modal de editar usuário */}
-      <EditarUsuarioModal 
-        isOpen={isEditModalOpen} 
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setSelectedUser(undefined);
-        }} 
-        onEditUser={handleUpdateUser} 
-        user={selectedUser ? adaptUserForModal(selectedUser) : undefined} 
-      />
+      <EditarUsuarioModal isOpen={isEditModalOpen} onClose={() => {
+      setIsEditModalOpen(false);
+      setSelectedUser(undefined);
+    }} onEditUser={handleUpdateUser} user={selectedUser} />
 
       {/* Modal de pausar usuário */}
       <PausarUsuarioModal isOpen={isPauseModalOpen} onClose={() => {
