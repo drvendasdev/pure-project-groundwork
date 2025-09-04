@@ -154,14 +154,15 @@ serve(async (req) => {
           );
         }
 
-        // Get default instance
+        // Get organization settings including connection limit
         const { data: orgSettings } = await supabaseClient
           .from('org_messaging_settings')
-          .select('default_instance')
+          .select('default_instance, connection_limit')
           .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
           .single();
 
         const defaultInstance = orgSettings?.default_instance;
+        const connectionLimit = orgSettings?.connection_limit || 1;
 
         // Format connections for frontend
         const connections = channels?.map(channel => ({
@@ -174,7 +175,7 @@ serve(async (req) => {
         })) || [];
 
         return new Response(
-          JSON.stringify({ success: true, connections }),
+          JSON.stringify({ success: true, connections, connectionLimit }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -189,7 +190,15 @@ serve(async (req) => {
 
         const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
 
-        // Check quota limit (1 connection per workspace)
+        // Check quota - get limit from org settings
+        const { data: orgSettings, error: settingsError } = await supabaseClient
+          .from('org_messaging_settings')
+          .select('connection_limit')
+          .eq('org_id', finalOrgId)
+          .single();
+
+        const connectionLimit = orgSettings?.connection_limit || 1;
+
         const { data: existingConnections, error: countError } = await supabaseClient
           .from('channels')
           .select('id')
@@ -203,11 +212,11 @@ serve(async (req) => {
           );
         }
 
-        if (existingConnections && existingConnections.length >= 1) {
+        if (existingConnections && existingConnections.length >= connectionLimit) {
           return new Response(
             JSON.stringify({ 
               success: false, 
-              error: 'Limite de conexões atingido (1/1). Solicite liberação de conexão extra.',
+              error: `Limite de conexões atingido (${existingConnections.length}/${connectionLimit}). Configure um limite maior nas configurações.`,
               quota_exceeded: true 
             }),
             { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -360,37 +369,73 @@ serve(async (req) => {
           );
         }
 
-        // Remove channel
-        const { error: channelError } = await supabaseClient
-          .from('channels')
-          .delete()
-          .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
-          .eq('instance', instanceName);
+        const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
 
-        if (channelError) {
-          console.error('Error deleting channel:', channelError);
+        try {
+          // Get the channel to delete
+          const { data: channelToDelete, error: channelFetchError } = await supabaseClient
+            .from('channels')
+            .select('id')
+            .eq('instance', instanceName)
+            .eq('org_id', finalOrgId)
+            .single();
+
+          if (channelFetchError) {
+            console.error('Error fetching channel for deletion:', channelFetchError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Canal não encontrado' }),
+              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // First, update any system_users that have this channel as default
+          const { error: updateUsersError } = await supabaseClient
+            .from('system_users')
+            .update({ default_channel: null })
+            .eq('default_channel', channelToDelete.id);
+
+          if (updateUsersError) {
+            console.error('Error updating system_users default_channel:', updateUsersError);
+          }
+
+          // Remove token first
+          const { error: tokenError } = await supabaseClient
+            .from('evolution_instance_tokens')
+            .delete()
+            .eq('org_id', finalOrgId)
+            .eq('instance_name', instanceName);
+
+          if (tokenError) {
+            console.error('Error deleting token:', tokenError);
+            // Don't fail the request if token deletion fails
+          }
+
+          // Remove channel
+          const { error: channelError } = await supabaseClient
+            .from('channels')
+            .delete()
+            .eq('org_id', finalOrgId)
+            .eq('instance', instanceName);
+
+          if (channelError) {
+            console.error('Error deleting channel:', channelError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao remover canal' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
           return new Response(
-            JSON.stringify({ success: false, error: 'Erro ao remover canal' }),
+            JSON.stringify({ success: true, message: 'Conexão removida com sucesso' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error) {
+          console.error('Error deleting connection:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao remover conexão' }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
-        // Remove token
-        const { error: tokenError } = await supabaseClient
-          .from('evolution_instance_tokens')
-          .delete()
-          .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
-          .eq('instance_name', instanceName);
-
-        if (tokenError) {
-          console.error('Error deleting token:', tokenError);
-          // Don't fail the request if token deletion fails
-        }
-
-        return new Response(
-          JSON.stringify({ success: true, message: 'Conexão removida com sucesso' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
       }
 
       default:

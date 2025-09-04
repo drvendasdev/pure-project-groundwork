@@ -22,24 +22,22 @@ interface Connection {
 export default function ConexoesNova() {
   const { hasRole } = useAuth();
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [currentQrConnection, setCurrentQrConnection] = useState<Connection | null>(null);
-  const [loading, setLoading] = useState(false);
   const [provisionLoading, setProvisionLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
-  const [formData, setFormData] = useState({ nome: '', token: '', evolutionUrl: '' });
   const [provisionData, setProvisionData] = useState({ 
     instanceName: '', 
     messageRecovery: 'none' 
   });
   const [defaultOrgId, setDefaultOrgId] = useState<string>('');
+  const [connectionLimit, setConnectionLimit] = useState(1);
   const pollRefs = useRef<Record<string, any>>({});
 
   // Check if user can create connections
   const canCreateConnections = hasRole(['master', 'admin']);
-  const hasReachedLimit = connections.length >= 1;
+  const hasReachedLimit = connections.length >= connectionLimit;
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -134,6 +132,9 @@ export default function ConexoesNova() {
 
       if (data?.success && data.connections) {
         setConnections(data.connections);
+        if (data.connectionLimit !== undefined) {
+          setConnectionLimit(data.connectionLimit);
+        }
       }
     } catch (error) {
       console.error('Error loading connections:', error);
@@ -145,43 +146,6 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleAddConexao = async () => {
-    if (!formData.nome.trim() || !formData.token.trim() || !formData.evolutionUrl.trim()) return;
-
-    try {
-      setLoading(true);
-      
-      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'add_reference',
-          orgId: defaultOrgId,
-          instanceName: formData.nome.trim(),
-          instanceToken: formData.token.trim(),
-          evolutionUrl: formData.evolutionUrl.trim()
-        }
-      });
-
-      if (!data?.success) {
-        throw new Error(data?.error || 'Erro ao adicionar conexão');
-      }
-
-      setFormData({ nome: '', token: '', evolutionUrl: '' });
-      setDialogOpen(false);
-      toast({ title: 'Conexão adicionada com sucesso!' });
-      
-      // Reload connections
-      loadConnections();
-    } catch (error: any) {
-      console.error('Erro ao adicionar conexão:', error);
-      toast({ 
-        title: 'Erro ao adicionar conexão',
-        description: error.message,
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleProvisionConnection = async () => {
     if (!provisionData.instanceName.trim()) return;
@@ -256,12 +220,6 @@ export default function ConexoesNova() {
     }
   };
 
-  const handleRequestExtraConnection = () => {
-    toast({
-      title: 'Solicitação enviada',
-      description: 'Sua solicitação de conexão extra foi registrada. Nossa equipe entrará em contato em breve.',
-    });
-  };
 
   const handleGetQr = async (connection: Connection, index: number) => {
     // Clear existing polling for this instance
@@ -576,87 +534,13 @@ export default function ConexoesNova() {
             </DialogContent>
           </Dialog>
 
-          {/* Quota limit message and request button */}
+          {/* Quota limit message */}
           {canCreateConnections && hasReachedLimit && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <AlertCircle className="h-4 w-4" />
-              <span>Limite atingido (1/1)</span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleRequestExtraConnection}
-              >
-                Solicitar liberação
-              </Button>
+              <span>Limite atingido ({connections.length}/{connectionLimit})</span>
             </div>
           )}
-
-          {/* Legacy add connection button for existing instances */}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Plus className="mr-2 h-4 w-4" />
-                Vincular Existente
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Adicionar Conexão WhatsApp</DialogTitle>
-              <DialogDescription>
-                Adicione uma instância existente do Evolution API
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome da Instância</Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
-                  placeholder="Ex: whatsapp-vendas"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="token">Token da Instância</Label>
-                <Input
-                  id="token"
-                  value={formData.token}
-                  onChange={(e) => setFormData(prev => ({ ...prev, token: e.target.value }))}
-                  placeholder="Token de autenticação"
-                  type="password"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="evolutionUrl">URL da Evolution API</Label>
-                <Input
-                  id="evolutionUrl"
-                  value={formData.evolutionUrl}
-                  onChange={(e) => setFormData(prev => ({ ...prev, evolutionUrl: e.target.value }))}
-                  placeholder="https://sua-evolution-api.com"
-                  required
-                />
-                <p className="text-sm text-muted-foreground">
-                  URL da sua instância da Evolution API
-                </p>
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setDialogOpen(false)}
-                  disabled={loading}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={handleAddConexao}
-                  disabled={!formData.nome || !formData.token || !formData.evolutionUrl || loading}
-                >
-                  {loading ? 'Adicionando...' : 'Adicionar'}
-                </Button>
-              </div>
-            </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 

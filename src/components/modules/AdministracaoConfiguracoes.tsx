@@ -125,6 +125,26 @@ export function AdministracaoConfiguracoes() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Limite de Conexões */}
+              <div className="space-y-2">
+                <Label htmlFor="connection-limit" className="text-xs font-medium text-foreground">
+                  Limite de Conexões WhatsApp
+                </Label>
+                <Select defaultValue="1">
+                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
+                    <SelectValue placeholder="Selecione o limite" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 conexão</SelectItem>
+                    <SelectItem value="2">2 conexões</SelectItem>
+                    <SelectItem value="3">3 conexões</SelectItem>
+                    <SelectItem value="5">5 conexões</SelectItem>
+                    <SelectItem value="10">10 conexões</SelectItem>
+                    <SelectItem value="unlimited">Ilimitado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </TabsContent>
 

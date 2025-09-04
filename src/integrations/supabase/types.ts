@@ -773,6 +773,7 @@ export type Database = {
       }
       org_messaging_settings: {
         Row: {
+          connection_limit: number
           created_at: string
           default_instance: string
           id: string
@@ -780,6 +781,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          connection_limit?: number
           created_at?: string
           default_instance: string
           id?: string
@@ -787,6 +789,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          connection_limit?: number
           created_at?: string
           default_instance?: string
           id?: string
@@ -1094,6 +1097,7 @@ export type Database = {
         Row: {
           avatar: string | null
           cargo_id: string | null
+          cargo_ids: string[] | null
           created_at: string | null
           default_channel: string | null
           email: string | null
@@ -1102,30 +1106,6 @@ export type Database = {
           profile: string | null
           status: string | null
           updated_at: string | null
-        }
-        Insert: {
-          avatar?: string | null
-          cargo_id?: string | null
-          created_at?: string | null
-          default_channel?: string | null
-          email?: string | null
-          id?: string | null
-          name?: string | null
-          profile?: string | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          avatar?: string | null
-          cargo_id?: string | null
-          created_at?: string | null
-          default_channel?: string | null
-          email?: string | null
-          id?: string | null
-          name?: string | null
-          profile?: string | null
-          status?: string | null
-          updated_at?: string | null
         }
         Relationships: [
           {
