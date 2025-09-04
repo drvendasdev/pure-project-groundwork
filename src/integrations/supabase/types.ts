@@ -1046,6 +1046,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      sync_user_roles: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       verify_password: {
         Args: { hash: string; password: string }
         Returns: boolean
