@@ -1,8 +1,84 @@
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export function AdministracaoConfiguracoes() {
+  const [connectionLimit, setConnectionLimit] = useState("1");
+  const [defaultOrgId, setDefaultOrgId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Load default org ID and settings
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Get the first available org as default
+        const { data: orgData } = await supabase
+          .from('orgs')
+          .select('id')
+          .limit(1)
+          .maybeSingle();
+        
+        const orgId = orgData?.id || '00000000-0000-0000-0000-000000000000';
+        setDefaultOrgId(orgId);
+
+        // Get current settings
+        const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+          body: {
+            action: 'get_settings',
+            orgId
+          }
+        });
+
+        if (data?.success && data.settings) {
+          setConnectionLimit(data.settings.connection_limit.toString());
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    };
+    
+    loadData();
+  }, []);
+
+  const handleConnectionLimitChange = async (value: string) => {
+    if (!defaultOrgId) return;
+
+    setLoading(true);
+    try {
+      const numericValue = value === "unlimited" ? 999 : parseInt(value);
+      
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'set_connection_limit',
+          orgId: defaultOrgId,
+          connectionLimit: numericValue
+        }
+      });
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao atualizar limite');
+      }
+
+      setConnectionLimit(value);
+      toast({
+        title: 'Configuração atualizada',
+        description: 'Limite de conexões atualizado com sucesso'
+      });
+    } catch (error: any) {
+      console.error('Error updating connection limit:', error);
+      toast({
+        title: 'Erro ao atualizar',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -131,7 +207,11 @@ export function AdministracaoConfiguracoes() {
                 <Label htmlFor="connection-limit" className="text-xs font-medium text-foreground">
                   Limite de Conexões WhatsApp
                 </Label>
-                <Select defaultValue="1">
+                <Select 
+                  value={connectionLimit} 
+                  onValueChange={handleConnectionLimitChange}
+                  disabled={loading}
+                >
                   <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
                     <SelectValue placeholder="Selecione o limite" />
                   </SelectTrigger>

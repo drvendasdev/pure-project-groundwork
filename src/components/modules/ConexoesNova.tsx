@@ -223,9 +223,9 @@ export default function ConexoesNova() {
 
   const handleGetQr = async (connection: Connection, index: number) => {
     // Clear existing polling for this instance
-    if (pollRefs.current[connection.name]) {
-      clearInterval(pollRefs.current[connection.name]);
-      delete pollRefs.current[connection.name];
+    if (pollRefs.current[connection.instance]) {
+      clearInterval(pollRefs.current[connection.instance]);
+      delete pollRefs.current[connection.instance];
     }
 
     try {
@@ -236,7 +236,7 @@ export default function ConexoesNova() {
       const qrResponse = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'get_qr',
-          instanceName: connection.name,
+          instanceName: connection.instance,
           orgId: defaultOrgId
         }
       });
@@ -260,7 +260,7 @@ export default function ConexoesNova() {
           const statusResponse = await supabase.functions.invoke('evolution-instance-actions', {
             body: {
               action: 'status',
-              instanceName: connection.name,
+              instanceName: connection.instance,
               orgId: defaultOrgId
             }
           });
@@ -269,8 +269,8 @@ export default function ConexoesNova() {
           
           if (state === 'open') {
             // Connected! Clear QR and update status
-            clearInterval(pollRefs.current[connection.name]);
-            delete pollRefs.current[connection.name];
+            clearInterval(pollRefs.current[connection.instance]);
+            delete pollRefs.current[connection.instance];
             
             setConnections(current => 
               current.map((c, i) => 
@@ -287,13 +287,13 @@ export default function ConexoesNova() {
         }
       }, 4000); // Poll every 4 seconds
 
-      pollRefs.current[connection.name] = pollInterval;
+      pollRefs.current[connection.instance] = pollInterval;
 
       // Stop polling after 2 minutes
       setTimeout(() => {
-        if (pollRefs.current[connection.name]) {
-          clearInterval(pollRefs.current[connection.name]);
-          delete pollRefs.current[connection.name];
+        if (pollRefs.current[connection.instance]) {
+          clearInterval(pollRefs.current[connection.instance]);
+          delete pollRefs.current[connection.instance];
           toast({ title: 'Tempo limite para conexão expirado', description: 'Tente gerar um novo QR code' });
         }
       }, 120000);
@@ -317,7 +317,7 @@ export default function ConexoesNova() {
       const { data } = await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'status',
-          instanceName: connection.name,
+          instanceName: connection.instance,
           orgId: defaultOrgId
         }
       });
@@ -340,7 +340,7 @@ export default function ConexoesNova() {
       await supabase.functions.invoke('evolution-instance-actions', {
         body: {
           action: 'disconnect',
-          instanceName: connection.name,
+          instanceName: connection.instance,
           orgId: defaultOrgId
         }
       });
@@ -375,7 +375,7 @@ export default function ConexoesNova() {
       const { error } = await supabase.functions.invoke('set-default-instance', {
         body: {
           orgId: defaultOrgId,
-          instance: connection.name
+          instance: connection.instance
         }
       });
 
@@ -402,9 +402,9 @@ export default function ConexoesNova() {
 
   const handleDelete = async (connection: Connection, index: number) => {
     // Clear polling if exists
-    if (pollRefs.current[connection.name]) {
-      clearInterval(pollRefs.current[connection.name]);
-      delete pollRefs.current[connection.name];
+    if (pollRefs.current[connection.instance]) {
+      clearInterval(pollRefs.current[connection.instance]);
+      delete pollRefs.current[connection.instance];
     }
     
     try {
@@ -412,7 +412,7 @@ export default function ConexoesNova() {
         body: {
           action: 'delete_reference',
           orgId: defaultOrgId,
-          instanceName: connection.name
+          instanceName: connection.instance
         }
       });
 
@@ -451,6 +451,35 @@ export default function ConexoesNova() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!window.confirm('Tem certeza que deseja remover todas as conexões? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    try {
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'delete_all',
+          orgId: defaultOrgId
+        }
+      });
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao remover todas as conexões');
+      }
+
+      setConnections([]);
+      toast({ title: 'Todas as conexões foram removidas com sucesso!' });
+    } catch (error: any) {
+      console.error('Erro ao remover todas as conexões:', error);
+      toast({
+        title: 'Erro ao remover conexões',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -462,6 +491,16 @@ export default function ConexoesNova() {
         </div>
         
         <div className="flex gap-2">
+          {connections.length > 0 && (
+            <Button 
+              variant="destructive"
+              onClick={handleDeleteAll}
+              disabled={!canCreateConnections}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Remover todas as conexões
+            </Button>
+          )}
           <Dialog open={provisionModalOpen} onOpenChange={setProvisionModalOpen}>
             <DialogTrigger asChild>
               <Button 

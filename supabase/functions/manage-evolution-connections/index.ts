@@ -239,29 +239,60 @@ serve(async (req) => {
         const instanceToken = crypto.randomUUID();
 
         try {
-          // Create instance in Evolution API
-          const createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': evolutionApiKey,
-            },
-            body: JSON.stringify({
-              instanceName: instanceName,
-              token: instanceToken,
-              qrcode: true,
-              webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
-              webhook_by_events: false,
-              events: [
-                'APPLICATION_STARTUP',
-                'QRCODE_UPDATED',
-                'CONNECTION_UPDATE',
-                'MESSAGES_UPSERT',
-                'MESSAGES_UPDATE',
-                'SEND_MESSAGE'
-              ]
-            })
-          });
+          // Try to create instance in Evolution API with different authentication methods
+          let createInstanceResponse;
+          
+          // First try with apikey header
+          try {
+            createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': evolutionApiKey,
+              },
+              body: JSON.stringify({
+                instanceName: instanceName,
+                token: instanceToken,
+                qrcode: true,
+                webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
+                webhook_by_events: false,
+                events: [
+                  'APPLICATION_STARTUP',
+                  'QRCODE_UPDATED',
+                  'CONNECTION_UPDATE',
+                  'MESSAGES_UPSERT',
+                  'MESSAGES_UPDATE',
+                  'SEND_MESSAGE'
+                ]
+              })
+            });
+          } catch (error) {
+            console.warn('Failed with apikey, trying Authorization header:', error);
+            
+            // If apikey fails, try with Authorization Bearer header
+            createInstanceResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${evolutionApiKey}`,
+              },
+              body: JSON.stringify({
+                instanceName: instanceName,
+                token: instanceToken,
+                qrcode: true,
+                webhook: `${Deno.env.get('PUBLIC_APP_URL')}/functions/v1/evolution-webhook`,
+                webhook_by_events: false,
+                events: [
+                  'APPLICATION_STARTUP',
+                  'QRCODE_UPDATED',
+                  'CONNECTION_UPDATE',
+                  'MESSAGES_UPSERT',
+                  'MESSAGES_UPDATE',
+                  'SEND_MESSAGE'
+                ]
+              })
+            });
+          }
 
           if (!createInstanceResponse.ok) {
             const errorText = await createInstanceResponse.text();
@@ -433,6 +464,159 @@ serve(async (req) => {
           console.error('Error deleting connection:', error);
           return new Response(
             JSON.stringify({ success: false, error: 'Erro ao remover conexão' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'delete_all': {
+        const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
+
+        try {
+          // Get all channels for this org
+          const { data: channels, error: channelsError } = await supabaseClient
+            .from('channels')
+            .select('id, instance')
+            .eq('org_id', finalOrgId);
+
+          if (channelsError) {
+            console.error('Error fetching channels:', channelsError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao buscar conexões' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          if (!channels || channels.length === 0) {
+            return new Response(
+              JSON.stringify({ success: true, message: 'Nenhuma conexão encontrada para remover' }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Update system_users to remove deleted channels as default
+          const channelIds = channels.map(c => c.id);
+          const { error: updateUsersError } = await supabaseClient
+            .from('system_users')
+            .update({ default_channel: null })
+            .in('default_channel', channelIds);
+
+          if (updateUsersError) {
+            console.error('Error updating system_users default_channel:', updateUsersError);
+          }
+
+          // Remove all tokens for this org
+          const { error: tokenError } = await supabaseClient
+            .from('evolution_instance_tokens')
+            .delete()
+            .eq('org_id', finalOrgId);
+
+          if (tokenError) {
+            console.error('Error deleting tokens:', tokenError);
+            // Don't fail the request if token deletion fails
+          }
+
+          // Remove all channels for this org
+          const { error: channelError } = await supabaseClient
+            .from('channels')
+            .delete()
+            .eq('org_id', finalOrgId);
+
+          if (channelError) {
+            console.error('Error deleting channels:', channelError);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao remover canais' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message: `${channels.length} conexões removidas com sucesso` }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error) {
+          console.error('Error deleting all connections:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao remover todas as conexões' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'get_settings': {
+        const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
+
+        try {
+          const { data: settings, error } = await supabaseClient
+            .from('org_messaging_settings')
+            .select('connection_limit')
+            .eq('org_id', finalOrgId)
+            .single();
+
+          if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+            console.error('Error fetching settings:', error);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao buscar configurações' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              settings: {
+                connection_limit: settings?.connection_limit || 1
+              }
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error) {
+          console.error('Error getting settings:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao obter configurações' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'set_connection_limit': {
+        const { connectionLimit } = await req.json();
+        const finalOrgId = orgId || '00000000-0000-0000-0000-000000000000';
+
+        if (typeof connectionLimit !== 'number' || connectionLimit < 1) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Limite de conexão deve ser um número maior que 0' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const { error } = await supabaseClient
+            .from('org_messaging_settings')
+            .upsert({
+              org_id: finalOrgId,
+              connection_limit: connectionLimit,
+              default_instance: '' // required field
+            }, {
+              onConflict: 'org_id'
+            });
+
+          if (error) {
+            console.error('Error updating connection limit:', error);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao atualizar limite de conexão' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message: 'Limite de conexão atualizado com sucesso' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (error) {
+          console.error('Error setting connection limit:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Erro ao definir limite de conexão' }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
