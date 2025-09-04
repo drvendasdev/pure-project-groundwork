@@ -599,7 +599,7 @@ export default function ConexoesNova() {
                 Vincular Existente
               </Button>
             </DialogTrigger>
-          <DialogContent>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>Adicionar Conexão WhatsApp</DialogTitle>
               <DialogDescription>
