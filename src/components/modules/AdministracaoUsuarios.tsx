@@ -72,19 +72,33 @@ export function AdministracaoUsuarios() {
     setIsDeleteModalOpen(false);
     setSelectedUser(undefined);
   };
-  const handleAddUser = async (newUser: Omit<SystemUser, "id" | "created_at" | "updated_at" | "cargo_id">) => {
+
+  const handleAddUser = async (userData: {
+    name: string;
+    email: string;
+    profile: string;
+    status: string;
+    senha: string;
+    default_channel: string | null;
+    cargo_ids: string[];
+  }) => {
     const result = await createUser({
-      name: newUser.name,
-      email: newUser.email,
-      profile: newUser.profile,
-      status: newUser.status,
-      senha: "123456" // Password default
+      name: userData.name,
+      email: userData.email,
+      profile: userData.profile,
+      status: userData.status,
+      senha: userData.senha,
+      default_channel: userData.default_channel,
+      cargo_ids: userData.cargo_ids
     });
+    
+
     if (result.data) {
       await refreshUsers();
     }
   };
   const handleUpdateUser = async (updatedUser: SystemUser) => {
+
     const result = await updateUser({
       id: updatedUser.id,
       name: updatedUser.name,
@@ -92,6 +106,7 @@ export function AdministracaoUsuarios() {
       profile: updatedUser.profile,
       status: updatedUser.status
     });
+
     if (result.data) {
       await refreshUsers();
     }
@@ -186,7 +201,6 @@ export function AdministracaoUsuarios() {
               </TableRow>)}
           </TableBody>
         </Table>
-
         {loading && (
           <div className="text-center py-8">
             <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />

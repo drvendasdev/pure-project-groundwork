@@ -1365,6 +1365,12 @@ export type Database = {
         Args: { p_connection_id: string }
         Returns: undefined
       }
+
+      get_current_user_profile: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+
       get_system_user: {
         Args: { user_email: string; user_password: string }
         Returns: {
@@ -1389,6 +1395,14 @@ export type Database = {
       hash_password: {
         Args: { password: string }
         Returns: string
+      }
+      is_current_user_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      is_current_user_master: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
       is_master: {
         Args: Record<PropertyKey, never>

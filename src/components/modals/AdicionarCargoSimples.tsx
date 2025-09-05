@@ -11,6 +11,7 @@ interface AdicionarCargoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddCargo: (cargo: { nome: string; tipo: string; funcao: string }) => void;
+  loading?: boolean;
 }
 
 const permissoes = [
@@ -72,7 +73,7 @@ const permissoes = [
   }
 ];
 
-export function AdicionarCargoModal({ isOpen, onClose, onAddCargo }: AdicionarCargoModalProps) {
+export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: AdicionarCargoModalProps) {
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<Record<string, Record<string, boolean>>>({});
@@ -94,14 +95,20 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo }: AdicionarCa
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (nome && tipo) {
-      // Extrair função do tipo selecionado
-      let funcao = "";
-      if (tipo.includes("(") && tipo.includes(")")) {
-        // Se o tipo tem parênteses, extrair o que está dentro
-        funcao = tipo.split("(")[1].split(")")[0];
+      // Derive funcao from tipo
+      let funcao = tipo;
+      if (tipo.includes('SDR')) {
+        funcao = 'SDR';
+      } else if (tipo.includes('BDR')) {
+        funcao = 'BDR';
+      } else if (tipo.includes('CLOSER')) {
+        funcao = 'CLOSER';
+      } else if (tipo === 'Suporte') {
+        funcao = 'SUPORTE';
+      } else if (tipo === 'Atendente') {
+        funcao = 'ATENDENTE';
       } else {
-        // Se não tem parênteses, usar o próprio tipo
-        funcao = tipo;
+        funcao = 'PADRAO';
       }
       
       onAddCargo({ nome, tipo, funcao });
@@ -377,16 +384,17 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo }: AdicionarCa
               variant="outline"
               onClick={onClose}
               className="bg-transparent border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md text-sm font-normal"
+              disabled={loading}
             >
               Cancelar
             </Button>
             <Button
               type="submit"
-              disabled={!isFormValid}
+              disabled={!isFormValid || loading}
               className="bg-yellow-400 text-black hover:bg-yellow-500 px-6 py-2 rounded-md text-sm font-normal disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: '#f1c40f' }}
             >
-              Salvar
+              {loading ? "Salvando..." : "Salvar"}
             </Button>
           </div>
         </form>

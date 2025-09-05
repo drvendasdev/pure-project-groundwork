@@ -1,6 +1,12 @@
 project_id = "zldeaozqxjwvzgrblyrh"
 
 [functions.manage-whatsapp-instances]
+
+[functions.delete-cargo]
+verify_jwt = false
+
+[functions.check-cargo-usage]
+
 verify_jwt = false
 
 [functions.evolution-instance-actions]

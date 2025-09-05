@@ -39,6 +39,8 @@ const App = () => (
             <Route path="/automacoes-integracoes" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/automacoes-filas" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/automacoes-api" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
+            <Route path="/parceiros-clientes" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
+            <Route path="/parceiros-planos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/conexoes" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master', 'admin']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
             <Route path="/administracao-usuarios" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master', 'admin']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
             <Route path="/administracao-financeiro" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master', 'admin']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />

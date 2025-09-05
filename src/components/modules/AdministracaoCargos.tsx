@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Search, Trash2, Edit, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,39 +7,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AdicionarCargoModal } from "@/components/modals/AdicionarCargoModal";
 import { EditarCargoModal } from "@/components/modals/EditarCargoModal";
 import { DeletarCargoModal } from "@/components/modals/DeletarCargoModal";
+import { useCargos } from "@/hooks/useCargos";
 
 interface Cargo {
   id: string;
   nome: string;
   tipo: string;
   funcao: string;
-  criadoEm: string;
+  created_at: string;
+  updated_at: string;
 }
-
-// Mock data baseado na imagem
-const mockCargos: Cargo[] = [
-  {
-    id: "1",
-    nome: "Closer",
-    tipo: "Vendedor",
-    funcao: "CLOSER",
-    criadoEm: "18/07/2025",
-  },
-  {
-    id: "2", 
-    nome: "SDR",
-    tipo: "Pré-vendedor",
-    funcao: "SDR",
-    criadoEm: "21/07/2025",
-  },
-];
 
 interface AdministracaoCargosProps {
   onBack: () => void;
 }
 
 export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
-  const [cargos, setCargos] = useState<Cargo[]>(mockCargos);
+  const { listCargos, createCargo, updateCargo, deleteCargo, loading } = useCargos();
+  const [cargos, setCargos] = useState<Cargo[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,6 +32,23 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedCargo, setSelectedCargo] = useState<Cargo | undefined>(undefined);
+
+  // Carregar cargos ao montar o componente
+  useEffect(() => {
+    loadCargos();
+  }, []);
+
+  const loadCargos = async () => {
+    console.log('🔄 Carregando cargos na administração...');
+    const result = await listCargos();
+    console.log('📦 Resultado dos cargos:', result);
+    if (result.data) {
+      console.log('✅ Cargos carregados na administração:', result.data);
+      setCargos(result.data);
+    } else {
+      console.error('❌ Erro ao carregar cargos na administração:', result.error);
+    }
+  };
 
   const filteredCargos = cargos.filter(cargo => 
     cargo.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -78,28 +80,38 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
     setIsAddModalOpen(true);
   };
 
-  const handleConfirmAddCargo = (newCargoData: { nome: string; tipo: string; funcao: string }) => {
-    const newCargo: Cargo = {
-      id: Date.now().toString(),
-      ...newCargoData,
-      criadoEm: new Date().toLocaleDateString('pt-BR'),
-    };
-    setCargos([...cargos, newCargo]);
-    console.log("Cargo adicionado:", newCargo);
+  const handleConfirmAddCargo = async (newCargoData: { nome: string; tipo: string; funcao: string }) => {
+    const result = await createCargo(newCargoData);
+    if (result.data) {
+      await loadCargos(); // Recarregar a lista
+      console.log("Cargo adicionado:", result.data);
+    }
+    setIsAddModalOpen(false);
   };
 
-  const handleConfirmEditCargo = (updatedCargo: Cargo) => {
-    setCargos(cargos.map(cargo => 
-      cargo.id === updatedCargo.id ? updatedCargo : cargo
-    ));
-    console.log("Cargo editado:", updatedCargo);
+  const handleConfirmEditCargo = async (cargoData: { nome: string; tipo: string; funcao: string }) => {
+    if (!selectedCargo) return;
+    
+    const result = await updateCargo({
+      id: selectedCargo.id,
+      ...cargoData
+    });
+    
+    if (result.data) {
+      await loadCargos(); // Recarregar a lista
+      console.log("Cargo editado:", result.data);
+    }
+    setIsEditModalOpen(false);
     setSelectedCargo(undefined);
   };
 
-  const handleConfirmDeleteCargo = () => {
+  const handleConfirmDeleteCargo = async () => {
     if (selectedCargo) {
-      setCargos(cargos.filter(cargo => cargo.id !== selectedCargo.id));
-      console.log("Cargo excluído:", selectedCargo.id);
+      const result = await deleteCargo(selectedCargo.id);
+      if (result.success) {
+        await loadCargos(); // Recarregar a lista
+        console.log("Cargo excluído:", selectedCargo.id);
+      }
     }
     setIsDeleteModalOpen(false);
     setSelectedCargo(undefined);
@@ -171,7 +183,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
                       {cargo.tipo} ({cargo.funcao})
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {cargo.criadoEm}
+                      {new Date(cargo.created_at).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
@@ -269,7 +281,13 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
             setSelectedCargo(undefined);
           }}
           onEditCargo={handleConfirmEditCargo}
-          cargo={selectedCargo}
+          cargo={selectedCargo ? {
+            id: selectedCargo.id,
+            nome: selectedCargo.nome,
+            tipo: selectedCargo.tipo,
+            funcao: selectedCargo.funcao,
+            criadoEm: new Date(selectedCargo.created_at).toLocaleDateString('pt-BR')
+          } : undefined}
         />
 
         {/* Modal de deletar cargo */}

@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,12 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 
+
 // Interfaces
 interface Connection {
+
   id: string;
   instance_name: string;
   status: string;
@@ -24,6 +29,7 @@ interface Connection {
   phone_number?: string | null;
   workspace_id: string;
   metadata?: any;
+
 }
 
 const EVOLUTION_API_URL = 'https://evo.eventoempresalucrativa.com.br';
@@ -60,6 +66,7 @@ const formatPhoneNumberDisplay = (phone: string): string => {
 
 export function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
@@ -218,9 +225,39 @@ export function ConexoesNova() {
       return;
     }
 
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [instanceName, setInstanceName] = useState('');
+
+  // Load connections from localStorage on component mount
+  useEffect(() => {
+    const savedConnections = localStorage.getItem('minhas-conexoes');
+    if (savedConnections) {
+      setConnections(JSON.parse(savedConnections));
+    }
+  }, []);
+
+  // Save connections to localStorage whenever connections change
+  const saveConnectionsToStorage = (newConnections: Connection[]) => {
+    localStorage.setItem('minhas-conexoes', JSON.stringify(newConnections));
+    setConnections(newConnections);
+  };
+
+  const handleAddConexao = async () => {
+    if (!instanceName.trim()) {
+      toast({
+        title: 'Nome da instância é obrigatório',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+
     try {
       setIsCreating(true);
-      
+
       // Criar instância na Evolution API
       const response = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
         method: 'POST',
@@ -690,10 +727,12 @@ export function ConexoesNova() {
           description: 'Instância desconectada localmente, mas pode ainda estar ativa na API',
           variant: 'destructive',
         });
+
       }
       
       // Reload connections
       await loadConnections();
+
 
     } catch (error) {
       console.error('Error disconnecting instance:', error);
@@ -737,13 +776,16 @@ export function ConexoesNova() {
     );
   }
 
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
+
           <h2 className="text-3xl font-bold tracking-tight">Conexões WhatsApp</h2>
           <p className="text-muted-foreground">
             Gerencie suas instâncias de WhatsApp
+
           </p>
         </div>
         
@@ -759,16 +801,20 @@ export function ConexoesNova() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
+
               <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
+
             </DialogHeader>
             
             <div className="space-y-4">
               <div className="space-y-2">
+
                 <Label htmlFor="instanceName">Nome da Instância</Label>
-                <Input
+  <Input
                   id="instanceName"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
+
                   placeholder="Ex: minha-empresa"
                   disabled={isEditMode}
                 />
@@ -801,6 +847,7 @@ export function ConexoesNova() {
                     <SelectItem value="quarter">Três meses</SelectItem>
                   </SelectContent>
                 </Select>
+
               </div>
 
               <Button onClick={isEditMode ? editConnection : createInstance} disabled={isCreating}>
@@ -821,11 +868,12 @@ export function ConexoesNova() {
             </p>
             <Button onClick={() => setIsCreateModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              Criar primeira conexão
+
             </Button>
           </CardContent>
         </Card>
       ) : (
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {connections.map((connection) => (
             <Card key={connection.id} className="relative">
@@ -905,6 +953,7 @@ export function ConexoesNova() {
                       </Button>
                     )}
                   </div>
+
                 </div>
               </CardContent>
             </Card>
@@ -934,6 +983,7 @@ export function ConexoesNova() {
                     alt="QR Code"
                     className="w-64 h-64"
                   />
+
                 </div>
                 <div className="text-center space-y-2">
                   <p className="font-medium">
@@ -952,8 +1002,11 @@ export function ConexoesNova() {
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
               </div>
+
+             
             )}
           </div>
+
         </DialogContent>
       </Dialog>
 

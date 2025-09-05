@@ -29,7 +29,9 @@ import {
   GitBranch,
   Bell,
   User,
-  LogOut
+  LogOut,
+  Handshake,
+  FileText
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -176,6 +178,12 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       group: "automacoes"
     },
     {
+      id: "parceiros-clientes",
+      label: "Clientes",
+      icon: <Users className="w-5 h-5" />,
+      group: "parceiros"
+    },
+    {
       id: "administracao-usuarios",
       label: "Usuários",
       icon: <Users className="w-5 h-5" />,
@@ -276,6 +284,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   const crmItems = menuItems.filter(item => item.group === "crm");
   const recursosItems = menuItems.filter(item => item.group === "recursos");
   const automacoesItems = menuItems.filter(item => item.group === "automacoes");
+  const parceirosItems = menuItems.filter(item => item.group === "parceiros");
   const administracaoItems = menuItems.filter(item => item.group === "administracao");
 
   const handleNotificationClick = (conversationId: string) => {
@@ -340,6 +349,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         {renderGroup("crm", "CRM", crmItems)}
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}
+        {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)}
         {hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
         {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
       </nav>
