@@ -49,6 +49,7 @@ export function Conexoes() {
     historyRecovery: 'none' as const
   });
   const [isCreating, setIsCreating] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
   const { toast } = useToast();
 
   const workspaceId = '00000000-0000-0000-0000-000000000000';
@@ -61,19 +62,39 @@ export function Conexoes() {
 
   const loadConnections = async () => {
     try {
-      const url = new URL(window.location.origin);
-      url.pathname = '/api/evolution-provisioning';
-      url.searchParams.set('workspaceId', workspaceId);
+      console.log('Loading connections for workspace:', workspaceId);
       
-      const response = await fetch(url.toString());
-      const data = await response.json();
+      const { data, error } = await supabase.functions.invoke('evolution-provisioning', {
+        method: 'GET',
+        body: { workspaceId }
+      });
 
-      if (!response.ok) throw new Error(data.error);
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw error;
+      }
 
+      if (!data.connections && !data.quota) {
+        console.error('Invalid response structure:', data);
+        throw new Error(data.error || 'Resposta inválida do servidor');
+      }
+
+      console.log('Connections loaded successfully:', data);
       setConnections(data.connections || []);
       setQuota(data.quota || { used: 0, limit: 1 });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading connections:', error);
+      
+      // Show user-friendly error message
+      toast({
+        title: "Erro ao carregar conexões",
+        description: error.message || "Erro de conexão com o servidor",
+        variant: "destructive",
+      });
+      
+      // Set empty state on error
+      setConnections([]);
+      setQuota({ used: 0, limit: 1 });
     } finally {
       setLoading(false);
     }
@@ -129,6 +150,39 @@ export function Conexoes() {
     }
   };
 
+  const testConnection = async () => {
+    setIsTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('test-evolution-connection');
+      
+      if (error) throw error;
+      
+      if (data.success) {
+        toast({
+          title: "Teste bem-sucedido",
+          description: `${data.summary.passed}/${data.summary.total} testes passaram`,
+        });
+      } else {
+        const failedTests = data.tests.filter((t: any) => !t.passed);
+        toast({
+          title: "Teste falhou",
+          description: `Problemas encontrados: ${failedTests.map((t: any) => t.test).join(', ')}`,
+          variant: "destructive",
+        });
+      }
+      
+      console.log('Connection test results:', data);
+    } catch (error: any) {
+      toast({
+        title: "Erro no teste",
+        description: error.message || "Erro ao executar teste de conectividade",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-64">
       <RefreshCw className="h-8 w-8 animate-spin" />
@@ -145,14 +199,25 @@ export function Conexoes() {
           </p>
         </div>
         
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button disabled={quota.used >= quota.limit} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Novo atendimento
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
+        <div className="flex gap-2">
+          <Button 
+            onClick={testConnection} 
+            disabled={isTesting}
+            variant="outline" 
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isTesting ? 'animate-spin' : ''}`} />
+            {isTesting ? 'Testando...' : 'Testar API'}
+          </Button>
+          
+            <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+              <DialogTrigger asChild>
+                <Button disabled={quota.used >= quota.limit} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Novo atendimento
+                </Button>
+              </DialogTrigger>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>Novo atendimento</DialogTitle>
               <DialogDescription>
@@ -211,9 +276,10 @@ export function Conexoes() {
                 </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </DialogContent>
+            </Dialog>
+          </div>
+        </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {connections.map((connection) => {

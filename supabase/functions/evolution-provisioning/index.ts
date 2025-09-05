@@ -37,11 +37,13 @@ async function logEvent(
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   const correlationId = crypto.randomUUID();
+  console.log(`🚀 Evolution Provisioning Request - ${req.method} - ${correlationId}`);
   
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -177,13 +179,24 @@ serve(async (req) => {
         ...webhookConfig
       };
 
+      await logEvent(supabase, connection.id, correlationId, 'EVOLUTION_CREATE_REQUEST', 'info', 
+        'Sending create instance request to Evolution API', { 
+          instanceName, 
+          evolutionApiUrl,
+          hasWebhook: !!webhookConfig.webhook
+        });
+
       let evolutionResponse;
       try {
+        if (!evolutionApiUrl || !evolutionApiKey) {
+          throw new Error('Evolution API URL ou API Key não configurados');
+        }
+
         evolutionResponse = await fetch(`${evolutionApiUrl}/instance/create`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': evolutionApiKey!,
+            'apikey': evolutionApiKey,
           },
           body: JSON.stringify(createInstanceBody)
         });
@@ -192,17 +205,35 @@ serve(async (req) => {
 
         if (!evolutionResponse.ok) {
           await logEvent(supabase, connection.id, correlationId, 'EVOLUTION_CREATE_ERROR', 'error', 
-            'Evolution API error', { status: evolutionResponse.status, error: responseData });
+            'Evolution API error', { 
+              status: evolutionResponse.status, 
+              error: responseData,
+              instanceName,
+              evolutionApiUrl 
+            });
 
           // Update connection status to error
           await supabase
             .from('connections')
-            .update({ status: 'error', metadata: { ...connection.metadata, error: responseData } })
+            .update({ 
+              status: 'error', 
+              metadata: { 
+                ...connection.metadata, 
+                error: responseData,
+                error_details: {
+                  timestamp: new Date().toISOString(),
+                  api_status: evolutionResponse.status,
+                  api_response: responseData
+                }
+              }
+            })
             .eq('id', connection.id);
 
           return new Response(JSON.stringify({
-            error: `Erro na Evolution API: ${responseData.message || responseData.error || 'Erro desconhecido'}`,
-            details: responseData
+            error: `Erro na Evolution API (${evolutionResponse.status}): ${responseData.message || responseData.error || 'Erro desconhecido'}`,
+            details: responseData,
+            status: evolutionResponse.status,
+            correlationId
           }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -261,15 +292,32 @@ serve(async (req) => {
 
     // GET request - fetch connections for workspace
     if (req.method === 'GET') {
-      const url = new URL(req.url);
-      const workspaceId = url.searchParams.get('workspaceId');
+      // For GET requests with body (from supabase.functions.invoke)
+      let workspaceId;
+      
+      try {
+        if (req.headers.get('content-type')?.includes('application/json')) {
+          const body = await req.json();
+          workspaceId = body.workspaceId;
+        }
+      } catch {
+        // Fallback to URL params
+        const url = new URL(req.url);
+        workspaceId = url.searchParams.get('workspaceId');
+      }
 
       if (!workspaceId) {
+        await logEvent(supabase, null, correlationId, 'GET_CONNECTIONS_ERROR', 'error', 
+          'Missing workspaceId parameter');
+        
         return new Response(JSON.stringify({ error: 'workspaceId é obrigatório' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+
+      await logEvent(supabase, null, correlationId, 'GET_CONNECTIONS_REQUEST', 'info', 
+        'Fetching connections for workspace', { workspaceId });
 
       const { data: connections, error } = await supabase
         .from('connections')
@@ -278,26 +326,45 @@ serve(async (req) => {
         .order('created_at', { ascending: false });
 
       if (error) {
+        await logEvent(supabase, null, correlationId, 'GET_CONNECTIONS_DB_ERROR', 'error', 
+          'Database error fetching connections', { error: error.message, workspaceId });
+        
         return new Response(JSON.stringify({ error: 'Erro ao buscar conexões' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
+      await logEvent(supabase, null, correlationId, 'GET_CONNECTIONS_SUCCESS', 'info', 
+        'Connections fetched successfully', { count: connections?.length || 0, workspaceId });
+
       // Get workspace limits
-      const { data: workspaceLimit } = await supabase
+      const { data: workspaceLimit, error: limitError } = await supabase
         .from('workspace_limits')
         .select('connection_limit')
         .eq('workspace_id', workspaceId)
         .single();
 
-      return new Response(JSON.stringify({
+      if (limitError && limitError.code !== 'PGRST116') { // Ignore "not found" errors
+        await logEvent(supabase, null, correlationId, 'GET_WORKSPACE_LIMITS_ERROR', 'warn', 
+          'Error fetching workspace limits', { error: limitError.message, workspaceId });
+      }
+
+      const responseData = {
         connections: connections || [],
         quota: {
           used: connections?.length || 0,
           limit: workspaceLimit?.connection_limit || 1
         }
-      }), {
+      };
+
+      await logEvent(supabase, null, correlationId, 'GET_CONNECTIONS_RESPONSE', 'info', 
+        'Returning connections response', { 
+          connectionsCount: responseData.connections.length, 
+          quota: responseData.quota 
+        });
+
+      return new Response(JSON.stringify(responseData), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -307,13 +374,21 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Evolution Provisioning Error:', error);
+    
     await logEvent(supabase, null, correlationId, 'GENERAL_ERROR', 'error', 
-      'Unexpected error in evolution-provisioning', { error: error.message });
+      'Unexpected error in evolution-provisioning', { 
+        error: error.message, 
+        stack: error.stack,
+        method: req.method,
+        url: req.url
+      });
 
     return new Response(JSON.stringify({
       error: 'Erro interno do servidor',
-      details: error.message
+      details: error.message,
+      correlationId
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
