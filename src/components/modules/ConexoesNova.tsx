@@ -6,8 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 
 // Interfaces
@@ -66,6 +68,10 @@ export function ConexoesNova() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   
   // Form states
   const [instanceName, setInstanceName] = useState('');
@@ -547,14 +553,76 @@ export function ConexoesNova() {
     }
   };
 
-  const removeConnection = async (connection: Connection) => {
-    if (!confirm(`Tem certeza que deseja remover a conexão "${connection.instance_name}"?`)) {
+  const openEditModal = (connection: Connection) => {
+    setEditingConnection(connection);
+    setInstanceName(connection.instance_name);
+    setPhoneNumber(connection.phone_number || '');
+    setHistoryRecovery(connection.history_recovery || 'none');
+    setIsEditMode(true);
+    setIsCreateModalOpen(true);
+  };
+
+  const openDeleteModal = (connection: Connection) => {
+    setConnectionToDelete(connection);
+    setIsDeleteModalOpen(true);
+  };
+
+  const editConnection = async () => {
+    if (!editingConnection || !phoneNumber.trim()) {
+      toast({
+        title: 'Erro',
+        description: 'Número de telefone é obrigatório',
+        variant: 'destructive',
+      });
       return;
     }
 
     try {
+      setIsCreating(true);
+      
+      const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
+      
+      // Atualizar apenas o número de telefone no banco
+      await supabase.rpc('update_connection_status_anon', {
+        p_connection_id: editingConnection.id,
+        p_status: editingConnection.status,
+        p_phone_number: normalizedPhone
+      });
+
+      toast({
+        title: 'Sucesso',
+        description: 'Conexão atualizada com sucesso!',
+      });
+      
+      // Reset form and close modal
+      setInstanceName('');
+      setHistoryRecovery('none');
+      setPhoneNumber('');
+      setIsEditMode(false);
+      setEditingConnection(null);
+      setIsCreateModalOpen(false);
+      
+      // Reload connections
+      await loadConnections();
+
+    } catch (error) {
+      console.error('Error updating connection:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao atualizar conexão: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const removeConnection = async () => {
+    if (!connectionToDelete) return;
+
+    try {
       // Remover da Evolution API
-      await fetch(`${EVOLUTION_API_URL}/instance/delete/${connection.instance_name}`, {
+      await fetch(`${EVOLUTION_API_URL}/instance/delete/${connectionToDelete.instance_name}`, {
         method: 'DELETE',
         headers: {
           'apikey': EVOLUTION_API_KEY,
@@ -563,7 +631,7 @@ export function ConexoesNova() {
 
       // Remover do banco de dados
       const { error } = await supabase.rpc('delete_connection_anon', {
-        p_connection_id: connection.id
+        p_connection_id: connectionToDelete.id
       });
 
       if (error) {
@@ -580,6 +648,9 @@ export function ConexoesNova() {
         title: 'Sucesso',
         description: 'Conexão removida com sucesso!',
       });
+      
+      setIsDeleteModalOpen(false);
+      setConnectionToDelete(null);
       
       // Reload connections
       await loadConnections();
@@ -648,7 +719,7 @@ export function ConexoesNova() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Criar Nova Conexão</DialogTitle>
+              <DialogTitle>{isEditMode ? 'Editar Conexão' : 'Criar Nova Conexão'}</DialogTitle>
             </DialogHeader>
             
             <div className="space-y-4">
@@ -660,7 +731,13 @@ export function ConexoesNova() {
                   onChange={(e) => setInstanceName(e.target.value)}
                   placeholder="Digite o nome da instância"
                   className="mt-2"
+                  disabled={isEditMode}
                 />
+                {isEditMode && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O nome da instância não pode ser alterado
+                  </p>
+                )}
               </div>
               
               <div>
@@ -743,7 +820,29 @@ export function ConexoesNova() {
                 <CardTitle className="text-sm font-medium">
                   {connection.instance_name}
                 </CardTitle>
-                {getStatusBadge(connection.status)}
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(connection.status)}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEditModal(connection)}>
+                        <Edit3 className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => openDeleteModal(connection)}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
