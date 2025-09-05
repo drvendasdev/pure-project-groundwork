@@ -204,6 +204,20 @@ export function ConexoesNova() {
       return;
     }
 
+    // Check for duplicate instance names
+    const existingConnection = connections.find(conn => 
+      conn.instance_name.toLowerCase() === instanceName.trim().toLowerCase()
+    );
+    
+    if (existingConnection) {
+      toast({
+        title: 'Erro',
+        description: 'Já existe uma instância com este nome',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setIsCreating(true);
       
@@ -269,11 +283,8 @@ export function ConexoesNova() {
         });
       }
       
-      // Reset form
-      setInstanceName('');
-      setHistoryRecovery('none');
-      setPhoneNumber('');
-      setIsCreateModalOpen(false);
+      // Reset form and close modal
+      resetModal();
       
       // Reload connections
       await loadConnections();
@@ -287,6 +298,144 @@ export function ConexoesNova() {
       });
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const editConnection = async () => {
+    if (!editingConnection || !phoneNumber.trim()) {
+      toast({
+        title: 'Erro',
+        description: 'Número de telefone é obrigatório',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+      
+      const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
+      
+      // Atualizar no banco de dados
+      const { error } = await supabase.rpc('update_connection_status_anon', {
+        p_connection_id: editingConnection.id,
+        p_status: editingConnection.status,
+        p_phone_number: normalizedPhone
+      });
+
+      if (error) {
+        console.error('Error updating connection:', error);
+        toast({
+          title: 'Erro',
+          description: 'Erro ao atualizar conexão',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: 'Conexão atualizada com sucesso!',
+      });
+      
+      // Reset form and close modal
+      resetModal();
+      
+      // Reload connections
+      await loadConnections();
+
+    } catch (error) {
+      console.error('Error editing connection:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao editar conexão: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const resetModal = () => {
+    setInstanceName('');
+    setHistoryRecovery('none');
+    setPhoneNumber('');
+    setIsEditMode(false);
+    setEditingConnection(null);
+    setIsCreateModalOpen(false);
+  };
+
+  const openEditModal = (connection: Connection) => {
+    setEditingConnection(connection);
+    setInstanceName(connection.instance_name);
+    setHistoryRecovery(connection.history_recovery);
+    setPhoneNumber(connection.phone_number || '');
+    setIsEditMode(true);
+    setIsCreateModalOpen(true);
+  };
+
+  const openDeleteModal = (connection: Connection) => {
+    setConnectionToDelete(connection);
+    setIsDeleteModalOpen(true);
+  };
+
+  const removeConnection = async () => {
+    if (!connectionToDelete) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Tentar deletar da Evolution API primeiro
+      const response = await fetch(`${EVOLUTION_API_URL}/instance/delete/${connectionToDelete.instance_name}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+        },
+      });
+
+      // Deletar do banco de dados independentemente do resultado da API
+      const { error: dbError } = await supabase.rpc('delete_connection_anon', {
+        p_connection_id: connectionToDelete.id
+      });
+
+      if (dbError) {
+        console.error('Error deleting from database:', dbError);
+        toast({
+          title: 'Erro',
+          description: 'Erro ao deletar conexão do banco de dados',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!response.ok) {
+        console.warn(`Warning: Could not delete from Evolution API (${response.status}), but connection was removed from database`);
+        toast({
+          title: 'Aviso',
+          description: 'Conexão removida do banco, mas pode ainda existir na API Evolution',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Sucesso',
+          description: 'Conexão deletada com sucesso!',
+        });
+      }
+      
+      // Reload connections
+      await loadConnections();
+      
+    } catch (error) {
+      console.error('Error deleting connection:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao deletar conexão: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+      setIsDeleteModalOpen(false);
+      setConnectionToDelete(null);
     }
   };
 
@@ -498,6 +647,7 @@ export function ConexoesNova() {
       } else {
         throw new Error('QR Code não encontrado na resposta');
       }
+
     } catch (error) {
       console.error('Error connecting instance:', error);
       toast({
@@ -514,7 +664,7 @@ export function ConexoesNova() {
     try {
       setIsDisconnecting(true);
       
-      // Disconnect from Evolution API
+      // Desconectar da Evolution API
       const response = await fetch(`${EVOLUTION_API_URL}/instance/logout/${connection.instance_name}`, {
         method: 'DELETE',
         headers: {
@@ -522,21 +672,25 @@ export function ConexoesNova() {
         },
       });
 
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status}`);
-      }
-
-      // Update database status to disconnected (keep phone number)
+      // Atualizar status na base de dados
       await supabase.rpc('update_connection_status_anon', {
         p_connection_id: connection.id,
         p_status: 'disconnected',
         p_qr_code: null
       });
 
-      toast({
-        title: 'Sucesso',
-        description: 'WhatsApp desconectado com sucesso!',
-      });
+      if (response.ok) {
+        toast({
+          title: 'Sucesso',
+          description: 'Instância desconectada com sucesso!',
+        });
+      } else {
+        toast({
+          title: 'Aviso',
+          description: 'Instância desconectada localmente, mas pode ainda estar ativa na API',
+          variant: 'destructive',
+        });
+      }
       
       // Reload connections
       await loadConnections();
@@ -553,148 +707,31 @@ export function ConexoesNova() {
     }
   };
 
-  const openEditModal = (connection: Connection) => {
-    setEditingConnection(connection);
-    setInstanceName(connection.instance_name);
-    setPhoneNumber(connection.phone_number || '');
-    setHistoryRecovery(connection.history_recovery || 'none');
-    setIsEditMode(true);
-    setIsCreateModalOpen(true);
-  };
-
-  const openDeleteModal = (connection: Connection) => {
-    setConnectionToDelete(connection);
-    setIsDeleteModalOpen(true);
-  };
-
-  const editConnection = async () => {
-    if (!editingConnection || !phoneNumber.trim()) {
-      toast({
-        title: 'Erro',
-        description: 'Número de telefone é obrigatório',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      setIsCreating(true);
-      
-      const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
-      
-      // Atualizar apenas o número de telefone no banco
-      await supabase.rpc('update_connection_status_anon', {
-        p_connection_id: editingConnection.id,
-        p_status: editingConnection.status,
-        p_phone_number: normalizedPhone
-      });
-
-      toast({
-        title: 'Sucesso',
-        description: 'Conexão atualizada com sucesso!',
-      });
-      
-      // Reset form and close modal
-      setInstanceName('');
-      setHistoryRecovery('none');
-      setPhoneNumber('');
-      setIsEditMode(false);
-      setEditingConnection(null);
-      setIsCreateModalOpen(false);
-      
-      // Reload connections
-      await loadConnections();
-
-    } catch (error) {
-      console.error('Error updating connection:', error);
-      toast({
-        title: 'Erro',
-        description: `Erro ao atualizar conexão: ${error.message}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const removeConnection = async () => {
-    if (!connectionToDelete) return;
-
-    try {
-      // Remover da Evolution API
-      await fetch(`${EVOLUTION_API_URL}/instance/delete/${connectionToDelete.instance_name}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': EVOLUTION_API_KEY,
-        },
-      });
-
-      // Remover do banco de dados
-      const { error } = await supabase.rpc('delete_connection_anon', {
-        p_connection_id: connectionToDelete.id
-      });
-
-      if (error) {
-        console.error('Error removing from database:', error);
-        toast({
-          title: 'Erro',
-          description: 'Erro ao remover do banco de dados',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      toast({
-        title: 'Sucesso',
-        description: 'Conexão removida com sucesso!',
-      });
-      
-      setIsDeleteModalOpen(false);
-      setConnectionToDelete(null);
-      
-      // Reload connections
-      await loadConnections();
-
-    } catch (error) {
-      console.error('Error removing connection:', error);
-      toast({
-        title: 'Erro',
-        description: `Erro ao remover conexão: ${error.message}`,
-        variant: 'destructive',
-      });
-    }
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
-        return <Badge className="bg-green-600 text-white">Conectado</Badge>;
-      default:
+        return <Badge variant="default" className="bg-green-500">Conectado</Badge>;
+      case 'qr':
+        return <Badge variant="secondary">QR Code</Badge>;
+      case 'connecting':
+        return <Badge variant="outline">Conectando</Badge>;
+      case 'disconnected':
         return <Badge variant="destructive">Desconectado</Badge>;
-    }
-  };
-
-  const getHistoryRecoveryLabel = (recovery: string) => {
-    switch (recovery) {
-      case 'week':
-        return '1 semana';
-      case 'month':
-        return '1 mês';
-      case '2months':
-        return '2 meses';
-      case '3months':
-        return '3 meses';
+      case 'creating':
+        return <Badge variant="secondary">Criando</Badge>;
+      case 'error':
+        return <Badge variant="destructive">Erro</Badge>;
       default:
-        return 'Nenhum';
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm text-muted-foreground">Carregando conexões...</p>
+      <div className="flex items-center justify-center py-8">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Carregando conexões...</p>
         </div>
       </div>
     );
@@ -706,92 +743,68 @@ export function ConexoesNova() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Conexões WhatsApp</h2>
           <p className="text-muted-foreground">
-            Gerencie suas instâncias do WhatsApp
+            Gerencie suas instâncias de WhatsApp
           </p>
         </div>
         
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <Dialog open={isCreateModalOpen} onOpenChange={(open) => {
+          if (!open) resetModal();
+          setIsCreateModalOpen(open);
+        }}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
-              Adicionar Conexão
+              Adicionar Instância
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{isEditMode ? 'Editar Conexão' : 'Criar Nova Conexão'}</DialogTitle>
+              <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
             </DialogHeader>
             
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="instanceName">Nome da Instância *</Label>
+              <div className="space-y-2">
+                <Label htmlFor="instanceName">Nome da Instância</Label>
                 <Input
                   id="instanceName"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
-                  placeholder="Digite o nome da instância"
-                  className="mt-2"
+                  placeholder="Ex: minha-empresa"
                   disabled={isEditMode}
                 />
-                {isEditMode && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    O nome da instância não pode ser alterado
-                  </p>
-                )}
               </div>
-              
-              <div>
-                <Label htmlFor="phoneNumber">Número de Telefone (opcional)</Label>
+
+              <div className="space-y-2">
+                <Label htmlFor="phoneNumber">Número do WhatsApp (opcional)</Label>
                 <Input
                   id="phoneNumber"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="Ex: 5511999999999"
-                  className="mt-2"
+                  type="tel"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground">
                   Formato: 55 + DDD + número (será normalizado automaticamente)
                 </p>
               </div>
-              
-              <div>
-                <Label htmlFor="historyRecovery">Período de Resgate de Mensagens</Label>
-                <Select value={historyRecovery} onValueChange={setHistoryRecovery}>
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Selecione o período" />
+
+              <div className="space-y-2">
+                <Label htmlFor="historyRecovery">Recuperação de Histórico</Label>
+                <Select value={historyRecovery} onValueChange={setHistoryRecovery} disabled={isEditMode}>
+                  <SelectTrigger>
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    <SelectItem value="week">1 semana</SelectItem>
-                    <SelectItem value="month">1 mês</SelectItem>
-                    <SelectItem value="2months">2 meses</SelectItem>
-                    <SelectItem value="3months">3 meses</SelectItem>
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    <SelectItem value="week">Uma semana</SelectItem>
+                    <SelectItem value="month">Um mês</SelectItem>
+                    <SelectItem value="quarter">Três meses</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            
-            <div className="flex gap-3 pt-4">
-              <Button 
-                onClick={createInstance} 
-                disabled={isCreating}
-                className="flex-1"
-              >
-                {isCreating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                    Criando...
-                  </>
-                ) : (
-                  'Editar Instância'
-                )}
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setIsCreateModalOpen(false)}
-                disabled={isCreating}
-              >
-                Cancelar
+
+              <Button onClick={isEditMode ? editConnection : createInstance} disabled={isCreating}>
+                {isCreating ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Criar Instância')}
               </Button>
             </div>
           </DialogContent>
@@ -835,7 +848,7 @@ export function ConexoesNova() {
                       </DropdownMenuItem>
                       <DropdownMenuItem 
                         onClick={() => openDeleteModal(connection)}
-                        className="text-red-600"
+                        className="text-destructive"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Excluir
@@ -856,7 +869,7 @@ export function ConexoesNova() {
                         size="sm"
                         onClick={() => disconnectInstance(connection)}
                         disabled={isDisconnecting}
-                        className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="flex items-center gap-2 text-destructive hover:text-destructive-foreground hover:bg-destructive"
                       >
                         {isDisconnecting ? (
                           <>
@@ -891,14 +904,6 @@ export function ConexoesNova() {
                         )}
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeConnection(connection)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -951,6 +956,25 @@ export function ConexoesNova() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Instância</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a instância "{connectionToDelete?.instance_name}"? 
+              Esta ação não pode ser desfeita e excluirá a instância diretamente da API Evolution.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={removeConnection} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
