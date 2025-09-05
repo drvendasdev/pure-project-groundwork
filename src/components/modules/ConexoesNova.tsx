@@ -783,7 +783,7 @@ export function ConexoesNova() {
                     Criando...
                   </>
                 ) : (
-                  'Criar Instância'
+                  'Editar Instância'
                 )}
               </Button>
               <Button 
