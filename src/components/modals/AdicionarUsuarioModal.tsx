@@ -4,22 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
-import { useChannels } from "@/hooks/useChannels";
-import { useCargos } from "@/hooks/useCargos";
+
+import { useInstances } from "@/hooks/useInstances";
+import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
+
 
 
 interface AdicionarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddUser: (user: {
-    name: string;
-    email: string;
-    profile: string;
-    status: string;
-    senha: string;
-    default_channel: string | null;
-    cargo_ids: string[];
-  }) => void;
+
+  onAddUser: (user: Omit<SystemUser, "id" | "created_at" | "updated_at" | "cargo_id">) => void;
+
 }
 
 // Mock options para os selects
@@ -96,23 +92,35 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
       default_channel: formData.defaultChannel || null,
       cargo_ids: selectedCargos
     });
-    
-    // Reset form
-    setFormData({
-      name: "",
-      email: "",
-      profile: "user",
-      password: "",
-      temporaryPassword: false,
-      queues: "",
-      defaultChannel: "",
-      defaultPhone: "",
-    });
-    setSelectedCargos([]);
-    setShowPassword(false);
-    setShowCargoDropdown(false);
-    setIsSubmitting(false);
-    onClose();
+
+
+    if (result.data) {
+      onAddUser({
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile,
+        status: "active",
+      });
+      
+      // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        profile: "user",
+        password: "",
+        temporaryPassword: false,
+        queues: "",
+        roles: "",
+        defaultChannel: "",
+        defaultPhone: "",
+      });
+      setShowPassword(false);
+      setSelectedRoles([]);
+      setSelectedInstances([]);
+      setDefaultInstance("");
+      onClose();
+    }
+
   };
 
   const handleCancel = () => {

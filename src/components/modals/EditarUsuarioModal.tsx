@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
-import { useChannels } from "@/hooks/useChannels";
-import { useCargos } from "@/hooks/useCargos";
+
+import { useInstances } from "@/hooks/useInstances";
+import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
+
 import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 
 interface EditarUsuarioModalProps {

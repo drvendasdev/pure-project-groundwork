@@ -72,6 +72,7 @@ export function AdministracaoUsuarios() {
     setIsDeleteModalOpen(false);
     setSelectedUser(undefined);
   };
+
   const handleAddUser = async (userData: {
     name: string;
     email: string;
@@ -91,12 +92,21 @@ export function AdministracaoUsuarios() {
       cargo_ids: userData.cargo_ids
     });
     
+
     if (result.data) {
       await refreshUsers();
     }
   };
   const handleUpdateUser = async (updatedUser: SystemUser) => {
-    const result = await updateUser(updatedUser);
+
+    const result = await updateUser({
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      profile: updatedUser.profile,
+      status: updatedUser.status
+    });
+
     if (result.data) {
       await refreshUsers();
     }
@@ -191,7 +201,6 @@ export function AdministracaoUsuarios() {
               </TableRow>)}
           </TableBody>
         </Table>
-
         {loading && (
           <div className="text-center py-8">
             <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />

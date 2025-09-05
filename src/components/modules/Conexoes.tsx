@@ -1,5 +1,1 @@
-import ConexoesNova from './ConexoesNova';
-
-export function Conexoes() {
-  return <ConexoesNova />;
-}
+export { ConexoesNova as Conexoes } from './ConexoesNova';

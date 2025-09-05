@@ -1,0 +1,176 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const { action, connectionId, instanceName } = await req.json()
+
+    if (!action || (!connectionId && !instanceName)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Action and connection identifier required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Get connection details
+    let query = supabase.from('connections').select('*')
+    
+    if (connectionId) {
+      query = query.eq('id', connectionId)
+    } else {
+      query = query.eq('instance_name', instanceName)
+    }
+
+    const { data: connection, error } = await query.single()
+
+    if (error || !connection) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Connection not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY')!
+    const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'
+
+    let response: Response
+    let newStatus = connection.status
+
+    switch (action) {
+      case 'reconnect':
+        response = await fetch(`${evolutionUrl}/instance/restart/${connection.instance_name}`, {
+          method: 'PUT',
+          headers: { 'apikey': evolutionApiKey }
+        })
+        newStatus = 'connecting'
+        break
+
+      case 'disconnect':
+        response = await fetch(`${evolutionUrl}/instance/logout/${connection.instance_name}`, {
+          method: 'DELETE',
+          headers: { 'apikey': evolutionApiKey }
+        })
+        newStatus = 'disconnected'
+        break
+
+      case 'delete':
+        response = await fetch(`${evolutionUrl}/instance/delete/${connection.instance_name}`, {
+          method: 'DELETE',
+          headers: { 'apikey': evolutionApiKey }
+        })
+        
+        // If Evolution API deletion successful, remove from our database
+        if (response.ok) {
+          await supabase
+            .from('connection_secrets')
+            .delete()
+            .eq('connection_id', connection.id)
+
+          await supabase
+            .from('connections')
+            .delete()
+            .eq('id', connection.id)
+
+          return new Response(
+            JSON.stringify({ success: true, message: 'Connection deleted successfully' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        break
+
+      case 'status':
+        response = await fetch(`${evolutionUrl}/instance/connectionState/${connection.instance_name}`, {
+          headers: { 'apikey': evolutionApiKey }
+        })
+        
+        if (response.ok) {
+          const statusData = await response.json()
+          const currentStatus = statusData.instance?.state
+          
+          if (currentStatus === 'open') {
+            newStatus = 'connected'
+          } else if (currentStatus === 'close') {
+            newStatus = 'disconnected'
+          } else {
+            newStatus = 'connecting'
+          }
+          
+          await supabase
+            .from('connections')
+            .update({ 
+              status: newStatus,
+              updated_at: new Date().toISOString(),
+              ...(currentStatus === 'open' && { last_activity_at: new Date().toISOString() })
+            })
+            .eq('id', connection.id)
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              status: newStatus, 
+              evolutionData: statusData 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        break
+
+      default:
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid action' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Evolution API error: ${errorData.message || 'Operation failed'}` 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Update connection status
+    if (action !== 'delete') {
+      await supabase
+        .from('connections')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', connection.id)
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, status: newStatus }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+
+  } catch (error) {
+    console.error('Error managing instance:', error)
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Internal server error' 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+})

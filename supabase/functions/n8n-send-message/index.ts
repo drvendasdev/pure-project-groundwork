@@ -31,18 +31,28 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Buscar dados da mensagem para ter contexto completo (sem embeds ambíguos)
+    // Buscar dados da mensagem para ter contexto completo (incluindo sender_id)
     let conversationId: string | null = null;
     let contactName: string | null = null;
     let contactEmail: string | null = null;
     let contactPhone: string | null = null;
     let evolutionInstance: string | null = null;
+    let senderId: string | null = null;
 
     const { data: msgRow, error: msgErr } = await supabase
       .from('messages')
-      .select('conversation_id')
+      .select('conversation_id, sender_id')
       .eq('id', messageId)
       .maybeSingle();
+
+    if (msgRow) {
+      senderId = msgRow.sender_id;
+    }
+
+    // Log se senderId está vazio para debugging
+    if (!senderId) {
+      console.log('⚠️ senderId is empty, message might fail instance resolution');
+    }
 
     if (msgRow?.conversation_id) {
       conversationId = msgRow.conversation_id as string;
@@ -70,12 +80,18 @@ serve(async (req) => {
       console.warn('Não foi possível carregar a conversa da mensagem:', msgErr.message);
     }
 
-    // Resolver evolutionInstance (prioridade: última msg inbound -> conversa -> user assignments -> org default -> body)
+    // Resolver evolutionInstance - Nova hierarquia (usuário específico -> org default)
     let resolvedEvolutionInstance: string | null = null;
     let instanceSource = 'not_found';
     
-    // Prioridade 1: última mensagem inbound (mais atual)
-    if (conversationId) {
+    // Prioridade 1: Body (explicit override)
+    if (evolutionInstanceFromBody) {
+      resolvedEvolutionInstance = evolutionInstanceFromBody;
+      instanceSource = 'body';
+    }
+    
+    // Prioridade 2: última mensagem inbound (mais atual)
+    if (!resolvedEvolutionInstance && conversationId) {
       const { data: lastInbound } = await supabase
         .from('messages')
         .select('metadata, created_at')
@@ -91,15 +107,59 @@ serve(async (req) => {
       }
     }
     
-    // Prioridade 2: conversa (se não achou na última mensagem)
+    // Prioridade 3: conversa
     if (!resolvedEvolutionInstance && evolutionInstance) {
       resolvedEvolutionInstance = evolutionInstance;
       instanceSource = 'conversation';
     }
     
-    // Prioridade 3: org default (instância padrão da organização)
-    let orgDefaultInstance: string | null = null;
-    if (conversationId) {
+    // Prioridade 4: user assignments (instância específica do usuário)
+    if (!resolvedEvolutionInstance && senderId) {
+      // Primeiro tentar instance_user_assignments com is_default=true
+      const { data: userDefaultAssignment } = await supabase
+        .from('instance_user_assignments')
+        .select('instance')
+        .eq('user_id', senderId)
+        .eq('is_default', true)
+        .maybeSingle();
+      
+      if (userDefaultAssignment?.instance) {
+        resolvedEvolutionInstance = userDefaultAssignment.instance;
+        instanceSource = 'userAssignmentDefault';
+        console.log('🔄 Usando instância padrão do usuário (assignments):', {
+          userId: senderId?.substring(0, 8) + '***',
+          instance: resolvedEvolutionInstance
+        });
+      } else {
+        // Fallback para default_channel do system_users
+        const { data: userData } = await supabase
+          .from('system_users')
+          .select('default_channel')
+          .eq('id', senderId)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        if (userData?.default_channel) {
+          const { data: channelData } = await supabase
+            .from('channels')
+            .select('instance')
+            .eq('id', userData.default_channel)
+            .maybeSingle();
+          
+          if (channelData?.instance) {
+            resolvedEvolutionInstance = channelData.instance;
+            instanceSource = 'userDefaultChannel';
+            console.log('🔄 Usando instância do default_channel do usuário:', {
+              userId: senderId?.substring(0, 8) + '***',
+              instance: resolvedEvolutionInstance
+            });
+          }
+        }
+      }
+    }
+    
+    // Prioridade 5: org default (instância padrão da organização)
+    if (!resolvedEvolutionInstance && conversationId) {
       const { data: convData } = await supabase
         .from('conversations')
         .select('org_id')
@@ -114,50 +174,21 @@ serve(async (req) => {
           .maybeSingle();
         
         if (orgSettings?.default_instance) {
-          orgDefaultInstance = orgSettings.default_instance;
-          
-          // Se não achou instância ainda, usar o padrão da org
-          if (!resolvedEvolutionInstance) {
-            resolvedEvolutionInstance = orgDefaultInstance;
-            instanceSource = 'orgDefault';
-          }
-          // Se a conversa tem a instância global e existe padrão da org, sobrescrever
-          else if (evolutionInstance && evolutionInstance === Deno.env.get('EVOLUTION_INSTANCE') && orgDefaultInstance) {
-            resolvedEvolutionInstance = orgDefaultInstance;
-            instanceSource = 'orgDefaultOverride';
-            
-            // Atualizar a conversa com o padrão da org
-            console.log('🔄 Substituindo instância global por padrão da org:', {
-              conversationId: conversationId.substring(0, 8) + '***',
-              oldGlobal: evolutionInstance,
-              newOrgDefault: orgDefaultInstance
-            });
-            
-            await supabase
-              .from('conversations')
-              .update({ evolution_instance: orgDefaultInstance })
-              .eq('id', conversationId);
-          }
+          resolvedEvolutionInstance = orgSettings.default_instance;
+          instanceSource = 'orgDefault';
         }
       }
     }
     
-    // Prioridade 4: user assignments (instância padrão do usuário, se houver)
-    // TODO: Implementar quando tiver sistema de autenticação
-    
-    // Prioridade 5: body (fallback apenas se não tiver outro)
-    if (!resolvedEvolutionInstance && evolutionInstanceFromBody) {
-      resolvedEvolutionInstance = evolutionInstanceFromBody;
-      instanceSource = 'body';
-    }
-    
-    // Prioridade 6: global secret (último fallback)
+    // Se não conseguiu resolver, retornar erro
     if (!resolvedEvolutionInstance) {
-      const globalInstance = Deno.env.get('EVOLUTION_INSTANCE');
-      if (globalInstance) {
-        resolvedEvolutionInstance = globalInstance;
-        instanceSource = 'globalSecret';
-      }
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Nenhuma instância Evolution encontrada. Configure uma instância padrão ou atribua uma instância ao usuário.'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
     // Atualizar conversa com a instância resolvida (sempre que diferente da atual ou se estava vazia)
@@ -320,10 +351,33 @@ serve(async (req) => {
     // Chamar webhook do N8N
     const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
     if (!webhookUrl) {
-      throw new Error('N8N_WEBHOOK_URL não configurada nos segredos do projeto');
+      console.error('❌ N8N_WEBHOOK_URL não configurada - tentando fallback para Evolution direto');
+      
+      // Fallback: tentar enviar via send-evolution-message com evolutionInstance resolvida
+      try {
+        const fallbackResult = await supabase.functions.invoke('send-evolution-message', {
+          body: { ...requestBodyCache, evolutionInstance: resolvedEvolutionInstance }
+        });
+        
+        if (fallbackResult.error) {
+          throw new Error(`Fallback Evolution API failed: ${fallbackResult.error.message}`);
+        }
+        
+        console.log('✅ Mensagem enviada via fallback Evolution API');
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Mensagem enviada via fallback Evolution API',
+          data: { messageId, status: 'sent', via: 'evolution_fallback' }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (fallbackError) {
+        throw new Error(`N8N não configurado e fallback falhou: ${fallbackError.message}`);
+      }
     }
+    
     if (webhookUrl.includes('/test/')) {
-      console.warn('Aviso: N8N_WEBHOOK_URL parece ser a URL de Test do Webhook. Use a Production URL para produção.');
+      console.warn('⚠️ N8N_WEBHOOK_URL usando Test URL - considere usar Production URL');
     }
 
     // Anexar destino ao payload para compatibilidade com Evolution
