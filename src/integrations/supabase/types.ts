@@ -283,6 +283,86 @@ export type Database = {
           },
         ]
       }
+      connection_secrets: {
+        Row: {
+          connection_id: string
+          created_at: string | null
+          evolution_url: string
+          id: string
+          token: string
+          updated_at: string | null
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string | null
+          evolution_url?: string
+          id?: string
+          token: string
+          updated_at?: string | null
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string | null
+          evolution_url?: string
+          id?: string
+          token?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_secrets_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: true
+            referencedRelation: "connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connections: {
+        Row: {
+          created_at: string | null
+          history_recovery: string | null
+          history_status: string | null
+          id: string
+          instance_name: string
+          last_activity_at: string | null
+          metadata: Json | null
+          phone_number: string | null
+          qr_code: string | null
+          status: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          history_recovery?: string | null
+          history_status?: string | null
+          id?: string
+          instance_name: string
+          last_activity_at?: string | null
+          metadata?: Json | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string | null
+          history_recovery?: string | null
+          history_status?: string | null
+          id?: string
+          instance_name?: string
+          last_activity_at?: string | null
+          metadata?: Json | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       contact_tags: {
         Row: {
           contact_id: string
@@ -843,6 +923,47 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_logs: {
+        Row: {
+          connection_id: string | null
+          correlation_id: string
+          created_at: string | null
+          event_type: string
+          id: string
+          level: string
+          message: string
+          metadata: Json | null
+        }
+        Insert: {
+          connection_id?: string | null
+          correlation_id: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          level?: string
+          message: string
+          metadata?: Json | null
+        }
+        Update: {
+          connection_id?: string | null
+          correlation_id?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          level?: string
+          message?: string
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_logs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       queues: {
         Row: {
           created_at: string
@@ -1055,6 +1176,30 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      workspace_limits: {
+        Row: {
+          connection_limit: number
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          connection_limit?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          connection_limit?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          workspace_id?: string
         }
         Relationships: []
       }
