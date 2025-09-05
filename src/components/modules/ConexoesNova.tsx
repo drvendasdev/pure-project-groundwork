@@ -35,6 +35,8 @@ export function ConexoesNova() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   
   // Form states
   const [instanceName, setInstanceName] = useState('');
@@ -43,7 +45,14 @@ export function ConexoesNova() {
   // Load connections on component mount
   useEffect(() => {
     loadConnections();
-  }, []);
+    
+    // Cleanup polling on unmount
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [pollInterval]);
 
   const loadConnections = async () => {
     try {
@@ -159,6 +168,60 @@ export function ConexoesNova() {
     }
   };
 
+  const startPolling = (instanceName: string) => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+    }
+    
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+          method: 'GET',
+          headers: {
+            'apikey': EVOLUTION_API_KEY,
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.instance && result.instance.state === 'open') {
+            // Connection successful
+            const phoneNumber = result.instance.wuid?.split('@')[0] || result.instance.number;
+            
+            // Update database
+            await supabase.rpc('update_connection_status_anon', {
+              p_connection_id: selectedConnection?.id,
+              p_status: 'connected',
+              p_qr_code: null,
+              p_phone_number: phoneNumber
+            });
+            
+            // Clear polling
+            clearInterval(interval);
+            setPollInterval(null);
+            
+            // Close modal and update UI
+            setIsQRModalOpen(false);
+            setSelectedConnection(null);
+            
+            // Reload connections
+            await loadConnections();
+            
+            toast({
+              title: 'Sucesso',
+              description: 'WhatsApp conectado com sucesso!',
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error polling connection status:', error);
+      }
+    }, 2000);
+    
+    setPollInterval(interval);
+  };
+
   const connectInstance = async (connection: Connection) => {
     try {
       setIsConnecting(true);
@@ -177,7 +240,12 @@ export function ConexoesNova() {
       }
 
       const result = await response.json();
-      const qrCode = result.base64 || result.qrcode;
+      let qrCode = result.base64 || result.qrcode;
+      
+      // Ensure QR code is a data URL
+      if (qrCode && !qrCode.startsWith('data:')) {
+        qrCode = `data:image/png;base64,${qrCode}`;
+      }
 
       if (qrCode) {
         // Atualizar status na base de dados
@@ -190,6 +258,9 @@ export function ConexoesNova() {
         // Update the connection with QR code
         setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCode, status: 'qr' } : null);
         setIsQRModalOpen(true);
+        
+        // Start polling for connection status
+        startPolling(connection.instance_name);
         
         // Reload connections to get updated status
         await loadConnections();
@@ -205,6 +276,49 @@ export function ConexoesNova() {
       });
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const disconnectInstance = async (connection: Connection) => {
+    try {
+      setIsDisconnecting(true);
+      
+      // Disconnect from Evolution API
+      const response = await fetch(`${EVOLUTION_API_URL}/instance/logout/${connection.instance_name}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na API: ${response.status}`);
+      }
+
+      // Update database status to disconnected (keep phone number)
+      await supabase.rpc('update_connection_status_anon', {
+        p_connection_id: connection.id,
+        p_status: 'disconnected',
+        p_qr_code: null
+      });
+
+      toast({
+        title: 'Sucesso',
+        description: 'WhatsApp desconectado com sucesso!',
+      });
+      
+      // Reload connections
+      await loadConnections();
+
+    } catch (error) {
+      console.error('Error disconnecting instance:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao desconectar instância: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDisconnecting(false);
     }
   };
 
@@ -258,15 +372,7 @@ export function ConexoesNova() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
-        return <Badge variant="default" className="bg-green-500">Conectado</Badge>;
-      case 'qr':
-        return <Badge variant="outline" className="text-yellow-600 border-yellow-600">QR Code</Badge>;
-      case 'connecting':
-        return <Badge variant="outline" className="text-blue-600 border-blue-600">Conectando</Badge>;
-      case 'creating':
-        return <Badge variant="secondary">Criando</Badge>;
-      case 'error':
-        return <Badge variant="destructive">Erro</Badge>;
+        return <Badge className="bg-green-600 text-white">Conectado</Badge>;
       default:
         return <Badge variant="destructive">Desconectado</Badge>;
     }
@@ -403,33 +509,50 @@ export function ConexoesNova() {
               <CardContent>
                 <div className="space-y-2">
                   <div className="text-xs text-muted-foreground">
-                    Resgate: {getHistoryRecoveryLabel(connection.history_recovery)}
+                    Número: {connection.phone_number || '-'}
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => connectInstance(connection)}
-                      disabled={isConnecting || connection.status === 'connected'}
-                      className="flex items-center gap-2"
-                    >
-                      {isConnecting && selectedConnection?.id === connection.id ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Conectando...
-                        </>
-                      ) : connection.status === 'connected' ? (
-                        <>
-                          <Wifi className="w-4 h-4" />
-                          Conectado
-                        </>
-                      ) : (
-                        <>
-                          <QrCode className="w-4 h-4" />
-                          Conectar
-                        </>
-                      )}
-                    </Button>
+                    {connection.status === 'connected' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => disconnectInstance(connection)}
+                        disabled={isDisconnecting}
+                        className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        {isDisconnecting ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Desconectando...
+                          </>
+                        ) : (
+                          <>
+                            <Wifi className="w-4 h-4" />
+                            Desconectar
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => connectInstance(connection)}
+                        disabled={isConnecting}
+                        className="flex items-center gap-2"
+                      >
+                        {isConnecting && selectedConnection?.id === connection.id ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Conectando...
+                          </>
+                        ) : (
+                          <>
+                            <QrCode className="w-4 h-4" />
+                            Conectar
+                          </>
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -447,7 +570,13 @@ export function ConexoesNova() {
       )}
 
       {/* QR Code Modal */}
-      <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
+      <Dialog open={isQRModalOpen} onOpenChange={(open) => {
+        setIsQRModalOpen(open);
+        if (!open && pollInterval) {
+          clearInterval(pollInterval);
+          setPollInterval(null);
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Conectar WhatsApp</DialogTitle>
@@ -469,6 +598,9 @@ export function ConexoesNova() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Abra o WhatsApp no seu celular, vá em <strong>Dispositivos conectados</strong> e escaneie este código
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    O modal será fechado automaticamente quando a conexão for estabelecida.
                   </p>
                 </div>
               </>
