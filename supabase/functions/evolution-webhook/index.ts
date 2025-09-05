@@ -147,6 +147,187 @@ async function updateChannelStatus(supabaseClient: any, instanceName: string, st
   }
 }
 
+async function logEvent(
+  supabase: any, 
+  connectionId: string | null, 
+  correlationId: string, 
+  eventType: string, 
+  level: string, 
+  message: string, 
+  metadata: any = {}
+) {
+  try {
+    await supabase.from('provider_logs').insert({
+      connection_id: connectionId,
+      correlation_id: correlationId,
+      event_type: eventType,
+      level,
+      message,
+      metadata
+    });
+  } catch (error) {
+    console.error('Failed to log event:', error);
+  }
+}
+
+async function uploadMediaToStorage(supabase: any, mediaData: string, fileName: string, mimeType: string) {
+  try {
+    // Convert base64 to blob
+    const response = await fetch(mediaData);
+    const blob = await response.blob();
+    
+    const { data, error } = await supabase.storage
+      .from('whatsapp-media')
+      .upload(`${Date.now()}-${fileName}`, blob, {
+        contentType: mimeType,
+        cacheControl: '3600'
+      });
+
+    if (error) throw error;
+    
+    const { data: { publicUrl } } = supabase.storage
+      .from('whatsapp-media')
+      .getPublicUrl(data.path);
+
+    return publicUrl;
+  } catch (error) {
+    console.error('Failed to upload media:', error);
+    return null;
+  }
+}
+
+async function processMessage(supabase: any, connectionId: string, messageData: any, correlationId: string) {
+  try {
+    const { key, message, messageTimestamp } = messageData;
+    
+    // Get or create contact
+    const phoneNumber = key.remoteJid.replace('@s.whatsapp.net', '');
+    const contactName = message.pushName || phoneNumber;
+
+    const { data: contact, error: contactError } = await supabase
+      .from('contacts')
+      .upsert({
+        phone: phoneNumber,
+        name: contactName,
+        org_id: '00000000-0000-0000-0000-000000000000' // Default workspace
+      }, {
+        onConflict: 'phone,org_id',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
+
+    if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
+      await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
+        'Failed to upsert contact', { error: contactError, phoneNumber });
+      return;
+    }
+
+    // Get or create conversation
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .upsert({
+        contact_id: contact?.id,
+        evolution_instance: connectionId,
+        org_id: '00000000-0000-0000-0000-000000000000',
+        status: 'open',
+        canal: 'whatsapp'
+      }, {
+        onConflict: 'contact_id,evolution_instance',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
+
+    if (conversationError) {
+      await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
+        'Failed to upsert conversation', { error: conversationError });
+      return;
+    }
+
+    // Process message content
+    let content = '';
+    let messageType = 'text';
+    let fileUrl = null;
+    let fileName = null;
+    let mimeType = null;
+
+    if (message.conversation) {
+      content = message.conversation;
+    } else if (message.extendedTextMessage?.text) {
+      content = message.extendedTextMessage.text;
+    } else if (message.imageMessage) {
+      messageType = 'image';
+      content = message.imageMessage.caption || '';
+      mimeType = message.imageMessage.mimetype;
+      fileName = `image_${Date.now()}.jpg`;
+      
+      if (message.imageMessage.url) {
+        fileUrl = await uploadMediaToStorage(supabase, message.imageMessage.url, fileName, mimeType);
+      }
+    } else if (message.videoMessage) {
+      messageType = 'video';
+      content = message.videoMessage.caption || '';
+      mimeType = message.videoMessage.mimetype;
+      fileName = `video_${Date.now()}.mp4`;
+      
+      if (message.videoMessage.url) {
+        fileUrl = await uploadMediaToStorage(supabase, message.videoMessage.url, fileName, mimeType);
+      }
+    } else if (message.audioMessage) {
+      messageType = 'audio';
+      mimeType = message.audioMessage.mimetype;
+      fileName = `audio_${Date.now()}.ogg`;
+      
+      if (message.audioMessage.url) {
+        fileUrl = await uploadMediaToStorage(supabase, message.audioMessage.url, fileName, mimeType);
+      }
+    } else if (message.documentMessage) {
+      messageType = 'document';
+      content = message.documentMessage.caption || '';
+      mimeType = message.documentMessage.mimetype;
+      fileName = message.documentMessage.fileName || `document_${Date.now()}`;
+      
+      if (message.documentMessage.url) {
+        fileUrl = await uploadMediaToStorage(supabase, message.documentMessage.url, fileName, mimeType);
+      }
+    }
+
+    // Insert message
+    const { error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversation.id,
+        content,
+        message_type: messageType,
+        sender_type: 'contact',
+        file_url: fileUrl,
+        file_name: fileName,
+        mime_type: mimeType,
+        external_id: key.id,
+        status: 'received',
+        metadata: {
+          remote_jid: key.remoteJid,
+          participant: key.participant,
+          timestamp: messageTimestamp,
+          raw_message: message
+        }
+      });
+
+    if (messageError) {
+      await logEvent(supabase, connectionId, correlationId, 'MESSAGE_INSERT_ERROR', 'error', 
+        'Failed to insert message', { error: messageError });
+    } else {
+      await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSED', 'info', 
+        'Message processed successfully', { messageType, phoneNumber });
+    }
+
+  } catch (error) {
+    await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSING_ERROR', 'error', 
+      'Error processing message', { error: error.message });
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -156,10 +337,17 @@ serve(async (req) => {
     // Generate correlation ID for request tracking
     const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
     const config = getConfig();
+    
+    // Initialize Supabase client
+    const supabaseClient = createClient(
+      config.supabaseUrl ?? '',
+      config.supabaseServiceRoleKey ?? ''
+    );
+    
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const mode = url.searchParams.get('hub.mode');
-      const token = url.searchParams.get('hub.verify_token');
+      const token = url.searchParams.get('hub.verify_token') || url.searchParams.get('token');
       const challenge = url.searchParams.get('hub.challenge');
       const test = url.searchParams.get('test');
 
@@ -178,45 +366,62 @@ serve(async (req) => {
         });
       }
 
-      // Webhook verification for Evolution API
+      // Webhook verification for Evolution API or simple token validation
       if (mode === 'subscribe' && token === config.evolutionVerifyToken) {
         console.log('✅ Webhook verified', { correlationId });
         return new Response(challenge, { status: 200 });
+      } else if (token && token === config.evolutionWebhookSecret) {
+        console.log('✅ Token validated', { correlationId });
+        return new Response('OK', { status: 200 });
       } else {
         console.log('❌ Webhook verification failed', { 
           correlationId, 
           mode, 
-          tokenProvided: !!token, 
-          expectedToken: config.evolutionVerifyToken 
+          tokenProvided: !!token
         });
         return new Response('Forbidden', { status: 403 });
       }
     }
 
     if (req.method === 'POST') {
-      // Validate webhook authorization
+      // Get token from URL or Authorization header
+      const url = new URL(req.url);
+      const urlToken = url.searchParams.get('token');
       const authHeader = req.headers.get('authorization');
-      if (config.evolutionWebhookSecret) {
+      
+      let isAuthorized = false;
+      
+      // Check URL token
+      if (urlToken && urlToken === config.evolutionWebhookSecret) {
+        isAuthorized = true;
+      }
+      
+      // Check Authorization header
+      if (!isAuthorized && config.evolutionWebhookSecret) {
         const expectedAuth = `Bearer ${config.evolutionWebhookSecret}`;
-        if (!authHeader || authHeader !== expectedAuth) {
-          console.log('❌ Webhook authorization failed', { 
-            correlationId, 
-            hasAuth: !!authHeader,
-            authType: authHeader?.split(' ')[0] || 'none'
-          });
-          return new Response(JSON.stringify({ 
-            error: 'Unauthorized',
-            correlationId 
-          }), { 
-            status: 401, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          });
+        if (authHeader === expectedAuth) {
+          isAuthorized = true;
         }
+      }
+      
+      if (config.evolutionWebhookSecret && !isAuthorized) {
+        console.log('❌ Webhook authorization failed', { 
+          correlationId, 
+          hasAuth: !!authHeader,
+          hasUrlToken: !!urlToken
+        });
+        return new Response(JSON.stringify({ 
+          error: 'Unauthorized',
+          correlationId 
+        }), { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
       const body = await req.json();
       
-      // Extrair metadados apenas para logs (sem payload completo)
+      // Extract metadata for logging
       const metadata = extractMetadata(body);
       console.log('📥 Webhook recebido:', {
         correlationId,
@@ -229,32 +434,102 @@ serve(async (req) => {
         fromMe: metadata.fromMe
       });
 
-      // Initialize Supabase client for status updates
-      const supabaseClient = createClient(
-        config.supabaseUrl ?? '',
-        config.supabaseServiceRoleKey ?? ''
-      );
+      const { event, instance, data } = body;
 
-      // Handle connection state changes
+      // Find connection by instance name
+      const { data: connection } = await supabaseClient
+        .from('connections')
+        .select('id')
+        .eq('instance_name', instance)
+        .single();
+
+      if (connection) {
+        await logEvent(supabaseClient, connection.id, correlationId, 'WEBHOOK_RECEIVED', 'info', 
+          'Webhook received for connection', { event, instance });
+
+        switch (event) {
+          case 'qrcode.updated':
+          case 'QRCODE_UPDATED':
+            await supabaseClient
+              .from('connections')
+              .update({ 
+                status: 'qr',
+                qr_code: data.qrcode,
+                last_activity_at: new Date().toISOString()
+              })
+              .eq('id', connection.id);
+
+            await logEvent(supabaseClient, connection.id, correlationId, 'QR_CODE_UPDATED', 'info', 
+              'QR code updated');
+            break;
+
+          case 'connection.update':
+          case 'CONNECTION_UPDATE':
+            let status = 'disconnected';
+            let phoneNumber = null;
+
+            if (data.state === 'open') {
+              status = 'connected';
+              phoneNumber = data.user?.id?.replace('@s.whatsapp.net', '') || null;
+            } else if (data.state === 'connecting') {
+              status = 'connecting';
+            } else if (data.state === 'close') {
+              status = 'disconnected';
+            }
+
+            await supabaseClient
+              .from('connections')
+              .update({ 
+                status,
+                phone_number: phoneNumber,
+                last_activity_at: new Date().toISOString(),
+                qr_code: status === 'connected' ? null : undefined
+              })
+              .eq('id', connection.id);
+
+            await logEvent(supabaseClient, connection.id, correlationId, 'CONNECTION_STATUS_UPDATED', 'info', 
+              'Connection status updated', { status, phoneNumber });
+            break;
+
+          case 'messages.upsert':
+          case 'MESSAGES_UPSERT':
+            if (data.messages && Array.isArray(data.messages)) {
+              for (const messageData of data.messages) {
+                await processMessage(supabaseClient, connection.id, messageData, correlationId);
+              }
+            }
+            break;
+
+          case 'send.message':
+          case 'SEND_MESSAGE':
+            await logEvent(supabaseClient, connection.id, correlationId, 'MESSAGE_SENT', 'info', 
+              'Message sent event received', { messageId: data.key?.id });
+            break;
+
+          default:
+            await logEvent(supabaseClient, connection.id, correlationId, 'UNKNOWN_EVENT', 'warn', 
+              'Unknown webhook event received', { event, data });
+        }
+      }
+
+      // Handle legacy channel updates for backwards compatibility
       if (body.event && body.instance) {
         if (body.event === 'connection.update' || body.event === 'CONNECTION_UPDATE') {
           const state = body.data?.state || body.state;
           if (state) {
-            const status = mapEvolutionStateToStatus(state);
-            await updateChannelStatus(supabaseClient, body.instance, status);
+            const channelStatus = mapEvolutionStateToStatus(state);
+            await updateChannelStatus(supabaseClient, body.instance, channelStatus);
           }
         } else if (body.event === 'qrcode.updated' || body.event === 'QRCODE_UPDATED') {
-          // When QR code is updated, instance is connecting
           await updateChannelStatus(supabaseClient, body.instance, 'connecting');
         } else if (body.event === 'logout.instance') {
-          // When instance logs out, mark as disconnected
           await updateChannelStatus(supabaseClient, body.instance, 'disconnected');
         }
       }
 
+      // Forward to n8n if configured
       if (config.n8nWebhookUrl) {
         try {
-          // Sanitizar dados antes de enviar (remover base64 grandes)
           const sanitizedData = sanitizeWebhookData(body);
           
           const forwardPayload = { 
@@ -287,40 +562,21 @@ serve(async (req) => {
             response: success ? 'SUCCESS' : fText.substring(0, 200)
           });
           
-          return new Response(JSON.stringify({ 
-            ok: true, 
-            forwarded: success,
-            n8n_status: fRes.status,
-            metadata: { ...metadata, correlationId }
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
         } catch (forwardErr) {
           console.error('❌ Error forwarding to n8n:', {
             correlationId,
             error: forwardErr.message,
             url: config.n8nWebhookUrl.substring(0, 50) + '...'
           });
-          return new Response(JSON.stringify({ 
-            ok: true, 
-            forwarded: false, 
-            error: forwardErr.message,
-            metadata: { ...metadata, correlationId }
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
         }
-      } else {
-        console.log('⚠️ N8N_WEBHOOK_URL not configured, webhook data discarded', { correlationId });
-        return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: false, 
-          note: 'N8N_WEBHOOK_URL not configured',
-          metadata: { ...metadata, correlationId }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       }
+
+      return new Response(JSON.stringify({ 
+        success: true,
+        correlationId 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
