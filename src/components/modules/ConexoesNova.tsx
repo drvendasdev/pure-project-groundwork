@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, AlertCircle } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -14,13 +14,20 @@ import { supabase } from '@/integrations/supabase/client';
 interface Connection {
   id: string;
   instance_name: string;
-  status: 'creating' | 'qr' | 'connecting' | 'connected' | 'disconnected' | 'error';
-  qr_code?: string;
+  status: string;
+  qr_code?: string | null;
   history_recovery: string;
+  history_status: string;
   created_at: string;
   updated_at: string;
+  last_activity_at?: string | null;
+  phone_number?: string | null;
   workspace_id: string;
+  metadata?: any;
 }
+
+const EVOLUTION_API_URL = 'https://evo.eventoempresalucrativa.com.br';
+const EVOLUTION_API_KEY = '9CF683F53F111493D7122C674139C';
 
 export function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -44,13 +51,11 @@ export function ConexoesNova() {
     try {
       setIsLoading(true);
       
-      // Get connections from database with status
-      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
-        body: { 
-          action: 'list',
-          orgId: '00000000-0000-0000-0000-000000000000'
-        }
-      });
+      const { data, error } = await supabase
+        .from('connections')
+        .select('*')
+        .eq('workspace_id', '00000000-0000-0000-0000-000000000000')
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error loading connections:', error);
@@ -62,9 +67,7 @@ export function ConexoesNova() {
         return;
       }
 
-      if (data?.connections) {
-        setConnections(data.connections);
-      }
+      setConnections(data || []);
     } catch (error) {
       console.error('Error loading connections:', error);
       toast({
@@ -90,44 +93,75 @@ export function ConexoesNova() {
     try {
       setIsCreating(true);
       
-      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
-        body: { 
-          action: 'create',
+      // Criar instância na Evolution API
+      const response = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify({
           instanceName: instanceName.trim(),
-          historyRecovery,
-          orgId: '00000000-0000-0000-0000-000000000000'
-        }
+          token: 'drvendasapi',
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+          webhook: {
+            url: 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response',
+            byEvents: false,
+            base64: true,
+            headers: {
+              autorization: 'Bearer TOKEN',
+              'Content-Type': 'application/json'
+            },
+            events: ['MESSAGES_UPSERT']
+          }
+        }),
       });
 
-      if (error) {
-        console.error('Error creating instance:', error);
-        toast({
-          title: 'Erro',
-          description: 'Erro ao criar instância',
-          variant: 'destructive',
-        });
-        return;
+      if (!response.ok) {
+        throw new Error(`Erro na API: ${response.status}`);
       }
 
-      if (data?.success) {
+      const result = await response.json();
+
+      // Salvar na tabela connections
+      const { error: dbError } = await supabase
+        .from('connections')
+        .insert({
+          instance_name: instanceName.trim(),
+          status: 'disconnected',
+          history_recovery: historyRecovery,
+          workspace_id: '00000000-0000-0000-0000-000000000000',
+          metadata: { evolution_response: result }
+        });
+
+      if (dbError) {
+        console.error('Error saving to database:', dbError);
+        toast({
+          title: 'Aviso',
+          description: 'Instância criada na Evolution mas erro ao salvar no banco',
+          variant: 'destructive',
+        });
+      } else {
         toast({
           title: 'Sucesso',
           description: 'Instância criada com sucesso!',
         });
-        
-        // Reset form
-        setInstanceName('');
-        setHistoryRecovery('none');
-        setIsCreateModalOpen(false);
-        
-        // Reload connections
-        await loadConnections();
       }
+      
+      // Reset form
+      setInstanceName('');
+      setHistoryRecovery('none');
+      setIsCreateModalOpen(false);
+      
+      // Reload connections
+      await loadConnections();
+
     } catch (error) {
       console.error('Error creating instance:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao criar instância',
+        description: `Erro ao criar instância: ${error.message}`,
         variant: 'destructive',
       });
     } finally {
@@ -140,37 +174,42 @@ export function ConexoesNova() {
       setIsConnecting(true);
       setSelectedConnection(connection);
       
-      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
-        body: { 
-          action: 'connect',
-          instanceName: connection.instance_name,
-          orgId: '00000000-0000-0000-0000-000000000000'
-        }
+      // Gerar QR Code da Evolution API
+      const response = await fetch(`${EVOLUTION_API_URL}/instance/connect/${connection.instance_name}`, {
+        method: 'GET',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+        },
       });
 
-      if (error) {
-        console.error('Error connecting instance:', error);
-        toast({
-          title: 'Erro',
-          description: 'Erro ao conectar instância',
-          variant: 'destructive',
-        });
-        return;
+      if (!response.ok) {
+        throw new Error(`Erro na API: ${response.status}`);
       }
 
-      if (data?.qrCode) {
+      const result = await response.json();
+      const qrCode = result.base64 || result.qrcode;
+
+      if (qrCode) {
+        // Atualizar status na base de dados
+        await supabase
+          .from('connections')
+          .update({ status: 'qr', qr_code: qrCode })
+          .eq('id', connection.id);
+
         // Update the connection with QR code
-        setSelectedConnection(prev => prev ? { ...prev, qr_code: data.qrCode } : null);
+        setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCode, status: 'qr' } : null);
         setIsQRModalOpen(true);
         
         // Reload connections to get updated status
         await loadConnections();
+      } else {
+        throw new Error('QR Code não encontrado na resposta');
       }
     } catch (error) {
       console.error('Error connecting instance:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao conectar instância',
+        description: `Erro ao conectar instância: ${error.message}`,
         variant: 'destructive',
       });
     } finally {
@@ -184,38 +223,43 @@ export function ConexoesNova() {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
-        body: { 
-          action: 'remove',
-          instanceName: connection.instance_name,
-          orgId: '00000000-0000-0000-0000-000000000000'
-        }
+      // Remover da Evolution API
+      await fetch(`${EVOLUTION_API_URL}/instance/delete/${connection.instance_name}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+        },
       });
 
+      // Remover do banco de dados
+      const { error } = await supabase
+        .from('connections')
+        .delete()
+        .eq('id', connection.id);
+
       if (error) {
-        console.error('Error removing connection:', error);
+        console.error('Error removing from database:', error);
         toast({
           title: 'Erro',
-          description: 'Erro ao remover conexão',
+          description: 'Erro ao remover do banco de dados',
           variant: 'destructive',
         });
         return;
       }
 
-      if (data?.success) {
-        toast({
-          title: 'Sucesso',
-          description: 'Conexão removida com sucesso!',
-        });
-        
-        // Reload connections
-        await loadConnections();
-      }
+      toast({
+        title: 'Sucesso',
+        description: 'Conexão removida com sucesso!',
+      });
+      
+      // Reload connections
+      await loadConnections();
+
     } catch (error) {
       console.error('Error removing connection:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao remover conexão',
+        description: `Erro ao remover conexão: ${error.message}`,
         variant: 'destructive',
       });
     }
