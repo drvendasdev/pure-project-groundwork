@@ -6,8 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 
 import { useInstances } from "@/hooks/useInstances";
+import { useChannels } from "@/hooks/useChannels";
+import { useCargos } from "@/hooks/useCargos";
 import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
-
 
 
 interface AdicionarUsuarioModalProps {
@@ -88,39 +89,25 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
       email: formData.email,
       profile: formData.profile,
       status: "active",
-      senha: formData.password,
+      avatar: null,
       default_channel: formData.defaultChannel || null,
-      cargo_ids: selectedCargos
     });
 
-
-    if (result.data) {
-      onAddUser({
-        name: formData.name,
-        email: formData.email,
-        profile: formData.profile,
-        status: "active",
-      });
-      
-      // Reset form
-      setFormData({
-        name: "",
-        email: "",
-        profile: "user",
-        password: "",
-        temporaryPassword: false,
-        queues: "",
-        roles: "",
-        defaultChannel: "",
-        defaultPhone: "",
-      });
-      setShowPassword(false);
-      setSelectedRoles([]);
-      setSelectedInstances([]);
-      setDefaultInstance("");
-      onClose();
-    }
-
+    // Reset form after successful submission
+    setFormData({
+      name: "",
+      email: "",
+      profile: "user",
+      password: "",
+      temporaryPassword: false,
+      queues: "",
+      defaultChannel: "",
+      defaultPhone: "",
+    });
+    setShowPassword(false);
+    setSelectedCargos([]);
+    onClose();
+    setIsSubmitting(false);
   };
 
   const handleCancel = () => {
@@ -135,7 +122,6 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
       defaultPhone: "",
     });
     setShowPassword(false);
-    setShowCargoDropdown(false);
     setSelectedCargos([]);
     onClose();
   };

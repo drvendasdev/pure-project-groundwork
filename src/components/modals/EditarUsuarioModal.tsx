@@ -7,7 +7,8 @@ import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
 
 import { useInstances } from "@/hooks/useInstances";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
-
+import { useChannels } from "@/hooks/useChannels";
+import { useCargos } from "@/hooks/useCargos";
 import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 
 interface EditarUsuarioModalProps {
