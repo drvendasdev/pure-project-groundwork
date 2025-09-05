@@ -1,6 +1,4 @@
-
 import React, { useState, useEffect } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,15 +8,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 
-
 // Interfaces
 interface Connection {
-
   id: string;
   instance_name: string;
   status: string;
@@ -29,7 +24,6 @@ interface Connection {
   phone_number?: string | null;
   workspace_id: string;
   metadata?: any;
-
 }
 
 const EVOLUTION_API_URL = 'https://evo.eventoempresalucrativa.com.br';
@@ -37,14 +31,10 @@ const EVOLUTION_API_KEY = '9CF683F53F111493D7122C674139C';
 
 // Helper functions for phone number formatting
 const normalizePhoneNumber = (phone: string): string => {
-  // Remove all non-digits
   const digitsOnly = phone.replace(/\D/g, '');
-  
-  // If it doesn't start with 55, add it
   if (digitsOnly && !digitsOnly.startsWith('55')) {
     return `55${digitsOnly}`;
   }
-  
   return digitsOnly;
 };
 
@@ -53,7 +43,6 @@ const formatPhoneNumberDisplay = (phone: string): string => {
   
   const normalized = normalizePhoneNumber(phone);
   if (normalized.length >= 13) {
-    // Format as: 55 (XX) XXXXX-XXXX
     const country = normalized.slice(0, 2);
     const area = normalized.slice(2, 4);
     const firstPart = normalized.slice(4, 9);
@@ -66,7 +55,6 @@ const formatPhoneNumberDisplay = (phone: string): string => {
 
 export function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
-
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
@@ -89,7 +77,6 @@ export function ConexoesNova() {
   useEffect(() => {
     loadConnections();
     
-    // Cleanup polling on unmount
     return () => {
       if (pollInterval) {
         clearInterval(pollInterval);
@@ -225,24 +212,87 @@ export function ConexoesNova() {
       return;
     }
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [instanceName, setInstanceName] = useState('');
+    try {
+      setIsCreating(true);
 
-  // Load connections from localStorage on component mount
-  useEffect(() => {
-    const savedConnections = localStorage.getItem('minhas-conexoes');
-    if (savedConnections) {
-      setConnections(JSON.parse(savedConnections));
+      // Criar instância na Evolution API
+      const response = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify({
+          instanceName: instanceName.trim(),
+          token: 'drvendasapi',
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+          webhook: {
+            url: 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response',
+            byEvents: false,
+            base64: true,
+            headers: {
+              autorization: 'Bearer TOKEN',
+              'Content-Type': 'application/json'
+            },
+            events: ['MESSAGES_UPSERT']
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na API: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // Salvar na tabela connections
+      const { data: connectionId, error: dbError } = await supabase.rpc('create_connection_anon', {
+        p_instance_name: instanceName.trim(),
+        p_history_recovery: historyRecovery,
+        p_metadata: { evolution_response: result }
+      });
+
+      // Se um número de telefone foi fornecido, salvar no banco
+      if (!dbError && phoneNumber.trim() && connectionId) {
+        const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
+        await supabase.rpc('update_connection_status_anon', {
+          p_connection_id: connectionId,
+          p_status: 'creating',
+          p_phone_number: normalizedPhone
+        });
+      }
+
+      if (dbError) {
+        console.error('Error saving to database:', dbError);
+        toast({
+          title: 'Aviso',
+          description: 'Instância criada na Evolution mas erro ao salvar no banco',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Sucesso',
+          description: 'Instância criada com sucesso!',
+        });
+      }
+      
+      // Reset form and close modal
+      resetModal();
+      
+      // Reload connections
+      await loadConnections();
+
+    } catch (error) {
+      console.error('Error creating instance:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao criar instância: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
     }
-  }, []);
-
-  // Save connections to localStorage whenever connections change
-  const saveConnectionsToStorage = (newConnections: Connection[]) => {
-    localStorage.setItem('minhas-conexoes', JSON.stringify(newConnections));
-    setConnections(newConnections);
   };
 
   const handleAddConexao = async () => {
@@ -253,7 +303,6 @@ export function ConexoesNova() {
       });
       return;
     }
-
 
     try {
       setIsCreating(true);
@@ -395,8 +444,8 @@ export function ConexoesNova() {
 
   const resetModal = () => {
     setInstanceName('');
-    setHistoryRecovery('none');
     setPhoneNumber('');
+    setHistoryRecovery('none');
     setIsEditMode(false);
     setEditingConnection(null);
     setIsCreateModalOpen(false);
@@ -405,8 +454,8 @@ export function ConexoesNova() {
   const openEditModal = (connection: Connection) => {
     setEditingConnection(connection);
     setInstanceName(connection.instance_name);
-    setHistoryRecovery(connection.history_recovery);
     setPhoneNumber(connection.phone_number || '');
+    setHistoryRecovery(connection.history_recovery);
     setIsEditMode(true);
     setIsCreateModalOpen(true);
   };
@@ -418,61 +467,59 @@ export function ConexoesNova() {
 
   const removeConnection = async () => {
     if (!connectionToDelete) return;
-    
+
     try {
-      setIsLoading(true);
-      
-      // Tentar deletar da Evolution API primeiro
+      setIsDisconnecting(true);
+
       const response = await fetch(`${EVOLUTION_API_URL}/instance/delete/${connectionToDelete.instance_name}`, {
         method: 'DELETE',
         headers: {
+          'Content-Type': 'application/json',
           'apikey': EVOLUTION_API_KEY,
         },
       });
 
-      // Deletar do banco de dados independentemente do resultado da API
       const { error: dbError } = await supabase.rpc('delete_connection_anon', {
         p_connection_id: connectionToDelete.id
       });
 
       if (dbError) {
-        console.error('Error deleting from database:', dbError);
+        console.error('Error deleting connection from database:', dbError);
         toast({
-          title: 'Erro',
-          description: 'Erro ao deletar conexão do banco de dados',
-          variant: 'destructive',
+          title: "Erro",
+          description: "Erro ao excluir conexão do banco de dados",
+          variant: "destructive",
         });
         return;
       }
 
       if (!response.ok) {
-        console.warn(`Warning: Could not delete from Evolution API (${response.status}), but connection was removed from database`);
         toast({
-          title: 'Aviso',
-          description: 'Conexão removida do banco, mas pode ainda existir na API Evolution',
-          variant: 'destructive',
+          title: "Erro",
+          description: "Erro ao excluir instância da API Evolution",
+          variant: "destructive",
         });
       } else {
         toast({
-          title: 'Sucesso',
-          description: 'Conexão deletada com sucesso!',
+          title: "Sucesso",
+          description: "Instância excluída com sucesso",
+          variant: "default",
         });
       }
-      
-      // Reload connections
+
       await loadConnections();
-      
+      setIsDeleteModalOpen(false);
+      setConnectionToDelete(null);
+
     } catch (error) {
       console.error('Error deleting connection:', error);
       toast({
-        title: 'Erro',
-        description: `Erro ao deletar conexão: ${error.message}`,
-        variant: 'destructive',
+        title: "Erro",
+        description: "Erro ao excluir conexão",
+        variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
-      setIsDeleteModalOpen(false);
-      setConnectionToDelete(null);
+      setIsDisconnecting(false);
     }
   };
 
@@ -727,12 +774,10 @@ export function ConexoesNova() {
           description: 'Instância desconectada localmente, mas pode ainda estar ativa na API',
           variant: 'destructive',
         });
-
       }
       
       // Reload connections
       await loadConnections();
-
 
     } catch (error) {
       console.error('Error disconnecting instance:', error);
@@ -776,16 +821,13 @@ export function ConexoesNova() {
     );
   }
 
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-
           <h2 className="text-3xl font-bold tracking-tight">Conexões WhatsApp</h2>
           <p className="text-muted-foreground">
             Gerencie suas instâncias de WhatsApp
-
           </p>
         </div>
         
@@ -801,20 +843,16 @@ export function ConexoesNova() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-
               <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
-
             </DialogHeader>
             
             <div className="space-y-4">
               <div className="space-y-2">
-
                 <Label htmlFor="instanceName">Nome da Instância</Label>
-  <Input
+                <Input
                   id="instanceName"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
-
                   placeholder="Ex: minha-empresa"
                   disabled={isEditMode}
                 />
@@ -847,7 +885,6 @@ export function ConexoesNova() {
                     <SelectItem value="quarter">Três meses</SelectItem>
                   </SelectContent>
                 </Select>
-
               </div>
 
               <Button onClick={isEditMode ? editConnection : createInstance} disabled={isCreating}>
@@ -868,12 +905,11 @@ export function ConexoesNova() {
             </p>
             <Button onClick={() => setIsCreateModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-
+              Adicionar Instância
             </Button>
           </CardContent>
         </Card>
       ) : (
-
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {connections.map((connection) => (
             <Card key={connection.id} className="relative">
@@ -953,7 +989,6 @@ export function ConexoesNova() {
                       </Button>
                     )}
                   </div>
-
                 </div>
               </CardContent>
             </Card>
@@ -983,7 +1018,6 @@ export function ConexoesNova() {
                     alt="QR Code"
                     className="w-64 h-64"
                   />
-
                 </div>
                 <div className="text-center space-y-2">
                   <p className="font-medium">
@@ -1002,11 +1036,8 @@ export function ConexoesNova() {
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
               </div>
-
-             
             )}
           </div>
-
         </DialogContent>
       </Dialog>
 
