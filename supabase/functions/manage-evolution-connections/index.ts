@@ -82,6 +82,191 @@ serve(async (req) => {
     });
 
     switch (action) {
+      case 'create': {
+        if (!instanceName || !orgId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'instanceName e orgId são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          // Check if instance already exists for this org
+          const { data: existingInstance } = await supabaseClient
+            .from('evolution_instance_tokens')
+            .select('instance_name')
+            .eq('org_id', orgId)
+            .eq('instance_name', instanceName)
+            .single();
+
+          if (existingInstance) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'Já existe uma instância com este nome' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Create instance via Evolution API
+          const createBody = {
+            instanceName: instanceName,
+            qrcode: true,
+            integration: "WHATSAPP-BAILEYS",
+            webhook: {
+              url: "",
+              byEvents: false,
+              base64: true,
+              headers: {
+                "autorization": "Bearer TOKEN",
+                "Content-Type": "application/json"
+              },
+              events: ["MESSAGES_UPSERT"]
+            }
+          };
+
+          console.log('Creating Evolution instance:', { instanceName, createBody });
+
+          const response = await fetch('https://evo.eventoempresalucrativa.com.br/instance/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': '9CF683F53F111493D7122C674139C'
+            },
+            body: JSON.stringify(createBody)
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Evolution API error:', errorText);
+            return new Response(
+              JSON.stringify({ success: false, error: `Erro da Evolution API: ${errorText}` }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const evolutionData = await response.json();
+          console.log('Evolution instance created:', evolutionData);
+
+          // Save to Supabase
+          const { data: savedInstance, error: saveError } = await supabaseClient
+            .from('evolution_instance_tokens')
+            .insert({
+              org_id: orgId,
+              instance_name: instanceName,
+              token: 'temp-token-' + Date.now(),
+              evolution_url: 'https://evo.eventoempresalucrativa.com.br'
+            })
+            .select()
+            .single();
+
+          if (saveError) {
+            console.error('Error saving to Supabase:', saveError);
+            return new Response(
+              JSON.stringify({ success: false, error: `Erro ao salvar: ${saveError.message}` }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              instance: savedInstance,
+              evolutionData: evolutionData
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+
+        } catch (error) {
+          console.error('Error in create action:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: `Erro interno: ${error.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'get_qr': {
+        if (!instanceName) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'instanceName é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const response = await fetch(`https://evo.eventoempresalucrativa.com.br/instance/qrcode/${instanceName}`, {
+            method: 'GET',
+            headers: {
+              'apikey': '9CF683F53F111493D7122C674139C'
+            }
+          });
+
+          if (!response.ok) {
+            return new Response(
+              JSON.stringify({ success: false, error: 'Erro ao obter QR code' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const qrData = await response.json();
+          
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              qr_code: qrData.qrcode || qrData.base64 
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+
+        } catch (error) {
+          console.error('Error getting QR code:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: `Erro ao obter QR: ${error.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'remove': {
+        if (!instanceName || !orgId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'instanceName e orgId são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          // Delete from Evolution API
+          const response = await fetch(`https://evo.eventoempresalucrativa.com.br/instance/delete/${instanceName}`, {
+            method: 'DELETE',
+            headers: {
+              'apikey': '9CF683F53F111493D7122C674139C'
+            }
+          });
+
+          // Delete from Supabase (regardless of Evolution API response)
+          const { error: deleteError } = await supabaseClient
+            .from('evolution_instance_tokens')
+            .delete()
+            .eq('org_id', orgId)
+            .eq('instance_name', instanceName);
+
+          if (deleteError) {
+            console.error('Error deleting from Supabase:', deleteError);
+          }
+
+          return new Response(
+            JSON.stringify({ success: true }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+
+        } catch (error) {
+          console.error('Error removing instance:', error);
+          return new Response(
+            JSON.stringify({ success: false, error: `Erro ao remover: ${error.message}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
       case 'add_reference': {
         if (!instanceName || !instanceToken || !evolutionUrl) {
           return new Response(
