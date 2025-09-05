@@ -41,8 +41,12 @@ function validateWebhookUrl(url: string): { valid: boolean, error?: string } {
       return { valid: false, error: 'URL do webhook deve ser do Supabase Functions' };
     }
     
-    if (!urlObj.pathname.endsWith('/functions/v1/evolution-webhook')) {
-      return { valid: false, error: 'URL do webhook deve terminar com /functions/v1/evolution-webhook' };
+    // Accept both formats: with and without /functions/v1
+    const validPaths = ['/evolution-webhook', '/functions/v1/evolution-webhook'];
+    const isValidPath = validPaths.some(path => urlObj.pathname.endsWith(path));
+    
+    if (!isValidPath) {
+      return { valid: false, error: 'URL do webhook deve terminar com /evolution-webhook ou /functions/v1/evolution-webhook' };
     }
     
     return { valid: true };

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X, AlertCircle } from 'lucide-react';
+import { Plus, QrCode, Power, PowerOff, Trash2, RefreshCw, Star, X, AlertCircle, Link, TestTube } from 'lucide-react';
 
 interface Connection {
   name: string;
@@ -23,13 +23,21 @@ export default function ConexoesNova() {
   const { hasRole } = useAuth();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
+  const [addReferenceModalOpen, setAddReferenceModalOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [currentQrConnection, setCurrentQrConnection] = useState<Connection | null>(null);
   const [provisionLoading, setProvisionLoading] = useState(false);
+  const [addReferenceLoading, setAddReferenceLoading] = useState(false);
+  const [testingApi, setTestingApi] = useState(false);
   const [qrLoading, setQrLoading] = useState<Record<number, boolean>>({});
   const [provisionData, setProvisionData] = useState({ 
     instanceName: '', 
     messageRecovery: 'none' 
+  });
+  const [referenceData, setReferenceData] = useState({
+    instanceName: '',
+    instanceToken: '',
+    evolutionUrl: 'https://evo.eventoempresalucrativa.com.br'
   });
   const [defaultOrgId, setDefaultOrgId] = useState<string>('');
   const [connectionLimit, setConnectionLimit] = useState(1);
@@ -177,12 +185,10 @@ export default function ConexoesNova() {
     try {
       setProvisionLoading(true);
       
-      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+      const { data } = await supabase.functions.invoke('create-evolution-instance', {
         body: {
-          action: 'provision',
-          orgId: defaultOrgId,
           instanceName: provisionData.instanceName.trim(),
-          messageRecovery: provisionData.messageRecovery
+          orgId: defaultOrgId
         }
       });
 
@@ -192,6 +198,16 @@ export default function ConexoesNova() {
         // Show detailed error if available from Evolution API
         if (data?.evolutionResponse) {
           console.error('Evolution API error details:', data.evolutionResponse);
+          
+          // Try to extract better error message from Evolution response
+          try {
+            const evolutionError = JSON.parse(data.evolutionResponse);
+            if (evolutionError.message || evolutionError.error) {
+              throw new Error(`Evolution API: ${evolutionError.message || evolutionError.error}`);
+            }
+          } catch (parseError) {
+            // If can't parse JSON, use original error
+          }
         }
         
         throw new Error(errorMessage);
@@ -458,6 +474,81 @@ export default function ConexoesNova() {
     }
   };
 
+  const handleAddReference = async () => {
+    if (!referenceData.instanceName.trim() || !referenceData.instanceToken.trim() || !referenceData.evolutionUrl.trim()) {
+      toast({
+        title: 'Campos obrigatórios',
+        description: 'Preencha todos os campos para adicionar a referência',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setAddReferenceLoading(true);
+      
+      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'add_reference',
+          orgId: defaultOrgId,
+          instanceName: referenceData.instanceName.trim(),
+          instanceToken: referenceData.instanceToken.trim(),
+          evolutionUrl: referenceData.evolutionUrl.trim()
+        }
+      });
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao adicionar referência');
+      }
+
+      setReferenceData({
+        instanceName: '',
+        instanceToken: '',
+        evolutionUrl: 'https://evo.eventoempresalucrativa.com.br'
+      });
+      setAddReferenceModalOpen(false);
+      toast({ title: 'Referência adicionada com sucesso!' });
+      
+      // Reload connections
+      loadConnections();
+    } catch (error: any) {
+      console.error('Erro ao adicionar referência:', error);
+      toast({ 
+        title: 'Erro ao adicionar referência',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setAddReferenceLoading(false);
+    }
+  };
+
+  const handleTestEvolutionApi = async () => {
+    try {
+      setTestingApi(true);
+      
+      const { data } = await supabase.functions.invoke('list-evolution-instances');
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro ao testar API Evolution');
+      }
+
+      toast({ 
+        title: 'API Evolution OK',
+        description: `Encontradas ${data.instances?.length || 0} instâncias na API`,
+      });
+    } catch (error: any) {
+      console.error('Erro ao testar API:', error);
+      toast({ 
+        title: 'Erro na API Evolution',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setTestingApi(false);
+    }
+  };
+
   const handleDeleteAll = async () => {
     if (!window.confirm('Tem certeza que deseja remover todas as conexões? Esta ação não pode ser desfeita.')) {
       return;
@@ -497,7 +588,95 @@ export default function ConexoesNova() {
           </p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {/* Test API button */}
+          <Button 
+            variant="outline"
+            onClick={handleTestEvolutionApi}
+            disabled={testingApi}
+          >
+            <TestTube className="mr-2 h-4 w-4" />
+            {testingApi ? 'Testando...' : 'Testar API'}
+          </Button>
+
+          {/* Add Reference button */}
+          <Dialog open={addReferenceModalOpen} onOpenChange={setAddReferenceModalOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline"
+                disabled={!canCreateConnections}
+              >
+                <Link className="mr-2 h-4 w-4" />
+                Adicionar referência
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Adicionar instância existente</DialogTitle>
+                <DialogDescription>
+                  Conecte uma instância já criada na API Evolution
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="refInstanceName">Nome da instância</Label>
+                  <Input
+                    id="refInstanceName"
+                    value={referenceData.instanceName}
+                    onChange={(e) => setReferenceData(prev => ({ 
+                      ...prev, 
+                      instanceName: e.target.value.trim() 
+                    }))}
+                    placeholder="ex.: minha-instancia"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="instanceToken">Token da instância</Label>
+                  <Input
+                    id="instanceToken"
+                    type="password"
+                    value={referenceData.instanceToken}
+                    onChange={(e) => setReferenceData(prev => ({ 
+                      ...prev, 
+                      instanceToken: e.target.value.trim() 
+                    }))}
+                    placeholder="Token JWT da instância"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="evolutionUrl">URL da Evolution API</Label>
+                  <Input
+                    id="evolutionUrl"
+                    value={referenceData.evolutionUrl}
+                    onChange={(e) => setReferenceData(prev => ({ 
+                      ...prev, 
+                      evolutionUrl: e.target.value.trim() 
+                    }))}
+                    placeholder="https://evo.exemplo.com.br"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setAddReferenceModalOpen(false)}
+                    disabled={addReferenceLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={handleAddReference}
+                    disabled={!referenceData.instanceName || !referenceData.instanceToken || !referenceData.evolutionUrl || addReferenceLoading}
+                  >
+                    {addReferenceLoading ? 'Adicionando...' : 'Adicionar'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {connections.length > 0 && (
             <Button 
               variant="destructive"

@@ -10,8 +10,9 @@ const corsHeaders = {
 function getConfig() {
   const supabaseFunctionsWebhook = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
   const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
-  const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-  const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
+  // Normalize Evolution API URL by removing trailing slashes
+  const evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
+  const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   
@@ -41,8 +42,12 @@ function validateWebhookUrl(url: string): { valid: boolean, error?: string } {
       return { valid: false, error: 'URL do webhook deve ser do Supabase Functions' };
     }
     
-    if (!urlObj.pathname.endsWith('/functions/v1/evolution-webhook')) {
-      return { valid: false, error: 'URL do webhook deve terminar com /functions/v1/evolution-webhook' };
+    // Accept both formats: with and without /functions/v1
+    const validPaths = ['/evolution-webhook', '/functions/v1/evolution-webhook'];
+    const isValidPath = validPaths.some(path => urlObj.pathname.endsWith(path));
+    
+    if (!isValidPath) {
+      return { valid: false, error: 'URL do webhook deve terminar com /evolution-webhook ou /functions/v1/evolution-webhook' };
     }
     
     return { valid: true };
@@ -262,22 +267,21 @@ serve(async (req) => {
             error: webhookValidation.error,
             url: config.supabaseFunctionsWebhook ? `${new URL(config.supabaseFunctionsWebhook).host}${new URL(config.supabaseFunctionsWebhook).pathname}` : 'undefined'
           });
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: webhookValidation.error,
-              correlationId
-            }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          
+          // Instead of returning error, log warning and proceed with fallback
+          console.warn('Proceeding without webhook due to validation failure', { correlationId });
         }
 
-        const webhookUrl = config.supabaseFunctionsWebhook!;
-        console.log('Using validated webhook URL:', { 
-          correlationId,
-          webhookHost: new URL(webhookUrl).host,
-          webhookPath: new URL(webhookUrl).pathname
-        });
+        const webhookUrl = webhookValidation.valid ? config.supabaseFunctionsWebhook! : null;
+        if (webhookUrl) {
+          console.log('Using validated webhook URL:', { 
+            correlationId,
+            webhookHost: new URL(webhookUrl).host,
+            webhookPath: new URL(webhookUrl).pathname
+          });
+        } else {
+          console.log('No valid webhook URL, proceeding without webhook', { correlationId });
+        }
 
         // Check quota - get limit from org settings
         const { data: orgSettings, error: settingsError } = await supabaseClient
@@ -332,8 +336,8 @@ serve(async (req) => {
         const globalWebhookEnabled = Deno.env.get('EVOLUTION_WEBHOOK_GLOBAL_ENABLED') === 'true';
 
         try {
-          // Prepare webhook configuration
-          const webhookConfig = globalWebhookEnabled ? {} : {
+          // Prepare webhook configuration only if webhook URL is valid
+          const webhookConfig = globalWebhookEnabled || !webhookUrl ? {} : {
             webhook: webhookUrl,
             webhook_by_events: false,
             webhook_base64: false,
@@ -364,7 +368,7 @@ serve(async (req) => {
           console.log('Creating instance with webhook config:', { 
             correlationId,
             instanceName,
-            webhookUrl: globalWebhookEnabled ? 'GLOBAL' : `${new URL(webhookUrl).host}${new URL(webhookUrl).pathname}`,
+            webhookUrl: globalWebhookEnabled ? 'GLOBAL' : webhookUrl ? `${new URL(webhookUrl).host}${new URL(webhookUrl).pathname}` : 'NONE',
             globalWebhookEnabled,
             hasWebhookSecret: !!config.evolutionWebhookSecret
           });
@@ -397,7 +401,7 @@ serve(async (req) => {
           }
 
           // Check if creation failed due to webhook issues and implement fallback
-          if (!createInstanceResponse.ok && !globalWebhookEnabled) {
+          if (!createInstanceResponse.ok && !globalWebhookEnabled && webhookUrl) {
             const errorText = await createInstanceResponse.text();
             console.log('Instance creation failed, checking if webhook-related:', { 
               correlationId, 
@@ -429,33 +433,39 @@ serve(async (req) => {
                 if (fallbackResponse.ok) {
                   console.log('Instance created without webhook, setting webhook separately...', { correlationId });
                   
-                  // Try to set webhook separately using the /webhook/set endpoint
-                  try {
-                    const setWebhookResponse = await fetch(`${config.evolutionApiUrl}/webhook/set/${instanceName}`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${config.evolutionApiKey}`,
-                      },
-                      body: JSON.stringify({
-                        url: webhookUrl,
-                        webhook_by_events: false,
-                        webhook_base64: false,
-                        ...(config.evolutionWebhookSecret && {
-                          headers: {
-                            authorization: `Bearer ${config.evolutionWebhookSecret}`
-                          }
-                        }),
-                        events: [
-                          'APPLICATION_STARTUP',
-                          'QRCODE_UPDATED',
-                          'CONNECTION_UPDATE',
-                          'MESSAGES_UPSERT',
-                          'MESSAGES_UPDATE',
-                          'SEND_MESSAGE'
-                        ]
-                      })
-                    });
+                  // Try to set webhook separately using both authentication methods
+                  const setWebhookAttempts = [
+                    { headers: { 'Authorization': `Bearer ${config.evolutionApiKey}` }, label: 'API key' },
+                    { headers: { 'Authorization': `Bearer ${instanceToken}` }, label: 'instance token' }
+                  ];
+
+                  for (const attempt of setWebhookAttempts) {
+                    try {
+                      const setWebhookResponse = await fetch(`${config.evolutionApiUrl}/webhook/set/${instanceName}`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          ...attempt.headers,
+                        },
+                        body: JSON.stringify({
+                          url: webhookUrl,
+                          webhook_by_events: false,
+                          webhook_base64: false,
+                          ...(config.evolutionWebhookSecret && {
+                            headers: {
+                              authorization: `Bearer ${config.evolutionWebhookSecret}`
+                            }
+                          }),
+                          events: [
+                            'APPLICATION_STARTUP',
+                            'QRCODE_UPDATED',
+                            'CONNECTION_UPDATE',
+                            'MESSAGES_UPSERT',
+                            'MESSAGES_UPDATE',
+                            'SEND_MESSAGE'
+                          ]
+                        })
+                      });
                     
                     if (setWebhookResponse.ok) {
                       console.log('Webhook configured successfully via fallback method', { correlationId });
