@@ -50,63 +50,17 @@ export function ConexoesNova() {
 
   const loadConnections = async () => {
     try {
-      const { data: tokens, error } = await supabase
-        .from('evolution_instance_tokens')
-        .select('*')
-        .eq('org_id', orgId);
+      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
+        body: { action: 'list', orgId }
+      });
 
       if (error) throw error;
 
-      // For each token, check status with Evolution API
-      const connectionsWithStatus: ConnectionWithStatus[] = [];
-      
-      for (const token of tokens || []) {
-        try {
-          const response = await fetch(`${token.evolution_url}/instance/fetchInstances`, {
-            method: 'GET',
-            headers: {
-              'apikey': token.token,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          let status: ConnectionWithStatus['status'] = 'disconnected';
-          
-          if (response.ok) {
-            const data = await response.json();
-            const instance = data.find((inst: any) => inst.instance.instanceName === token.instance_name);
-            
-            if (instance) {
-              switch (instance.instance.state) {
-                case 'open':
-                  status = 'connected';
-                  break;
-                case 'connecting':
-                  status = 'connecting';
-                  break;
-                case 'close':
-                  status = 'disconnected';
-                  break;
-                default:
-                  status = 'disconnected';
-              }
-            }
-          }
-
-          connectionsWithStatus.push({
-            ...token,
-            status
-          });
-        } catch (err) {
-          console.error(`Error checking status for ${token.instance_name}:`, err);
-          connectionsWithStatus.push({
-            ...token,
-            status: 'error'
-          });
-        }
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao carregar conexões');
       }
 
-      setConnections(connectionsWithStatus);
+      setConnections(data.data || []);
     } catch (error: any) {
       console.error('Error loading connections:', error);
       toast({
@@ -131,42 +85,19 @@ export function ConexoesNova() {
 
     setIsCreating(true);
     try {
-      // Call Evolution API to create instance
-      const response = await fetch(`${evolutionUrl}/instance/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
+        body: { 
+          action: 'create', 
           instanceName: createForm.instanceName.trim(),
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
-          events: ['APPLICATION_STARTUP', 'QRCODE_UPDATED', 'MESSAGES_UPSERT', 'CONNECTION_UPDATE']
-        })
+          orgId 
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Erro HTTP: ${response.status}`);
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao criar instância');
       }
-
-      const data = await response.json();
-      
-      if (!data.hash) {
-        throw new Error('Token não retornado pela API');
-      }
-
-      // Save token to database
-      const { error: dbError } = await supabase
-        .from('evolution_instance_tokens')
-        .insert({
-          org_id: orgId,
-          instance_name: createForm.instanceName.trim(),
-          token: data.hash,
-          evolution_url: evolutionUrl
-        });
-
-      if (dbError) throw dbError;
 
       toast({
         title: "Sucesso",
@@ -195,28 +126,21 @@ export function ConexoesNova() {
     setIsQRModalOpen(true);
 
     try {
-      const response = await fetch(`${connection.evolution_url}/instance/connect/${connection.instance_name}`, {
-        method: 'GET',
-        headers: {
-          'apikey': connection.token,
-          'Content-Type': 'application/json'
+      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
+        body: { 
+          action: 'connect', 
+          instanceName: connection.instance_name,
+          orgId 
         }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Erro HTTP: ${response.status}`);
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao obter QR code');
       }
 
-      const data = await response.json();
-      
-      if (data.base64) {
-        setQrCode(`data:image/png;base64,${data.base64}`);
-      } else if (data.code) {
-        setQrCode(data.code);
-      } else {
-        throw new Error('QR Code não encontrado na resposta');
-      }
+      setQrCode(data.data.qrCode);
 
     } catch (error: any) {
       console.error('Error getting QR code:', error);
@@ -237,27 +161,19 @@ export function ConexoesNova() {
     }
 
     try {
-      // Delete from Evolution API
-      const response = await fetch(`${connection.evolution_url}/instance/delete/${connection.instance_name}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': connection.token,
-          'Content-Type': 'application/json'
+      const { data, error } = await supabase.functions.invoke('manage-whatsapp-instances', {
+        body: { 
+          action: 'remove', 
+          instanceName: connection.instance_name,
+          orgId 
         }
       });
 
-      // Continue even if Evolution API call fails
-      if (!response.ok) {
-        console.warn('Failed to delete from Evolution API, continuing with database cleanup');
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao remover instância');
       }
-
-      // Delete from database
-      const { error: dbError } = await supabase
-        .from('evolution_instance_tokens')
-        .delete()
-        .eq('id', connection.id);
-
-      if (dbError) throw dbError;
 
       toast({
         title: "Sucesso",
