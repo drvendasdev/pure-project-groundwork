@@ -186,12 +186,12 @@ export function Conexoes() {
             <DialogTrigger asChild>
               <Button disabled={quota.used >= quota.limit} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Novo atendimento
+                Adicionar Conexão
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Novo atendimento</DialogTitle>
+                <DialogTitle>Adicionar Conexão</DialogTitle>
                 <DialogDescription>
                   Configure uma nova conexão do WhatsApp
                 </DialogDescription>
@@ -219,9 +219,9 @@ export function Conexoes() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
-                      <SelectItem value="week">Uma semana</SelectItem>
-                      <SelectItem value="month">Um mês</SelectItem>
-                      <SelectItem value="quarter">Três meses</SelectItem>
+                      <SelectItem value="week">1 semana</SelectItem>
+                      <SelectItem value="month">1 mês</SelectItem>
+                      <SelectItem value="quarter">2 meses</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
