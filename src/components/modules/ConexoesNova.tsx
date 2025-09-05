@@ -17,9 +17,7 @@ interface Connection {
   status: string;
   qr_code?: string | null;
   history_recovery: string;
-  history_status: string;
   created_at: string;
-  updated_at: string;
   last_activity_at?: string | null;
   phone_number?: string | null;
   workspace_id: string;
@@ -51,11 +49,7 @@ export function ConexoesNova() {
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase
-        .from('connections')
-        .select('*')
-        .eq('workspace_id', '00000000-0000-0000-0000-000000000000')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('list_connections_anon');
 
       if (error) {
         console.error('Error loading connections:', error);
@@ -125,15 +119,11 @@ export function ConexoesNova() {
       const result = await response.json();
 
       // Salvar na tabela connections
-      const { error: dbError } = await supabase
-        .from('connections')
-        .insert({
-          instance_name: instanceName.trim(),
-          status: 'disconnected',
-          history_recovery: historyRecovery,
-          workspace_id: '00000000-0000-0000-0000-000000000000',
-          metadata: { evolution_response: result }
-        });
+      const { data: connectionId, error: dbError } = await supabase.rpc('create_connection_anon', {
+        p_instance_name: instanceName.trim(),
+        p_history_recovery: historyRecovery,
+        p_metadata: { evolution_response: result }
+      });
 
       if (dbError) {
         console.error('Error saving to database:', dbError);
@@ -191,10 +181,11 @@ export function ConexoesNova() {
 
       if (qrCode) {
         // Atualizar status na base de dados
-        await supabase
-          .from('connections')
-          .update({ status: 'qr', qr_code: qrCode })
-          .eq('id', connection.id);
+        await supabase.rpc('update_connection_status_anon', {
+          p_connection_id: connection.id,
+          p_status: 'qr',
+          p_qr_code: qrCode
+        });
 
         // Update the connection with QR code
         setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCode, status: 'qr' } : null);
@@ -232,10 +223,9 @@ export function ConexoesNova() {
       });
 
       // Remover do banco de dados
-      const { error } = await supabase
-        .from('connections')
-        .delete()
-        .eq('id', connection.id);
+      const { error } = await supabase.rpc('delete_connection_anon', {
+        p_connection_id: connection.id
+      });
 
       if (error) {
         console.error('Error removing from database:', error);

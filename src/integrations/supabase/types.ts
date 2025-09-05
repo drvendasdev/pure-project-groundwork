@@ -283,6 +283,66 @@ export type Database = {
           },
         ]
       }
+      clientes: {
+        Row: {
+          cep: string | null
+          cidade: string | null
+          cpf_cnpj: string | null
+          created_at: string
+          data_cadastro: string | null
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: string
+          metadata: Json | null
+          nome: string
+          observacoes: string | null
+          org_id: string
+          status: string
+          telefone: string | null
+          tipo_pessoa: string
+          updated_at: string
+        }
+        Insert: {
+          cep?: string | null
+          cidade?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_cadastro?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          metadata?: Json | null
+          nome: string
+          observacoes?: string | null
+          org_id?: string
+          status?: string
+          telefone?: string | null
+          tipo_pessoa?: string
+          updated_at?: string
+        }
+        Update: {
+          cep?: string | null
+          cidade?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_cadastro?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          metadata?: Json | null
+          nome?: string
+          observacoes?: string | null
+          org_id?: string
+          status?: string
+          telefone?: string | null
+          tipo_pessoa?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       connection_secrets: {
         Row: {
           connection_id: string
@@ -1293,6 +1353,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      create_connection_anon: {
+        Args: {
+          p_history_recovery: string
+          p_instance_name: string
+          p_metadata?: Json
+        }
+        Returns: string
+      }
+      delete_connection_anon: {
+        Args: { p_connection_id: string }
+        Returns: undefined
+      }
       get_system_user: {
         Args: { user_email: string; user_password: string }
         Returns: {
@@ -1329,8 +1401,33 @@ export type Database = {
         }
         Returns: boolean
       }
+      list_connections_anon: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          history_recovery: string
+          id: string
+          instance_name: string
+          last_activity_at: string
+          metadata: Json
+          phone_number: string
+          qr_code: string
+          status: string
+          workspace_id: string
+        }[]
+      }
       sync_user_roles: {
         Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      update_connection_status_anon: {
+        Args: {
+          p_connection_id: string
+          p_metadata?: Json
+          p_phone_number?: string
+          p_qr_code?: string
+          p_status: string
+        }
         Returns: undefined
       }
       verify_password: {
