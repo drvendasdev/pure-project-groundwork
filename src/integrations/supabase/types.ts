@@ -283,6 +283,146 @@ export type Database = {
           },
         ]
       }
+      clientes: {
+        Row: {
+          cep: string | null
+          cidade: string | null
+          cpf_cnpj: string | null
+          created_at: string
+          data_cadastro: string | null
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: string
+          metadata: Json | null
+          nome: string
+          observacoes: string | null
+          org_id: string
+          status: string
+          telefone: string | null
+          tipo_pessoa: string
+          updated_at: string
+        }
+        Insert: {
+          cep?: string | null
+          cidade?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_cadastro?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          metadata?: Json | null
+          nome: string
+          observacoes?: string | null
+          org_id?: string
+          status?: string
+          telefone?: string | null
+          tipo_pessoa?: string
+          updated_at?: string
+        }
+        Update: {
+          cep?: string | null
+          cidade?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_cadastro?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          metadata?: Json | null
+          nome?: string
+          observacoes?: string | null
+          org_id?: string
+          status?: string
+          telefone?: string | null
+          tipo_pessoa?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      connection_secrets: {
+        Row: {
+          connection_id: string
+          created_at: string | null
+          evolution_url: string
+          id: string
+          token: string
+          updated_at: string | null
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string | null
+          evolution_url?: string
+          id?: string
+          token: string
+          updated_at?: string | null
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string | null
+          evolution_url?: string
+          id?: string
+          token?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_secrets_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: true
+            referencedRelation: "connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connections: {
+        Row: {
+          created_at: string | null
+          history_recovery: string | null
+          history_status: string | null
+          id: string
+          instance_name: string
+          last_activity_at: string | null
+          metadata: Json | null
+          phone_number: string | null
+          qr_code: string | null
+          status: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          history_recovery?: string | null
+          history_status?: string | null
+          id?: string
+          instance_name: string
+          last_activity_at?: string | null
+          metadata?: Json | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string | null
+          history_recovery?: string | null
+          history_status?: string | null
+          id?: string
+          instance_name?: string
+          last_activity_at?: string | null
+          metadata?: Json | null
+          phone_number?: string | null
+          qr_code?: string | null
+          status?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       contact_tags: {
         Row: {
           contact_id: string
@@ -773,6 +913,7 @@ export type Database = {
       }
       org_messaging_settings: {
         Row: {
+          connection_limit: number
           created_at: string
           default_instance: string
           id: string
@@ -780,6 +921,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          connection_limit?: number
           created_at?: string
           default_instance: string
           id?: string
@@ -787,6 +929,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          connection_limit?: number
           created_at?: string
           default_instance?: string
           id?: string
@@ -839,6 +982,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      provider_logs: {
+        Row: {
+          connection_id: string | null
+          correlation_id: string
+          created_at: string | null
+          event_type: string
+          id: string
+          level: string
+          message: string
+          metadata: Json | null
+        }
+        Insert: {
+          connection_id?: string | null
+          correlation_id: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          level?: string
+          message: string
+          metadata?: Json | null
+        }
+        Update: {
+          connection_id?: string | null
+          correlation_id?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          level?: string
+          message?: string
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_logs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       queues: {
         Row: {
@@ -1055,6 +1239,30 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_limits: {
+        Row: {
+          connection_limit: number
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          connection_limit?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          connection_limit?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       channels_view: {
@@ -1145,6 +1353,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      create_connection_anon: {
+        Args: {
+          p_history_recovery: string
+          p_instance_name: string
+          p_metadata?: Json
+        }
+        Returns: string
+      }
+      delete_connection_anon: {
+        Args: { p_connection_id: string }
+        Returns: undefined
+      }
       get_system_user: {
         Args: { user_email: string; user_password: string }
         Returns: {
@@ -1181,8 +1401,33 @@ export type Database = {
         }
         Returns: boolean
       }
+      list_connections_anon: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          history_recovery: string
+          id: string
+          instance_name: string
+          last_activity_at: string
+          metadata: Json
+          phone_number: string
+          qr_code: string
+          status: string
+          workspace_id: string
+        }[]
+      }
       sync_user_roles: {
         Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      update_connection_status_anon: {
+        Args: {
+          p_connection_id: string
+          p_metadata?: Json
+          p_phone_number?: string
+          p_qr_code?: string
+          p_status: string
+        }
         Returns: undefined
       }
       verify_password: {
