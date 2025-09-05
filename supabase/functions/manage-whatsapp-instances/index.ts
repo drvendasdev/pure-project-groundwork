@@ -22,7 +22,9 @@ Deno.serve(async (req) => {
 
     // Get Evolution API configuration
     const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br';
-    const evolutionApiKey = Deno.env.get('EVOLUTION_ADMIN_API_KEY')!;
+    const evolutionApiKey = Deno.env.get('EVOLUTION_ADMIN_API_KEY') || '9CF683F53F111493D7122C674139C';
+    
+    console.log(`Using Evolution API Key: ${evolutionApiKey ? 'Available' : 'Missing'}`);
 
     switch (action) {
       case 'create':
