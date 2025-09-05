@@ -35,6 +35,11 @@ Deno.serve(async (req) => {
       user_password: password
     });
 
+    console.log('RPC Response - data:', data);
+    console.log('RPC Response - error:', error);
+    console.log('Data type:', typeof data);
+    console.log('Data length:', data ? data.length : 'N/A');
+
     if (error) {
       console.error('Error authenticating user:', error);
       return new Response(
@@ -44,7 +49,7 @@ Deno.serve(async (req) => {
     }
 
     if (!data || data.length === 0) {
-      console.log('No user found or invalid credentials');
+      console.log('No user found or invalid credentials - data is empty or null');
       return new Response(
         JSON.stringify({ error: 'Email ou senha inválidos' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
