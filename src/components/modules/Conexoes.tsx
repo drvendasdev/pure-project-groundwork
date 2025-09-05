@@ -7,39 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { Plus, RefreshCw, Wifi, WifiOff, QrCode, Phone, Calendar, Eye } from "lucide-react";
-
-interface Connection {
-  id: string;
-  instance_name: string;
-  status: 'creating' | 'qr' | 'connecting' | 'connected' | 'disconnected' | 'error';
-  qr_code?: string;
-  phone_number?: string;
-  history_recovery: 'none' | 'week' | 'month' | 'quarter';
-  created_at: string;
-  last_activity_at?: string;
-}
-
-const statusMap = {
-  creating: { label: 'Criando', variant: 'secondary' as const, icon: RefreshCw },
-  qr: { label: 'QR Code', variant: 'outline' as const, icon: QrCode },
-  connecting: { label: 'Conectando', variant: 'outline' as const, icon: RefreshCw },
-  connected: { label: 'Conectado', variant: 'default' as const, icon: Wifi },
-  disconnected: { label: 'Desconectado', variant: 'destructive' as const, icon: WifiOff },
-  error: { label: 'Erro', variant: 'destructive' as const, icon: WifiOff },
-};
-
-const historyRecoveryMap = {
-  none: 'Nenhuma',
-  week: 'Uma semana', 
-  month: 'Um mês',
-  quarter: 'Três meses'
-};
+import { evolutionProvider } from "@/services/EvolutionProvider";
+import { 
+  Connection, 
+  CONNECTION_STATUS_MAP, 
+  HISTORY_RECOVERY_MAP, 
+  ConnectionsQuota 
+} from "@/types/evolution";
+import { Plus, RefreshCw, Wifi, WifiOff, QrCode, Phone, Calendar, Eye, Settings, Trash2, Pause, Play } from "lucide-react";
 
 export function Conexoes() {
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [quota, setQuota] = useState({ used: 0, limit: 1 });
+  const [quota, setQuota] = useState<ConnectionsQuota>({ used: 0, limit: 1 });
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -50,10 +29,10 @@ export function Conexoes() {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isRefreshingQR, setIsRefreshingQR] = useState(false);
   const { toast } = useToast();
 
   const workspaceId = '00000000-0000-0000-0000-000000000000';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsZGVhb3pxeGp3dnpncmJseXJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzNDQyNDYsImV4cCI6MjA2ODkyMDI0Nn0.4KmrswdBfTyHLqrUt9NdCBUjDPKCeO2NN7Vvqepr4xM';
 
   useEffect(() => {
     loadConnections();
@@ -65,31 +44,8 @@ export function Conexoes() {
     try {
       console.log('Loading connections for workspace:', workspaceId);
       
-      // For GET requests, use URL params instead of body
-      const url = new URL(`https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-provisioning`);
-      url.searchParams.set('workspaceId', workspaceId);
+      const data = await evolutionProvider.listConnections(workspaceId);
       
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Erro de conexão' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (!data.connections && !data.quota) {
-        console.error('Invalid response structure:', data);
-        throw new Error(data.error || 'Resposta inválida do servidor');
-      }
-
       console.log('Connections loaded successfully:', data);
       setConnections(data.connections || []);
       setQuota(data.quota || { used: 0, limit: 1 });
@@ -115,7 +71,7 @@ export function Conexoes() {
     if (!createForm.instanceName || !/^[a-z0-9\-_]{3,50}$/.test(createForm.instanceName)) {
       toast({
         title: "Erro",
-        description: "Nome da instância inválido",
+        description: "Nome da instância inválido (3-50 caracteres, apenas letras minúsculas, números, hífen e underscore)",
         variant: "destructive",
       });
       return;
@@ -123,32 +79,20 @@ export function Conexoes() {
 
     setIsCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('evolution-provisioning', {
-        body: {
-          instanceName: createForm.instanceName,
-          historyRecovery: createForm.historyRecovery,
-          workspaceId
-        }
+      const connection = await evolutionProvider.createConnection({
+        instanceName: createForm.instanceName,
+        historyRecovery: createForm.historyRecovery,
+        workspaceId
       });
 
-      if (error) throw error;
+      toast({ title: "Sucesso", description: "Conexão criada com sucesso" });
+      setIsCreateModalOpen(false);
+      setCreateForm({ instanceName: '', historyRecovery: 'none' });
+      loadConnections();
 
-      if (data.success) {
-        toast({ title: "Sucesso", description: "Conexão criada com sucesso" });
-        setIsCreateModalOpen(false);
-        setCreateForm({ instanceName: '', historyRecovery: 'none' });
-        loadConnections();
-
-        if (data.connection?.qr_code) {
-          setSelectedConnection(data.connection);
-          setIsDetailModalOpen(true);
-        }
-      } else {
-        toast({
-          title: "Erro",
-          description: data.error || "Erro ao criar conexão",
-          variant: "destructive",
-        });
+      if (connection.qr_code) {
+        setSelectedConnection(connection);
+        setIsDetailModalOpen(true);
       }
     } catch (error: any) {
       toast({
@@ -164,20 +108,7 @@ export function Conexoes() {
   const testConnection = async () => {
     setIsTesting(true);
     try {
-      const response = await fetch('https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/test-evolution-connection', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await evolutionProvider.testConnection();
       
       if (data.success) {
         toast({
@@ -185,10 +116,10 @@ export function Conexoes() {
           description: `${data.summary.passed}/${data.summary.total} testes passaram`,
         });
       } else {
-        const failedTests = data.tests.filter((t: any) => !t.passed);
+        const failedTests = data.tests.filter(t => !t.passed);
         toast({
           title: "Teste falhou",
-          description: `Problemas encontrados: ${failedTests.map((t: any) => t.test).join(', ')}`,
+          description: `Problemas encontrados: ${failedTests.map(t => t.test).join(', ')}`,
           variant: "destructive",
         });
       }
@@ -202,6 +133,25 @@ export function Conexoes() {
       });
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const refreshQRCode = async () => {
+    if (!selectedConnection) return;
+    
+    setIsRefreshingQR(true);
+    try {
+      const data = await evolutionProvider.getQRCode(selectedConnection.id);
+      setSelectedConnection(prev => prev ? { ...prev, qr_code: data.qr_code } : null);
+      toast({ title: "QR Code atualizado" });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar QR Code",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshingQR(false);
     }
   };
 
@@ -305,7 +255,11 @@ export function Conexoes() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {connections.map((connection) => {
-          const StatusIcon = statusMap[connection.status]?.icon || WifiOff;
+          const statusConfig = CONNECTION_STATUS_MAP[connection.status] || CONNECTION_STATUS_MAP.disconnected;
+          const StatusIcon = connection.status === 'creating' ? RefreshCw :
+                            connection.status === 'qr' ? QrCode :
+                            connection.status === 'connecting' ? RefreshCw :
+                            connection.status === 'connected' ? Wifi : WifiOff;
           
           return (
             <Card key={connection.id} className="cursor-pointer hover:shadow-md transition-shadow">
@@ -314,9 +268,9 @@ export function Conexoes() {
                   <div>
                     <CardTitle className="text-lg">{connection.instance_name}</CardTitle>
                     <CardDescription className="flex items-center gap-2 mt-1">
-                      <StatusIcon className="h-4 w-4" />
-                      <Badge variant={statusMap[connection.status]?.variant || 'secondary'}>
-                        {statusMap[connection.status]?.label || 'Desconhecido'}
+                      <StatusIcon className={`h-4 w-4 ${connection.status === 'creating' || connection.status === 'connecting' ? 'animate-spin' : ''}`} />
+                      <Badge variant={statusConfig.variant}>
+                        {statusConfig.label}
                       </Badge>
                     </CardDescription>
                   </div>
@@ -349,7 +303,7 @@ export function Conexoes() {
                   </div>
                   
                   <div className="text-muted-foreground">
-                    Histórico: {historyRecoveryMap[connection.history_recovery]}
+                    Histórico: {HISTORY_RECOVERY_MAP[connection.history_recovery]}
                   </div>
                 </div>
               </CardContent>
@@ -374,23 +328,92 @@ export function Conexoes() {
         </Card>
       )}
 
-      {/* QR Code Modal */}
+      {/* Connection Details Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Escaneie o QR Code</DialogTitle>
+            <DialogTitle>Detalhes da Conexão</DialogTitle>
+            <DialogDescription>
+              {selectedConnection?.instance_name}
+            </DialogDescription>
           </DialogHeader>
           
-          {selectedConnection?.qr_code && (
-            <div className="text-center space-y-4">
-              <img 
-                src={selectedConnection.qr_code} 
-                alt="QR Code" 
-                className="w-64 h-64 mx-auto border rounded-lg"
-              />
-              <p className="text-sm text-muted-foreground">
-                Abra o WhatsApp no seu celular e escaneie este código
-              </p>
+          {selectedConnection && (
+            <div className="space-y-6">
+              {/* Status and Info */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Status:</span>
+                  <Badge variant={CONNECTION_STATUS_MAP[selectedConnection.status]?.variant}>
+                    {CONNECTION_STATUS_MAP[selectedConnection.status]?.label}
+                  </Badge>
+                </div>
+                
+                {selectedConnection.phone_number && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{selectedConnection.phone_number}</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Criado: {new Date(selectedConnection.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+
+              {/* QR Code Section */}
+              {selectedConnection.status === 'qr' && selectedConnection.qr_code && (
+                <div className="text-center space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium">QR Code para conexão</h4>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={refreshQRCode}
+                      disabled={isRefreshingQR}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingQR ? 'animate-spin' : ''}`} />
+                      Atualizar
+                    </Button>
+                  </div>
+                  <img 
+                    src={selectedConnection.qr_code} 
+                    alt="QR Code" 
+                    className="w-64 h-64 mx-auto border rounded-lg"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Abra o WhatsApp no seu celular e escaneie este código
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-4">
+                {selectedConnection.status === 'connected' && (
+                  <Button variant="outline" size="sm" className="flex-1">
+                    <Pause className="h-4 w-4 mr-2" />
+                    Pausar
+                  </Button>
+                )}
+                
+                {selectedConnection.status === 'disconnected' && (
+                  <Button variant="outline" size="sm" className="flex-1">
+                    <Play className="h-4 w-4 mr-2" />
+                    Reconectar
+                  </Button>
+                )}
+                
+                <Button variant="outline" size="sm" className="flex-1">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Ver Logs
+                </Button>
+                
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
