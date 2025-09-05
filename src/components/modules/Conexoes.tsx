@@ -53,6 +53,7 @@ export function Conexoes() {
   const { toast } = useToast();
 
   const workspaceId = '00000000-0000-0000-0000-000000000000';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsZGVhb3pxeGp3dnpncmJseXJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzNDQyNDYsImV4cCI6MjA2ODkyMDI0Nn0.4KmrswdBfTyHLqrUt9NdCBUjDPKCeO2NN7Vvqepr4xM';
 
   useEffect(() => {
     loadConnections();
@@ -64,15 +65,25 @@ export function Conexoes() {
     try {
       console.log('Loading connections for workspace:', workspaceId);
       
-      const { data, error } = await supabase.functions.invoke('evolution-provisioning', {
+      // For GET requests, use URL params instead of body
+      const url = new URL(`https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-provisioning`);
+      url.searchParams.set('workspaceId', workspaceId);
+      
+      const response = await fetch(url.toString(), {
         method: 'GET',
-        body: { workspaceId }
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        }
       });
 
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw error;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Erro de conexão' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
+
+      const data = await response.json();
 
       if (!data.connections && !data.quota) {
         console.error('Invalid response structure:', data);
@@ -153,9 +164,20 @@ export function Conexoes() {
   const testConnection = async () => {
     setIsTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('test-evolution-connection');
+      const response = await fetch('https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/test-evolution-connection', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        }
+      });
       
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
       
       if (data.success) {
         toast({
@@ -210,76 +232,76 @@ export function Conexoes() {
             {isTesting ? 'Testando...' : 'Testar API'}
           </Button>
           
-            <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={quota.used >= quota.limit} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Novo atendimento
-                </Button>
-              </DialogTrigger>
+          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+            <DialogTrigger asChild>
+              <Button disabled={quota.used >= quota.limit} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Novo atendimento
+              </Button>
+            </DialogTrigger>
             <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Novo atendimento</DialogTitle>
-              <DialogDescription>
-                Configure uma nova conexão do WhatsApp
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="instanceName">Nome da instância</Label>
-                <Input
-                  id="instanceName"
-                  placeholder="ex: atendimento-vendas"
-                  value={createForm.instanceName}
-                  onChange={(e) => setCreateForm({ ...createForm, instanceName: e.target.value })}
-                />
-              </div>
+              <DialogHeader>
+                <DialogTitle>Novo atendimento</DialogTitle>
+                <DialogDescription>
+                  Configure uma nova conexão do WhatsApp
+                </DialogDescription>
+              </DialogHeader>
               
-              <div>
-                <Label>Recuperar mensagens</Label>
-                <Select 
-                  value={createForm.historyRecovery} 
-                  onValueChange={(value: any) => setCreateForm({ ...createForm, historyRecovery: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhuma</SelectItem>
-                    <SelectItem value="week">Uma semana</SelectItem>
-                    <SelectItem value="month">Um mês</SelectItem>
-                    <SelectItem value="quarter">Três meses</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {quota.used >= quota.limit && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                  <p className="text-sm text-destructive">
-                    Limite de conexões do workspace atingido ({quota.used}/{quota.limit}). 
-                    Entre em contato para liberação adicional.
-                  </p>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="instanceName">Nome da instância</Label>
+                  <Input
+                    id="instanceName"
+                    placeholder="ex: atendimento-vendas"
+                    value={createForm.instanceName}
+                    onChange={(e) => setCreateForm({ ...createForm, instanceName: e.target.value })}
+                  />
                 </div>
-              )}
-              
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  onClick={createConnection} 
-                  disabled={isCreating || quota.used >= quota.limit}
-                  className="flex-1"
-                >
-                  {isCreating ? 'Criando...' : 'Criar conexão'}
-                </Button>
-                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
-                  Cancelar
-                </Button>
+                
+                <div>
+                  <Label>Recuperar mensagens</Label>
+                  <Select 
+                    value={createForm.historyRecovery} 
+                    onValueChange={(value: any) => setCreateForm({ ...createForm, historyRecovery: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      <SelectItem value="week">Uma semana</SelectItem>
+                      <SelectItem value="month">Um mês</SelectItem>
+                      <SelectItem value="quarter">Três meses</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {quota.used >= quota.limit && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                    <p className="text-sm text-destructive">
+                      Limite de conexões do workspace atingido ({quota.used}/{quota.limit}). 
+                      Entre em contato para liberação adicional.
+                    </p>
+                  </div>
+                )}
+                
+                <div className="flex gap-2 pt-4">
+                  <Button 
+                    onClick={createConnection} 
+                    disabled={isCreating || quota.used >= quota.limit}
+                    className="flex-1"
+                  >
+                    {isCreating ? 'Criando...' : 'Criar conexão'}
+                  </Button>
+                  <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                    Cancelar
+                  </Button>
+                </div>
               </div>
-            </div>
             </DialogContent>
-            </Dialog>
-          </div>
+          </Dialog>
         </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {connections.map((connection) => {
