@@ -27,6 +27,35 @@ interface Connection {
 const EVOLUTION_API_URL = 'https://evo.eventoempresalucrativa.com.br';
 const EVOLUTION_API_KEY = '9CF683F53F111493D7122C674139C';
 
+// Helper functions for phone number formatting
+const normalizePhoneNumber = (phone: string): string => {
+  // Remove all non-digits
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // If it doesn't start with 55, add it
+  if (digitsOnly && !digitsOnly.startsWith('55')) {
+    return `55${digitsOnly}`;
+  }
+  
+  return digitsOnly;
+};
+
+const formatPhoneNumberDisplay = (phone: string): string => {
+  if (!phone) return '-';
+  
+  const normalized = normalizePhoneNumber(phone);
+  if (normalized.length >= 13) {
+    // Format as: 55 (XX) XXXXX-XXXX
+    const country = normalized.slice(0, 2);
+    const area = normalized.slice(2, 4);
+    const firstPart = normalized.slice(4, 9);
+    const secondPart = normalized.slice(9, 13);
+    return `${country} (${area}) ${firstPart}-${secondPart}`;
+  }
+  
+  return phone;
+};
+
 export function ConexoesNova() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -41,6 +70,7 @@ export function ConexoesNova() {
   // Form states
   const [instanceName, setInstanceName] = useState('');
   const [historyRecovery, setHistoryRecovery] = useState('none');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   // Load connections on component mount
   useEffect(() => {
@@ -209,6 +239,16 @@ export function ConexoesNova() {
         p_metadata: { evolution_response: result }
       });
 
+      // Se um número de telefone foi fornecido, salvar no banco
+      if (!dbError && phoneNumber.trim() && connectionId) {
+        const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
+        await supabase.rpc('update_connection_status_anon', {
+          p_connection_id: connectionId,
+          p_status: 'creating',
+          p_phone_number: normalizedPhone
+        });
+      }
+
       if (dbError) {
         console.error('Error saving to database:', dbError);
         toast({
@@ -226,6 +266,7 @@ export function ConexoesNova() {
       // Reset form
       setInstanceName('');
       setHistoryRecovery('none');
+      setPhoneNumber('');
       setIsCreateModalOpen(false);
       
       // Reload connections
@@ -623,6 +664,20 @@ export function ConexoesNova() {
               </div>
               
               <div>
+                <Label htmlFor="phoneNumber">Número de Telefone (opcional)</Label>
+                <Input
+                  id="phoneNumber"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="Ex: 5511999999999"
+                  className="mt-2"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Formato: 55 + DDD + número (será normalizado automaticamente)
+                </p>
+              </div>
+              
+              <div>
                 <Label htmlFor="historyRecovery">Período de Resgate de Mensagens</Label>
                 <Select value={historyRecovery} onValueChange={setHistoryRecovery}>
                   <SelectTrigger className="mt-2">
@@ -693,7 +748,7 @@ export function ConexoesNova() {
               <CardContent>
                 <div className="space-y-2">
                   <div className="text-xs text-muted-foreground">
-                    Número: {connection.phone_number || '-'}
+                    Número: {formatPhoneNumberDisplay(connection.phone_number || '')}
                   </div>
                   <div className="flex gap-2">
                     {connection.status === 'connected' ? (
