@@ -250,21 +250,95 @@ export function ConexoesNova() {
     
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+        // Verificar status da conexão
+        const statusResponse = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
           method: 'GET',
           headers: {
             'apikey': EVOLUTION_API_KEY,
           },
         });
 
-        if (response.ok) {
-          const result = await response.json();
+        if (statusResponse.ok) {
+          const statusResult = await statusResponse.json();
+          console.log('Polling status result:', statusResult);
           
-          if (result.instance && result.instance.state === 'open') {
-            // Connection successful
-            const phoneNumber = result.instance.wuid?.split('@')[0] || result.instance.number;
+          if (statusResult.instance && statusResult.instance.state === 'open') {
+            let phoneNumber = null;
             
-            // Update database
+            // Estratégia 1: Tentar extrair do status atual
+            phoneNumber = statusResult.instance.wuid?.split('@')[0] || 
+                         statusResult.instance.number ||
+                         statusResult.instance.user?.id?.split('@')[0];
+            
+            // Estratégia 2: Se não encontrou, buscar na lista de instâncias
+            if (!phoneNumber) {
+              try {
+                const instancesResponse = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
+                  method: 'GET',
+                  headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                  },
+                });
+
+                if (instancesResponse.ok) {
+                  const instances = await instancesResponse.json();
+                  const currentInstance = instances.find((inst: any) => inst.instanceName === instanceName);
+                  
+                  if (currentInstance) {
+                    phoneNumber = currentInstance.instance?.wuid?.split('@')[0] || 
+                                 currentInstance.instance?.number ||
+                                 currentInstance.number ||
+                                 currentInstance.instance?.user?.id?.split('@')[0];
+                  }
+                }
+              } catch (instanceError) {
+                console.log('Error fetching instances:', instanceError);
+              }
+            }
+
+            // Estratégia 3: Tentar buscar números do WhatsApp
+            if (!phoneNumber) {
+              try {
+                const numbersResponse = await fetch(`${EVOLUTION_API_URL}/chat/whatsappNumbers/${instanceName}`, {
+                  method: 'GET',
+                  headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                  },
+                });
+
+                if (numbersResponse.ok) {
+                  const numbers = await numbersResponse.json();
+                  if (numbers && numbers.length > 0) {
+                    phoneNumber = numbers[0].split('@')[0];
+                  }
+                }
+              } catch (numbersError) {
+                console.log('Error fetching WhatsApp numbers:', numbersError);
+              }
+            }
+
+            // Estratégia 4: Como último recurso, tentar endpoint de device info
+            if (!phoneNumber) {
+              try {
+                const deviceResponse = await fetch(`${EVOLUTION_API_URL}/instance/info/${instanceName}`, {
+                  method: 'GET',
+                  headers: {
+                    'apikey': EVOLUTION_API_KEY,
+                  },
+                });
+
+                if (deviceResponse.ok) {
+                  const deviceData = await deviceResponse.json();
+                  phoneNumber = deviceData.instance?.wuid?.split('@')[0] ||
+                               deviceData.instance?.number ||
+                               deviceData.number;
+                }
+              } catch (deviceError) {
+                console.log('Error fetching device info:', deviceError);
+              }
+            }
+            
+            // Atualizar banco de dados
             await supabase.rpc('update_connection_status_anon', {
               p_connection_id: selectedConnection?.id,
               p_status: 'connected',
@@ -272,20 +346,42 @@ export function ConexoesNova() {
               p_phone_number: phoneNumber
             });
             
-            // Clear polling
+            // Limpar polling
             clearInterval(interval);
             setPollInterval(null);
             
-            // Close modal and update UI
+            // Fechar modal e atualizar UI
             setIsQRModalOpen(false);
             setSelectedConnection(null);
             
-            // Reload connections
+            // Recarregar conexões
             await loadConnections();
             
             toast({
               title: 'Sucesso',
-              description: 'WhatsApp conectado com sucesso!',
+              description: phoneNumber ? 
+                `WhatsApp conectado como ${phoneNumber}!` : 
+                'WhatsApp conectado com sucesso!',
+            });
+          } else if (statusResult.instance && statusResult.instance.state === 'close') {
+            // Instância desconectada
+            await supabase.rpc('update_connection_status_anon', {
+              p_connection_id: selectedConnection?.id,
+              p_status: 'disconnected',
+              p_qr_code: null
+            });
+            
+            clearInterval(interval);
+            setPollInterval(null);
+            setIsQRModalOpen(false);
+            setSelectedConnection(null);
+            
+            await loadConnections();
+            
+            toast({
+              title: 'Desconectado',
+              description: `${instanceName} foi desconectado.`,
+              variant: "destructive",
             });
           }
         }
@@ -293,6 +389,19 @@ export function ConexoesNova() {
         console.error('Error polling connection status:', error);
       }
     }, 2000);
+    
+    // Timeout de 5 minutos
+    setTimeout(() => {
+      if (interval) {
+        clearInterval(interval);
+        setPollInterval(null);
+        toast({
+          title: 'Timeout',
+          description: 'Tempo limite para conexão excedido.',
+          variant: "destructive",
+        });
+      }
+    }, 300000);
     
     setPollInterval(interval);
   };
