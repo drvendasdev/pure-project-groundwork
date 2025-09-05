@@ -690,6 +690,7 @@ serve(async (req) => {
                 } catch (fallbackError) {
                   console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
                 }
+              }
             }
           }
 
