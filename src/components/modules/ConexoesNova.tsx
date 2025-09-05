@@ -10,28 +10,21 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, RefreshCw, Wifi, WifiOff, QrCode, Trash2 } from "lucide-react";
 
-interface EvolutionInstance {
-  id: string;
-  instance_name: string;
-  token: string;
-  evolution_url: string;
-  org_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface ConnectionStatus {
-  connected: boolean;
+interface Connection {
+  name: string;
   instance: string;
+  status: 'connected' | 'disconnected' | 'connecting';
+  qrCode?: string;
+  isDefault?: boolean;
+  created_at: string;
 }
 
 export function ConexoesNova() {
-  const [instances, setInstances] = useState<EvolutionInstance[]>([]);
-  const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [selectedInstance, setSelectedInstance] = useState<EvolutionInstance | null>(null);
+  const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [qrCode, setQrCode] = useState<string>('');
   const [createForm, setCreateForm] = useState({
     instanceName: '',
@@ -44,61 +37,29 @@ export function ConexoesNova() {
   const orgId = '00000000-0000-0000-0000-000000000000';
 
   useEffect(() => {
-    loadInstances();
-    const interval = setInterval(loadInstances, 30000);
+    loadConnections();
+    const interval = setInterval(loadConnections, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const loadInstances = async () => {
+  const loadConnections = async () => {
     try {
-      const { data: instancesData, error } = await supabase
-        .from('evolution_instance_tokens')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
+        body: {
+          action: 'list',
+          orgId: orgId
+        }
+      });
 
       if (error) throw error;
 
-      setInstances(instancesData || []);
-
-      // Check status for each instance
-      if (instancesData && instancesData.length > 0) {
-        const statusPromises = instancesData.map(async (instance) => {
-          try {
-            const response = await fetch(`https://evo.eventoempresalucrativa.com.br/instance/connectionState/${instance.instance_name}`, {
-              headers: {
-                'apikey': '9CF683F53F111493D7122C674139C'
-              }
-            });
-            
-            if (response.ok) {
-              const data = await response.json();
-              return {
-                instanceName: instance.instance_name,
-                status: { connected: data.state === 'open', instance: instance.instance_name }
-              };
-            }
-          } catch (error) {
-            console.error(`Error checking status for ${instance.instance_name}:`, error);
-          }
-          
-          return {
-            instanceName: instance.instance_name,
-            status: { connected: false, instance: instance.instance_name }
-          };
-        });
-
-        const statusResults = await Promise.all(statusPromises);
-        const statusMap: Record<string, ConnectionStatus> = {};
-        
-        statusResults.forEach(({ instanceName, status }) => {
-          statusMap[instanceName] = status;
-        });
-        
-        setStatuses(statusMap);
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao carregar conexões');
       }
+
+      setConnections(data.connections || []);
     } catch (error: any) {
-      console.error('Error loading instances:', error);
+      console.error('Error loading connections:', error);
       toast({
         title: "Erro",
         description: error.message || "Erro ao carregar conexões",
@@ -143,7 +104,7 @@ export function ConexoesNova() {
 
       setCreateForm({ instanceName: '', messageRecovery: 'none' });
       setIsCreateModalOpen(false);
-      loadInstances();
+      loadConnections();
 
     } catch (error: any) {
       console.error('Error creating instance:', error);
@@ -157,8 +118,8 @@ export function ConexoesNova() {
     }
   };
 
-  const connectInstance = async (instance: EvolutionInstance) => {
-    setSelectedInstance(instance);
+  const connectInstance = async (connection: Connection) => {
+    setSelectedConnection(connection);
     setIsLoadingQR(true);
     setIsQRModalOpen(true);
 
@@ -166,7 +127,7 @@ export function ConexoesNova() {
       const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
         body: {
           action: 'get_qr',
-          instanceName: instance.instance_name
+          instanceName: connection.instance
         }
       });
 
@@ -191,8 +152,8 @@ export function ConexoesNova() {
     }
   };
 
-  const removeInstance = async (instance: EvolutionInstance) => {
-    if (!confirm(`Tem certeza que deseja remover a instância "${instance.instance_name}"?`)) {
+  const removeConnection = async (connection: Connection) => {
+    if (!confirm(`Tem certeza que deseja remover a instância "${connection.instance}"?`)) {
       return;
     }
 
@@ -200,22 +161,26 @@ export function ConexoesNova() {
       const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
         body: {
           action: 'remove',
-          instanceName: instance.instance_name,
+          instanceName: connection.instance,
           orgId: orgId
         }
       });
 
       if (error) throw error;
 
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao remover instância');
+      }
+
       toast({
         title: "Sucesso",
         description: "Instância removida com sucesso!",
       });
 
-      loadInstances();
+      loadConnections();
 
     } catch (error: any) {
-      console.error('Error removing instance:', error);
+      console.error('Error removing connection:', error);
       toast({
         title: "Erro",
         description: error.message || "Erro ao remover instância",
@@ -310,17 +275,16 @@ export function ConexoesNova() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {instances.map((instance) => {
-          const status = statuses[instance.instance_name];
-          const isConnected = status?.connected || false;
+        {connections.map((connection, index) => {
+          const isConnected = connection.status === 'connected';
           
           return (
-            <Card key={instance.id} className="hover:shadow-md transition-shadow">
+            <Card key={`${connection.instance}-${index}`} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      {instance.instance_name}
+                      {connection.name}
                       <Badge variant={isConnected ? "default" : "destructive"}>
                         {isConnected ? "Conectado" : "Desconectado"}
                       </Badge>
@@ -340,7 +304,7 @@ export function ConexoesNova() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => connectInstance(instance)}
+                    onClick={() => connectInstance(connection)}
                     className="flex-1"
                   >
                     <QrCode className="h-4 w-4 mr-2" />
@@ -350,7 +314,7 @@ export function ConexoesNova() {
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => removeInstance(instance)}
+                    onClick={() => removeConnection(connection)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -361,7 +325,7 @@ export function ConexoesNova() {
         })}
       </div>
 
-      {instances.length === 0 && (
+      {connections.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Wifi className="h-12 w-12 text-muted-foreground mb-4" />
@@ -383,7 +347,7 @@ export function ConexoesNova() {
           <DialogHeader>
             <DialogTitle>Conectar WhatsApp</DialogTitle>
             <DialogDescription>
-              {selectedInstance?.instance_name}
+              {selectedConnection?.instance}
             </DialogDescription>
           </DialogHeader>
           

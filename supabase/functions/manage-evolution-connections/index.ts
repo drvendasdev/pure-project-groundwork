@@ -86,41 +86,32 @@ serve(async (req) => {
         if (!instanceName || !orgId) {
           return new Response(
             JSON.stringify({ success: false, error: 'instanceName e orgId são obrigatórios' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
         try {
-          // Check if instance already exists for this org
-          const { data: existingInstance } = await supabaseClient
-            .from('evolution_instance_tokens')
-            .select('instance_name')
+          // Check if instance already exists in channels
+          const { data: existingChannel } = await supabaseClient
+            .from('channels')
+            .select('instance')
             .eq('org_id', orgId)
-            .eq('instance_name', instanceName)
+            .eq('instance', instanceName)
             .single();
 
-          if (existingInstance) {
+          if (existingChannel) {
             return new Response(
               JSON.stringify({ success: false, error: 'Já existe uma instância com este nome' }),
-              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
 
-          // Create instance via Evolution API
+          // Create instance via Evolution API with correct payload
           const createBody = {
             instanceName: instanceName,
             qrcode: true,
             integration: "WHATSAPP-BAILEYS",
-            webhook: {
-              url: "",
-              byEvents: false,
-              base64: true,
-              headers: {
-                "autorization": "Bearer TOKEN",
-                "Content-Type": "application/json"
-              },
-              events: ["MESSAGES_UPSERT"]
-            }
+            events: ["MESSAGES_UPSERT"]
           };
 
           console.log('Creating Evolution instance:', { instanceName, createBody });
@@ -134,26 +125,38 @@ serve(async (req) => {
             body: JSON.stringify(createBody)
           });
 
+          const responseText = await response.text();
+          let evolutionData;
+          
+          try {
+            evolutionData = JSON.parse(responseText);
+          } catch (e) {
+            evolutionData = { message: responseText };
+          }
+
           if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Evolution API error:', errorText);
+            console.error('Evolution API error:', { status: response.status, response: responseText });
             return new Response(
-              JSON.stringify({ success: false, error: `Erro da Evolution API: ${errorText}` }),
-              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              JSON.stringify({ 
+                success: false, 
+                error: `Erro da Evolution API (${response.status}): ${evolutionData.message || responseText}` 
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
 
-          const evolutionData = await response.json();
           console.log('Evolution instance created:', evolutionData);
 
-          // Save to Supabase
-          const { data: savedInstance, error: saveError } = await supabaseClient
-            .from('evolution_instance_tokens')
+          // Save to channels table with disconnected status
+          const { data: savedChannel, error: saveError } = await supabaseClient
+            .from('channels')
             .insert({
               org_id: orgId,
-              instance_name: instanceName,
-              token: 'temp-token-' + Date.now(),
-              evolution_url: 'https://evo.eventoempresalucrativa.com.br'
+              name: instanceName,
+              number: '', // Will be updated when connected
+              instance: instanceName,
+              status: 'disconnected',
+              webhook_secret: crypto.randomUUID()
             })
             .select()
             .single();
@@ -162,14 +165,14 @@ serve(async (req) => {
             console.error('Error saving to Supabase:', saveError);
             return new Response(
               JSON.stringify({ success: false, error: `Erro ao salvar: ${saveError.message}` }),
-              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
 
           return new Response(
             JSON.stringify({ 
               success: true, 
-              instance: savedInstance,
+              channel: savedChannel,
               evolutionData: evolutionData
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -179,7 +182,7 @@ serve(async (req) => {
           console.error('Error in create action:', error);
           return new Response(
             JSON.stringify({ success: false, error: `Erro interno: ${error.message}` }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
@@ -188,7 +191,7 @@ serve(async (req) => {
         if (!instanceName) {
           return new Response(
             JSON.stringify({ success: false, error: 'instanceName é obrigatório' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
@@ -200,19 +203,29 @@ serve(async (req) => {
             }
           });
 
-          if (!response.ok) {
-            return new Response(
-              JSON.stringify({ success: false, error: 'Erro ao obter QR code' }),
-              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+          const responseText = await response.text();
+          let qrData;
+          
+          try {
+            qrData = JSON.parse(responseText);
+          } catch (e) {
+            qrData = { message: responseText };
           }
 
-          const qrData = await response.json();
+          if (!response.ok) {
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: `Erro ao obter QR code (${response.status}): ${qrData.message || responseText}` 
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
           
           return new Response(
             JSON.stringify({ 
               success: true, 
-              qr_code: qrData.qrcode || qrData.base64 
+              qr_code: qrData.qrcode || qrData.base64 || qrData
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -221,7 +234,7 @@ serve(async (req) => {
           console.error('Error getting QR code:', error);
           return new Response(
             JSON.stringify({ success: false, error: `Erro ao obter QR: ${error.message}` }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
@@ -230,7 +243,7 @@ serve(async (req) => {
         if (!instanceName || !orgId) {
           return new Response(
             JSON.stringify({ success: false, error: 'instanceName e orgId são obrigatórios' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
@@ -243,15 +256,21 @@ serve(async (req) => {
             }
           });
 
-          // Delete from Supabase (regardless of Evolution API response)
+          console.log('Evolution API delete response:', { status: response.status, instanceName });
+
+          // Delete from Supabase channels table
           const { error: deleteError } = await supabaseClient
-            .from('evolution_instance_tokens')
+            .from('channels')
             .delete()
             .eq('org_id', orgId)
-            .eq('instance_name', instanceName);
+            .eq('instance', instanceName);
 
           if (deleteError) {
-            console.error('Error deleting from Supabase:', deleteError);
+            console.error('Error deleting from channels:', deleteError);
+            return new Response(
+              JSON.stringify({ success: false, error: `Erro ao remover do banco: ${deleteError.message}` }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
           }
 
           return new Response(
@@ -263,7 +282,7 @@ serve(async (req) => {
           console.error('Error removing instance:', error);
           return new Response(
             JSON.stringify({ success: false, error: `Erro ao remover: ${error.message}` }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
