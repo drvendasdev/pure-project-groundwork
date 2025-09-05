@@ -10,21 +10,26 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, RefreshCw, Wifi, WifiOff, QrCode, Trash2 } from "lucide-react";
 
-interface Connection {
-  name: string;
-  instance: string;
-  status: 'connected' | 'disconnected' | 'connecting';
-  qrCode?: string;
-  isDefault?: boolean;
+interface EvolutionToken {
+  id: string;
+  instance_name: string;
+  token: string;
+  evolution_url: string;
   created_at: string;
+  org_id: string;
+}
+
+interface ConnectionWithStatus extends EvolutionToken {
+  status: 'creating' | 'qr' | 'connecting' | 'connected' | 'disconnected' | 'error';
+  qr_code?: string;
 }
 
 export function ConexoesNova() {
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connections, setConnections] = useState<ConnectionWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
+  const [selectedConnection, setSelectedConnection] = useState<ConnectionWithStatus | null>(null);
   const [qrCode, setQrCode] = useState<string>('');
   const [createForm, setCreateForm] = useState({
     instanceName: '',
@@ -35,6 +40,7 @@ export function ConexoesNova() {
   const { toast } = useToast();
 
   const orgId = '00000000-0000-0000-0000-000000000000';
+  const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br';
 
   useEffect(() => {
     loadConnections();
@@ -44,20 +50,63 @@ export function ConexoesNova() {
 
   const loadConnections = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'list',
-          orgId: orgId
-        }
-      });
+      const { data: tokens, error } = await supabase
+        .from('evolution_instance_tokens')
+        .select('*')
+        .eq('org_id', orgId);
 
       if (error) throw error;
 
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao carregar conexões');
+      // For each token, check status with Evolution API
+      const connectionsWithStatus: ConnectionWithStatus[] = [];
+      
+      for (const token of tokens || []) {
+        try {
+          const response = await fetch(`${token.evolution_url}/instance/fetchInstances`, {
+            method: 'GET',
+            headers: {
+              'apikey': token.token,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          let status: ConnectionWithStatus['status'] = 'disconnected';
+          
+          if (response.ok) {
+            const data = await response.json();
+            const instance = data.find((inst: any) => inst.instance.instanceName === token.instance_name);
+            
+            if (instance) {
+              switch (instance.instance.state) {
+                case 'open':
+                  status = 'connected';
+                  break;
+                case 'connecting':
+                  status = 'connecting';
+                  break;
+                case 'close':
+                  status = 'disconnected';
+                  break;
+                default:
+                  status = 'disconnected';
+              }
+            }
+          }
+
+          connectionsWithStatus.push({
+            ...token,
+            status
+          });
+        } catch (err) {
+          console.error(`Error checking status for ${token.instance_name}:`, err);
+          connectionsWithStatus.push({
+            ...token,
+            status: 'error'
+          });
+        }
       }
 
-      setConnections(data.connections || []);
+      setConnections(connectionsWithStatus);
     } catch (error: any) {
       console.error('Error loading connections:', error);
       toast({
@@ -82,20 +131,42 @@ export function ConexoesNova() {
 
     setIsCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'create',
+      // Call Evolution API to create instance
+      const response = await fetch(`${evolutionUrl}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
           instanceName: createForm.instanceName.trim(),
-          orgId: orgId,
-          messageRecovery: createForm.messageRecovery
-        }
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+          events: ['APPLICATION_STARTUP', 'QRCODE_UPDATED', 'MESSAGES_UPSERT', 'CONNECTION_UPDATE']
+        })
       });
 
-      if (error) throw error;
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao criar instância');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Erro HTTP: ${response.status}`);
       }
+
+      const data = await response.json();
+      
+      if (!data.hash) {
+        throw new Error('Token não retornado pela API');
+      }
+
+      // Save token to database
+      const { error: dbError } = await supabase
+        .from('evolution_instance_tokens')
+        .insert({
+          org_id: orgId,
+          instance_name: createForm.instanceName.trim(),
+          token: data.hash,
+          evolution_url: evolutionUrl
+        });
+
+      if (dbError) throw dbError;
 
       toast({
         title: "Sucesso",
@@ -118,26 +189,34 @@ export function ConexoesNova() {
     }
   };
 
-  const connectInstance = async (connection: Connection) => {
+  const connectInstance = async (connection: ConnectionWithStatus) => {
     setSelectedConnection(connection);
     setIsLoadingQR(true);
     setIsQRModalOpen(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'get_qr',
-          instanceName: connection.instance
+      const response = await fetch(`${connection.evolution_url}/instance/connect/${connection.instance_name}`, {
+        method: 'GET',
+        headers: {
+          'apikey': connection.token,
+          'Content-Type': 'application/json'
         }
       });
 
-      if (error) throw error;
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao obter QR code');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Erro HTTP: ${response.status}`);
       }
 
-      setQrCode(data.qr_code);
+      const data = await response.json();
+      
+      if (data.base64) {
+        setQrCode(`data:image/png;base64,${data.base64}`);
+      } else if (data.code) {
+        setQrCode(data.code);
+      } else {
+        throw new Error('QR Code não encontrado na resposta');
+      }
 
     } catch (error: any) {
       console.error('Error getting QR code:', error);
@@ -152,25 +231,33 @@ export function ConexoesNova() {
     }
   };
 
-  const removeConnection = async (connection: Connection) => {
-    if (!confirm(`Tem certeza que deseja remover a instância "${connection.instance}"?`)) {
+  const removeConnection = async (connection: ConnectionWithStatus) => {
+    if (!confirm(`Tem certeza que deseja remover a instância "${connection.instance_name}"?`)) {
       return;
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'remove',
-          instanceName: connection.instance,
-          orgId: orgId
+      // Delete from Evolution API
+      const response = await fetch(`${connection.evolution_url}/instance/delete/${connection.instance_name}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': connection.token,
+          'Content-Type': 'application/json'
         }
       });
 
-      if (error) throw error;
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao remover instância');
+      // Continue even if Evolution API call fails
+      if (!response.ok) {
+        console.warn('Failed to delete from Evolution API, continuing with database cleanup');
       }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('evolution_instance_tokens')
+        .delete()
+        .eq('id', connection.id);
+
+      if (dbError) throw dbError;
 
       toast({
         title: "Sucesso",
@@ -279,12 +366,12 @@ export function ConexoesNova() {
           const isConnected = connection.status === 'connected';
           
           return (
-            <Card key={`${connection.instance}-${index}`} className="hover:shadow-md transition-shadow">
+            <Card key={`${connection.instance_name}-${index}`} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      {connection.name}
+                      {connection.instance_name}
                       <Badge variant={isConnected ? "default" : "destructive"}>
                         {isConnected ? "Conectado" : "Desconectado"}
                       </Badge>
@@ -347,7 +434,7 @@ export function ConexoesNova() {
           <DialogHeader>
             <DialogTitle>Conectar WhatsApp</DialogTitle>
             <DialogDescription>
-              {selectedConnection?.instance}
+              {selectedConnection?.instance_name}
             </DialogDescription>
           </DialogHeader>
           
