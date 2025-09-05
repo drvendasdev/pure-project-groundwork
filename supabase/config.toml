@@ -1,5 +1,8 @@
 project_id = "zldeaozqxjwvzgrblyrh"
 
+[functions.manage-whatsapp-instances]
+verify_jwt = false
+
 [functions.evolution-instance-actions]
 verify_jwt = false
 
