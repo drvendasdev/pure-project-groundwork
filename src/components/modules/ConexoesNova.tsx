@@ -70,7 +70,82 @@ export function ConexoesNova() {
         return;
       }
 
-      setConnections(data || []);
+      const connections = data || [];
+      
+      // Check current status for each connection with Evolution API
+      const updatedConnections = await Promise.all(
+        connections.map(async (connection) => {
+          try {
+            const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${connection.instance_name}`, {
+              method: 'GET',
+              headers: {
+                'apikey': EVOLUTION_API_KEY,
+              },
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              
+              // Check if connected
+              if (result.instance && result.instance.state === 'open') {
+                const phoneNumber = result.instance.wuid?.split('@')[0] || result.instance.number;
+                
+                // Update database if status changed
+                if (connection.status !== 'connected') {
+                  await supabase.rpc('update_connection_status_anon', {
+                    p_connection_id: connection.id,
+                    p_status: 'connected',
+                    p_qr_code: null,
+                    p_phone_number: phoneNumber
+                  });
+                }
+                
+                return {
+                  ...connection,
+                  status: 'connected',
+                  phone_number: phoneNumber,
+                  qr_code: null
+                };
+              } else {
+                // Instance exists but not connected
+                if (connection.status === 'connected') {
+                  await supabase.rpc('update_connection_status_anon', {
+                    p_connection_id: connection.id,
+                    p_status: 'disconnected',
+                    p_qr_code: null
+                  });
+                }
+                
+                return {
+                  ...connection,
+                  status: 'disconnected',
+                  qr_code: null
+                };
+              }
+            } else {
+              // Instance doesn't exist or error
+              if (connection.status !== 'error') {
+                await supabase.rpc('update_connection_status_anon', {
+                  p_connection_id: connection.id,
+                  p_status: 'error',
+                  p_qr_code: null
+                });
+              }
+              
+              return {
+                ...connection,
+                status: 'error',
+                qr_code: null
+              };
+            }
+          } catch (apiError) {
+            console.error(`Error checking status for ${connection.instance_name}:`, apiError);
+            return connection; // Return unchanged if API call fails
+          }
+        })
+      );
+
+      setConnections(updatedConnections);
     } catch (error) {
       console.error('Error loading connections:', error);
       toast({
