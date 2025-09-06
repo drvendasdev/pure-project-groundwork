@@ -114,7 +114,6 @@ export function useWorkspaceMembers(workspaceId?: string) {
       senha: string;
       default_channel?: string;
       phone?: string;
-      cargo_ids?: string[];
     },
     role: 'colaborador' | 'gestor' | 'mentor_master'
   ) => {
@@ -125,7 +124,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
       const { data: createResponse, error: createError } = await supabase.functions.invoke('manage-system-user', {
         body: {
           action: 'create',
-          ...userData
+          userData: userData
         }
       });
 

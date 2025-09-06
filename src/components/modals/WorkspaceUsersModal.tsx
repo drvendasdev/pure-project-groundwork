@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWorkspaceMembers, WorkspaceMember } from "@/hooks/useWorkspaceMembers";
-import { useCargos } from "@/hooks/useCargos";
+import { useWorkspaceConnections } from "@/hooks/useWorkspaceConnections";
 import { useToast } from "@/components/ui/use-toast";
 
 interface WorkspaceUsersModalProps {
@@ -54,9 +54,6 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedCargos, setSelectedCargos] = useState<string[]>([]);
-  const [cargos, setCargos] = useState<any[]>([]);
-
   // Form data for new user
   const [formData, setFormData] = useState({
     name: '',
@@ -68,22 +65,11 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
   });
 
   const { members, isLoading, createUserAndAddToWorkspace, updateMember, removeMember } = useWorkspaceMembers(workspaceId);
-  const { listCargos } = useCargos();
+  const { connections, isLoading: connectionsLoading } = useWorkspaceConnections(workspaceId);
   const { toast } = useToast();
 
-  // Load cargos when modal opens
-  React.useEffect(() => {
-    if (open) {
-      listCargos().then(response => {
-        if (response.data) {
-          setCargos(response.data);
-        }
-      });
-    }
-  }, [open, listCargos]);
-
   const handleCreateUser = async () => {
-    if (!formData.name || !formData.email || !formData.profile || !formData.senha) {
+    if (!formData.name || !formData.email || !formData.profile || !formData.senha || !formData.default_channel) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios",
@@ -94,10 +80,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
     
     setIsSubmitting(true);
     try {
-      await createUserAndAddToWorkspace({
-        ...formData,
-        cargo_ids: selectedCargos
-      }, selectedRole);
+      await createUserAndAddToWorkspace(formData, selectedRole);
       
       // Reset form
       setFormData({
@@ -108,7 +91,6 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
         default_channel: '',
         phone: ''
       });
-      setSelectedCargos([]);
       setSelectedRole('colaborador');
       setShowAddUser(false);
       
@@ -132,7 +114,6 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
       default_channel: '',
       phone: ''
     });
-    setSelectedCargos([]);
     setSelectedRole('colaborador');
     setShowAddUser(false);
   };
@@ -255,63 +236,29 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="default_channel">Canal Padrão</Label>
-                    <Input
-                      id="default_channel"
-                      placeholder="Canal padrão"
-                      value={formData.default_channel}
-                      onChange={(e) => setFormData(prev => ({ ...prev, default_channel: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Cargos */}
-              <div className="space-y-4">
-                <h5 className="font-medium text-sm text-muted-foreground">Cargos</h5>
-                <div className="space-y-2">
-                  <Label>Selecionar Cargos</Label>
-                  <Select value="" onValueChange={(value) => {
-                    if (value && !selectedCargos.includes(value)) {
-                      setSelectedCargos(prev => [...prev, value]);
-                    }
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cargo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cargos
-                        .filter(cargo => !selectedCargos.includes(cargo.id))
-                        .map((cargo) => (
-                          <SelectItem key={cargo.id} value={cargo.id}>
-                            {cargo.nome} - {cargo.tipo}
+                    <Label htmlFor="default_channel">Canal Padrão *</Label>
+                    <Select 
+                      value={formData.default_channel} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, default_channel: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={connectionsLoading ? "Carregando..." : "Selecione uma conexão"} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border border-border">
+                        {connections.length === 0 ? (
+                          <SelectItem value="" disabled>
+                            Nenhuma conexão disponível
                           </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  
-                  {selectedCargos.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {selectedCargos.map(cargoId => {
-                        const cargo = cargos.find(c => c.id === cargoId);
-                        return cargo ? (
-                          <Badge
-                            key={cargoId}
-                            variant="secondary"
-                            className="flex items-center gap-1"
-                          >
-                            {cargo.nome}
-                            <button
-                              onClick={() => setSelectedCargos(prev => prev.filter(id => id !== cargoId))}
-                              className="ml-1 hover:text-destructive"
-                            >
-                              ×
-                            </button>
-                          </Badge>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
+                        ) : (
+                          connections.map((connection) => (
+                            <SelectItem key={connection.id} value={connection.id}>
+                              {connection.instance_name} {connection.phone_number ? `— ${connection.phone_number}` : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -336,7 +283,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
               <div className="flex gap-2 pt-4">
                 <Button 
                   onClick={handleCreateUser}
-                  disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || !formData.senha}
+                  disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || !formData.senha || !formData.default_channel}
                 >
                   {isSubmitting ? "Criando..." : "Criar Usuário"}
                 </Button>
