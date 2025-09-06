@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3 } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -67,11 +67,19 @@ export function ConexoesNova() {
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
+  const [timeoutRef, setTimeoutRef] = useState<NodeJS.Timeout | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Form states
   const [instanceName, setInstanceName] = useState('');
   const [historyRecovery, setHistoryRecovery] = useState('none');
   const [phoneNumber, setPhoneNumber] = useState('');
+
+  // Configuration
+  const CONNECTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+  const QR_REFRESH_THRESHOLD = 90 * 1000; // 90 seconds for auto-refresh
 
   // Load connections on component mount
   useEffect(() => {
@@ -81,8 +89,14 @@ export function ConexoesNova() {
       if (pollInterval) {
         clearInterval(pollInterval);
       }
+      if (timeoutRef) {
+        clearTimeout(timeoutRef);
+      }
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
     };
-  }, [pollInterval]);
+  }, [pollInterval, timeoutRef, countdownInterval]);
 
   const loadConnections = async () => {
     try {
@@ -188,6 +202,58 @@ export function ConexoesNova() {
     }
   };
 
+  const refreshQRCode = async (instanceName: string) => {
+    try {
+      setIsRefreshing(true);
+      console.log(`🔄 Refreshing QR code for ${instanceName}`);
+      
+      const response = await fetch(`${EVOLUTION_API_URL}/instance/connect/${instanceName}`, {
+        method: 'GET',
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na API: ${response.status}`);
+      }
+
+      const result = await response.json();
+      let qrCode = result.base64 || result.qrcode;
+      
+      // Ensure QR code is a data URL
+      if (qrCode && !qrCode.startsWith('data:')) {
+        qrCode = `data:image/png;base64,${qrCode}`;
+      }
+
+      if (qrCode && selectedConnection) {
+        // Update the connection with new QR code
+        setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCode, status: 'qr' } : null);
+        
+        // Update database
+        await supabase.rpc('update_connection_status_anon', {
+          p_connection_id: selectedConnection.id,
+          p_status: 'qr',
+          p_qr_code: qrCode
+        });
+
+        toast({
+          title: 'QR Code Atualizado',
+          description: 'Escaneie o novo QR code com seu WhatsApp',
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing QR code:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao atualizar QR Code: ${error.message}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const createInstance = async () => {
     if (!instanceName.trim()) {
       toast({
@@ -208,98 +274,6 @@ export function ConexoesNova() {
         title: 'Erro',
         description: 'Já existe uma instância com este nome',
         variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      setIsCreating(true);
-
-      // Criar instância na Evolution API
-      const response = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': EVOLUTION_API_KEY,
-        },
-        body: JSON.stringify({
-          instanceName: instanceName.trim(),
-          token: 'drvendasapi',
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
-          webhook: {
-            url: 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response',
-            byEvents: false,
-            base64: true,
-            headers: {
-              autorization: 'Bearer TOKEN',
-              'Content-Type': 'application/json'
-            },
-            events: ['MESSAGES_UPSERT']
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      // Salvar na tabela connections
-      const { data: connectionId, error: dbError } = await supabase.rpc('create_connection_anon', {
-        p_instance_name: instanceName.trim(),
-        p_history_recovery: historyRecovery,
-        p_metadata: { evolution_response: result }
-      });
-
-      // Se um número de telefone foi fornecido, salvar no banco
-      if (!dbError && phoneNumber.trim() && connectionId) {
-        const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
-        await supabase.rpc('update_connection_status_anon', {
-          p_connection_id: connectionId,
-          p_status: 'creating',
-          p_phone_number: normalizedPhone
-        });
-      }
-
-      if (dbError) {
-        console.error('Error saving to database:', dbError);
-        toast({
-          title: 'Aviso',
-          description: 'Instância criada na Evolution mas erro ao salvar no banco',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Sucesso',
-          description: 'Instância criada com sucesso!',
-        });
-      }
-      
-      // Reset form and close modal
-      resetModal();
-      
-      // Reload connections
-      await loadConnections();
-
-    } catch (error) {
-      console.error('Error creating instance:', error);
-      toast({
-        title: 'Erro',
-        description: `Erro ao criar instância: ${error.message}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const handleAddConexao = async () => {
-    if (!instanceName.trim()) {
-      toast({
-        title: 'Nome da instância é obrigatório',
-        variant: 'destructive'
       });
       return;
     }
@@ -523,10 +497,31 @@ export function ConexoesNova() {
     }
   };
 
-  const startPolling = (instanceName: string) => {
+  const startPolling = (instanceName: string, startTime: number = Date.now()) => {
     if (pollInterval) {
       clearInterval(pollInterval);
     }
+    if (timeoutRef) {
+      clearTimeout(timeoutRef);
+    }
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+    }
+    
+    console.log(`🔄 Starting polling for ${instanceName}`);
+    
+    // Start countdown
+    const countdownTimer = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, CONNECTION_TIMEOUT - elapsed);
+      setCountdown(Math.ceil(remaining / 1000));
+      
+      if (remaining <= 0) {
+        clearInterval(countdownTimer);
+        setCountdownInterval(null);
+      }
+    }, 1000);
+    setCountdownInterval(countdownTimer);
     
     const interval = setInterval(async () => {
       try {
@@ -626,9 +621,18 @@ export function ConexoesNova() {
               p_phone_number: phoneNumber
             });
             
-            // Limpar polling
+            // Limpar polling e timers
             clearInterval(interval);
             setPollInterval(null);
+            if (timeoutRef) {
+              clearTimeout(timeoutRef);
+              setTimeoutRef(null);
+            }
+            if (countdownInterval) {
+              clearInterval(countdownTimer);
+              setCountdownInterval(null);
+            }
+            setCountdown(0);
             
             // Fechar modal e atualizar UI
             setIsQRModalOpen(false);
@@ -653,6 +657,15 @@ export function ConexoesNova() {
             
             clearInterval(interval);
             setPollInterval(null);
+            if (timeoutRef) {
+              clearTimeout(timeoutRef);
+              setTimeoutRef(null);
+            }
+            if (countdownInterval) {
+              clearInterval(countdownTimer);
+              setCountdownInterval(null);
+            }
+            setCountdown(0);
             setIsQRModalOpen(false);
             setSelectedConnection(null);
             
@@ -670,20 +683,43 @@ export function ConexoesNova() {
       }
     }, 2000);
     
-    // Timeout de 5 minutos
-    setTimeout(() => {
-      if (interval) {
-        clearInterval(interval);
-        setPollInterval(null);
-        toast({
-          title: 'Timeout',
-          description: 'Tempo limite para conexão excedido.',
-          variant: "destructive",
-        });
+    // Check for auto-refresh QR if stuck in connecting state
+    const qrRefreshCheck = setInterval(async () => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= QR_REFRESH_THRESHOLD && selectedConnection?.status === 'qr') {
+        console.log('🔄 Auto-refreshing QR code after 90 seconds');
+        await refreshQRCode(instanceName);
+        clearInterval(qrRefreshCheck);
       }
-    }, 300000);
+    }, 5000);
+    
+    // Timeout configurável
+    const timeout = setTimeout(() => {
+      console.log(`⏰ Connection timeout for ${instanceName}`);
+      clearInterval(interval);
+      clearInterval(qrRefreshCheck);
+      if (countdownInterval) {
+        clearInterval(countdownTimer);
+        setCountdownInterval(null);
+      }
+      setPollInterval(null);
+      setTimeoutRef(null);
+      setCountdown(0);
+      
+      toast({
+        title: 'Timeout',
+        description: `Tempo limite para conexão excedido (${CONNECTION_TIMEOUT / 60000} minutos). Tente novamente.`,
+        variant: "destructive",
+      });
+      
+      // Keep modal open but show retry option
+      if (selectedConnection) {
+        setSelectedConnection(prev => prev ? { ...prev, status: 'timeout' } : null);
+      }
+    }, CONNECTION_TIMEOUT);
     
     setPollInterval(interval);
+    setTimeoutRef(timeout);
   };
 
   const connectInstance = async (connection: Connection) => {
@@ -741,6 +777,12 @@ export function ConexoesNova() {
       });
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const retryConnection = () => {
+    if (selectedConnection) {
+      connectInstance(selectedConnection);
     }
   };
 
@@ -805,9 +847,17 @@ export function ConexoesNova() {
         return <Badge variant="secondary">Criando</Badge>;
       case 'error':
         return <Badge variant="destructive">Erro</Badge>;
+      case 'timeout':
+        return <Badge variant="destructive">Timeout</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   if (isLoading) {
@@ -996,65 +1046,139 @@ export function ConexoesNova() {
         </div>
       )}
 
-      {/* QR Code Modal */}
+      {/* QR Code Modal with improved timeout handling */}
       <Dialog open={isQRModalOpen} onOpenChange={(open) => {
-        setIsQRModalOpen(open);
-        if (!open && pollInterval) {
-          clearInterval(pollInterval);
-          setPollInterval(null);
+        if (!open) {
+          // Clear all timers when modal closes
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            setPollInterval(null);
+          }
+          if (timeoutRef) {
+            clearTimeout(timeoutRef);
+            setTimeoutRef(null);
+          }
+          if (countdownInterval) {
+            clearInterval(countdownInterval);
+            setCountdownInterval(null);
+          }
+          setCountdown(0);
+          setSelectedConnection(null);
         }
+        setIsQRModalOpen(open);
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp</DialogTitle>
+            <DialogTitle>Conectar WhatsApp - {selectedConnection?.instance_name}</DialogTitle>
           </DialogHeader>
           
-          <div className="flex flex-col items-center space-y-4">
-            {selectedConnection?.qr_code ? (
+          <div className="space-y-4">
+            {selectedConnection?.status === 'timeout' ? (
+              <div className="text-center py-8 space-y-4">
+                <div className="text-muted-foreground">
+                  Tempo limite excedido. A conexão pode demorar mais que o esperado.
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <Button onClick={retryConnection} variant="default" size="sm">
+                    Tentar Novamente
+                  </Button>
+                  <Button 
+                    onClick={() => selectedConnection && refreshQRCode(selectedConnection.instance_name)}
+                    variant="outline" 
+                    size="sm"
+                    disabled={isRefreshing}
+                  >
+                    {isRefreshing ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                        Atualizando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Novo QR
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ) : selectedConnection?.qr_code ? (
               <>
-                <div className="p-4 bg-white rounded-lg border">
+                <div className="text-center space-y-4">
                   <img 
                     src={selectedConnection.qr_code} 
-                    alt="QR Code"
-                    className="w-64 h-64"
+                    alt="QR Code" 
+                    className="mx-auto border border-border rounded-lg"
+                    style={{ maxWidth: '300px', maxHeight: '300px' }}
                   />
-                </div>
-                <div className="text-center space-y-2">
-                  <p className="font-medium">
-                    {selectedConnection.instance_name}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Abra o WhatsApp no seu celular, vá em <strong>Dispositivos conectados</strong> e escaneie este código
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    O modal será fechado automaticamente quando a conexão for estabelecida.
-                  </p>
+                  
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Escaneie o código QR com seu WhatsApp
+                    </p>
+                    
+                    {countdown > 0 && (
+                      <div className="flex items-center justify-center gap-2 text-sm">
+                        <span className="text-muted-foreground">
+                          Tempo restante: 
+                        </span>
+                        <span className="font-mono font-medium">
+                          {formatCountdown(countdown)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2 justify-center">
+                      <Button 
+                        onClick={() => selectedConnection && refreshQRCode(selectedConnection.instance_name)}
+                        variant="outline" 
+                        size="sm"
+                        disabled={isRefreshing}
+                      >
+                        {isRefreshing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                            Atualizando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Atualizar QR
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </>
             ) : (
-              <div className="flex flex-col items-center space-y-3 py-8">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Gerando QR Code...</p>
               </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Modal */}
       <AlertDialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Instância</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir a instância "{connectionToDelete?.instance_name}"? 
-              Esta ação não pode ser desfeita e excluirá a instância diretamente da API Evolution.
+              Esta ação não pode ser desfeita e todos os dados associados serão perdidos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={removeConnection} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Excluir
+            <AlertDialogAction 
+              onClick={removeConnection}
+              disabled={isDisconnecting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDisconnecting ? 'Excluindo...' : 'Excluir'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
