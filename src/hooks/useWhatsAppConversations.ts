@@ -107,17 +107,6 @@ export const useWhatsAppConversations = () => {
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
-  const sendMessage = useCallback(async (
-    conversationId: string, 
-    content: string, 
-    contactPhone: string, 
-    messageType: string = 'text', 
-    fileUrl?: string, 
-    fileName?: string
-  ) => {
-    try {
-      console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
-
       // Obter dados do usuário logado
       const userData = localStorage.getItem('currentUser');
       const currentUser = userData ? JSON.parse(userData) : null;
