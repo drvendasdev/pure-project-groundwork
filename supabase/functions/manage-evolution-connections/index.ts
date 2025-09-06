@@ -671,22 +671,23 @@ serve(async (req) => {
                         })
                       });
                     
-                    if (setWebhookResponse.ok) {
-                      console.log('Webhook configured successfully via fallback method', { correlationId });
-                    } else {
-                      console.warn('Failed to set webhook via fallback method:', { 
-                        correlationId, 
-                        status: setWebhookResponse.status,
-                        error: (await setWebhookResponse.text()).substring(0, 200)
-                      });
+                      if (setWebhookResponse.ok) {
+                        console.log('Webhook configured successfully via fallback method', { correlationId });
+                        break; // Stop trying other methods if one succeeds
+                      } else {
+                        console.warn('Failed to set webhook via fallback method:', { 
+                          correlationId, 
+                          status: setWebhookResponse.status,
+                          error: (await setWebhookResponse.text()).substring(0, 200)
+                        });
+                      }
+                    } catch (webhookError) {
+                      console.warn('Failed to set webhook separately:', { correlationId, error: webhookError.message });
                     }
-                  } catch (webhookError) {
-                    console.warn('Failed to set webhook separately:', { correlationId, error: webhookError.message });
                   }
 
                   // Use the successful fallback response
                   createInstanceResponse = fallbackResponse;
-                }
                 } catch (fallbackError) {
                   console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
                 }
