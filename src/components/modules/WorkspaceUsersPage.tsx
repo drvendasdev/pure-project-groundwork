@@ -202,7 +202,7 @@ export function WorkspaceUsersPage() {
           className="gap-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          Voltar para Empresas
+          
         </Button>
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
