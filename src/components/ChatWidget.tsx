@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface ChatMessage {
   id: string;
@@ -26,6 +27,7 @@ export const ChatWidget = ({
   customerEmail,
   className = '' 
 }: ChatWidgetProps) => {
+  const { selectedWorkspace } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -74,7 +76,7 @@ export const ChatWidget = ({
             .insert({
               name: customerName,
               email: customerEmail,
-              workspace_id: selectedWorkspace.workspace_id
+              workspace_id: selectedWorkspace!.workspace_id
             })
             .select()
             .single();
@@ -98,7 +100,7 @@ export const ChatWidget = ({
           .insert({
             name: `${customerName} ${Date.now()}`,
             email: `temp_${Date.now()}@temp.com`,
-            workspace_id: selectedWorkspace.workspace_id
+            workspace_id: selectedWorkspace!.workspace_id
           })
           .select()
           .single();
@@ -130,7 +132,8 @@ export const ChatWidget = ({
             contact_id: contact.id,
             canal: 'site',
             agente_ativo: true,
-            status: 'open'
+            status: 'open',
+            workspace_id: selectedWorkspace!.workspace_id
           })
           .select()
           .single();
@@ -199,7 +202,8 @@ export const ChatWidget = ({
           sender_type: 'contact',
           message_type: 'text',
           status: 'sent',
-          origem_resposta: 'manual'
+          origem_resposta: 'manual',
+          workspace_id: selectedWorkspace!.workspace_id
         })
         .select()
         .single();

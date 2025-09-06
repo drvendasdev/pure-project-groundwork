@@ -14,6 +14,7 @@ import { useTags } from "@/hooks/useTags";
 import { format } from "date-fns";
 import { DeletarTicketModal } from "@/components/modals/DeletarTicketModal";
 import { useToast } from "@/components/ui/use-toast";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface Contact {
   id: string;
@@ -28,6 +29,7 @@ interface Contact {
 }
 
 export function CRMContatos() {
+  const { selectedWorkspace } = useWorkspace();
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("");
@@ -362,7 +364,8 @@ export function CRMContatos() {
             name: editingContact.name.trim(),
             phone: editingContact.phone.trim() || null,
             email: editingContact.email.trim() || null,
-            extra_info: extraInfo
+            extra_info: extraInfo,
+            workspace_id: selectedWorkspace!.workspace_id
           })
           .select()
           .single();
