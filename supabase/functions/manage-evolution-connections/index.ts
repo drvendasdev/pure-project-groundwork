@@ -682,11 +682,10 @@ serve(async (req) => {
                     }
                   } catch (webhookError) {
                     console.warn('Failed to set webhook separately:', { correlationId, error: webhookError.message });
-                  }
+                   }
 
-                  // Use the successful fallback response
-                  createInstanceResponse = fallbackResponse;
-                }
+                   // Use the successful fallback response
+                   createInstanceResponse = fallbackResponse;
                 } catch (fallbackError) {
                   console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
                 }
