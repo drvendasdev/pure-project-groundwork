@@ -62,6 +62,14 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Prevent updating the reserved workspace ID
+      if (workspaceId === '00000000-0000-0000-0000-000000000000') {
+        return new Response(
+          JSON.stringify({ error: 'Não é possível atualizar o workspace reservado do sistema' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Update workspace
       const { error: workspaceError } = await supabase
         .from('workspaces')
