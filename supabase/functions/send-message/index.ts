@@ -37,6 +37,7 @@ serve(async (req) => {
       .from('messages')
       .insert([{
         conversation_id: conversationId,
+        workspace_id: conversation.workspace_id,
         sender_type: 'operator',
         message_type: messageType,
         content: fileUrl || content,
