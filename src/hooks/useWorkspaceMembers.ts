@@ -106,6 +106,75 @@ export function useWorkspaceMembers(workspaceId?: string) {
     }
   };
 
+  const createUserAndAddToWorkspace = async (
+    userData: {
+      name: string;
+      email: string;
+      profile: string;
+      senha: string;
+      default_channel?: string;
+      phone?: string;
+      cargo_ids?: string[];
+    },
+    role: 'colaborador' | 'gestor' | 'mentor_master'
+  ) => {
+    if (!workspaceId) return;
+
+    try {
+      // Create user via edge function
+      const { data: createResponse, error: createError } = await supabase.functions.invoke('manage-system-user', {
+        body: {
+          action: 'create',
+          ...userData
+        }
+      });
+
+      if (createError) {
+        throw createError;
+      }
+
+      if (!createResponse.success) {
+        throw new Error(createResponse.error || 'Falha ao criar usuário');
+      }
+
+      const newUserId = createResponse.user.id;
+
+      // Add user to workspace
+      const { data: memberData, error: memberError } = await supabase
+        .from('workspace_members')
+        .insert({
+          workspace_id: workspaceId,
+          user_id: newUserId,
+          role
+        })
+        .select(`
+          *,
+          user:system_users(
+            id,
+            name,
+            email,
+            profile
+          )
+        `)
+        .single();
+
+      if (memberError) {
+        throw memberError;
+      }
+
+      fetchMembers();
+      return memberData;
+    } catch (error) {
+      console.error('Error creating user and adding to workspace:', error);
+      toast({
+        title: "Erro",
+        description: "Falha ao criar usuário e adicionar ao workspace",
+        variant: "destructive"
+      });
+      throw error;
+    }
+  };
+
   const updateMember = async (memberId: string, updates: { role?: 'colaborador' | 'gestor' | 'mentor_master'; is_hidden?: boolean }) => {
     try {
       const { error } = await supabase
@@ -167,6 +236,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
     isLoading,
     fetchMembers,
     addMember,
+    createUserAndAddToWorkspace,
     updateMember,
     removeMember
   };

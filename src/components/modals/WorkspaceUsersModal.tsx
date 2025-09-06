@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, UserPlus, Edit, Trash } from "lucide-react";
+import { User, UserPlus, Edit, Trash, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,8 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useWorkspaceMembers, WorkspaceMember } from "@/hooks/useWorkspaceMembers";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
+import { useCargos } from "@/hooks/useCargos";
+import { useToast } from "@/components/ui/use-toast";
 
 interface WorkspaceUsersModalProps {
   open: boolean;
@@ -47,41 +50,91 @@ const roleVariants = {
 
 export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspaceName }: WorkspaceUsersModalProps) {
   const [showAddUser, setShowAddUser] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<'colaborador' | 'gestor' | 'mentor_master'>('colaborador');
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedCargos, setSelectedCargos] = useState<string[]>([]);
+  const [cargos, setCargos] = useState<any[]>([]);
 
-  const { members, isLoading, addMember, updateMember, removeMember } = useWorkspaceMembers(workspaceId);
-  const { listUsers } = useSystemUsers();
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  // Form data for new user
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    profile: 'user',
+    senha: '',
+    default_channel: '',
+    phone: ''
+  });
 
-  // Load users when modal opens
+  const { members, isLoading, createUserAndAddToWorkspace, updateMember, removeMember } = useWorkspaceMembers(workspaceId);
+  const { listCargos } = useCargos();
+  const { toast } = useToast();
+
+  // Load cargos when modal opens
   React.useEffect(() => {
     if (open) {
-      listUsers().then(response => {
+      listCargos().then(response => {
         if (response.data) {
-          setAllUsers(response.data);
+          setCargos(response.data);
         }
       });
     }
-  }, [open, listUsers]);
+  }, [open, listCargos]);
 
-  // Filter users that are not already members
-  const availableUsers = allUsers.filter(user => 
-    !members.some(member => member.user_id === user.id)
-  );
-
-  const handleAddMember = async () => {
-    if (!selectedUserId || !selectedRole) return;
+  const handleCreateUser = async () => {
+    if (!formData.name || !formData.email || !formData.profile || !formData.senha) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive"
+      });
+      return;
+    }
     
+    setIsSubmitting(true);
     try {
-      await addMember(selectedUserId, selectedRole);
-      setShowAddUser(false);
-      setSelectedUserId("");
+      await createUserAndAddToWorkspace({
+        ...formData,
+        cargo_ids: selectedCargos
+      }, selectedRole);
+      
+      // Reset form
+      setFormData({
+        name: '',
+        email: '',
+        profile: 'user',
+        senha: '',
+        default_channel: '',
+        phone: ''
+      });
+      setSelectedCargos([]);
       setSelectedRole('colaborador');
+      setShowAddUser(false);
+      
+      toast({
+        title: "Sucesso",
+        description: "Usuário criado e adicionado ao workspace com sucesso"
+      });
     } catch (error) {
       // Error handled in hook
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleCancel = () => {
+    setFormData({
+      name: '',
+      email: '',
+      profile: 'user',
+      senha: '',
+      default_channel: '',
+      phone: ''
+    });
+    setSelectedCargos([]);
+    setSelectedRole('colaborador');
+    setShowAddUser(false);
   };
 
   const handleUpdateRole = async (memberId: string, newRole: 'colaborador' | 'gestor' | 'mentor_master') => {
@@ -127,26 +180,146 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
           </div>
 
           {showAddUser && (
-            <div className="border rounded-lg p-4 space-y-4">
-              <h4 className="font-medium">Adicionar Novo Membro</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Usuário</label>
-                  <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+            <div className="border rounded-lg p-6 space-y-6">
+              <h4 className="font-medium text-lg">Criar Novo Usuário</h4>
+              
+              {/* Dados Básicos */}
+              <div className="space-y-4">
+                <h5 className="font-medium text-sm text-muted-foreground">Dados Básicos</h5>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome *</Label>
+                    <Input
+                      id="name"
+                      placeholder="Nome completo"
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="usuario@exemplo.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="profile">Perfil *</Label>
+                    <Select value={formData.profile} onValueChange={(value) => setFormData(prev => ({ ...prev, profile: value }))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">Usuário</SelectItem>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                        <SelectItem value="master">Master</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="senha">Senha *</Label>
+                    <div className="relative">
+                      <Input
+                        id="senha"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Digite a senha"
+                        value={formData.senha}
+                        onChange={(e) => setFormData(prev => ({ ...prev, senha: e.target.value }))}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Telefone</Label>
+                    <Input
+                      id="phone"
+                      placeholder="(11) 99999-9999"
+                      value={formData.phone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="default_channel">Canal Padrão</Label>
+                    <Input
+                      id="default_channel"
+                      placeholder="Canal padrão"
+                      value={formData.default_channel}
+                      onChange={(e) => setFormData(prev => ({ ...prev, default_channel: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Cargos */}
+              <div className="space-y-4">
+                <h5 className="font-medium text-sm text-muted-foreground">Cargos</h5>
+                <div className="space-y-2">
+                  <Label>Selecionar Cargos</Label>
+                  <Select value="" onValueChange={(value) => {
+                    if (value && !selectedCargos.includes(value)) {
+                      setSelectedCargos(prev => [...prev, value]);
+                    }
+                  }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione um usuário" />
+                      <SelectValue placeholder="Selecione um cargo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableUsers.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.email})
-                        </SelectItem>
-                      ))}
+                      {cargos
+                        .filter(cargo => !selectedCargos.includes(cargo.id))
+                        .map((cargo) => (
+                          <SelectItem key={cargo.id} value={cargo.id}>
+                            {cargo.nome} - {cargo.tipo}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
+                  
+                  {selectedCargos.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedCargos.map(cargoId => {
+                        const cargo = cargos.find(c => c.id === cargoId);
+                        return cargo ? (
+                          <Badge
+                            key={cargoId}
+                            variant="secondary"
+                            className="flex items-center gap-1"
+                          >
+                            {cargo.nome}
+                            <button
+                              onClick={() => setSelectedCargos(prev => prev.filter(id => id !== cargoId))}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Função</label>
+              </div>
+
+              {/* Função no Workspace */}
+              <div className="space-y-4">
+                <h5 className="font-medium text-sm text-muted-foreground">Função no Workspace</h5>
+                <div className="space-y-2">
+                  <Label>Função</Label>
                   <Select value={selectedRole} onValueChange={(value: 'colaborador' | 'gestor' | 'mentor_master') => setSelectedRole(value)}>
                     <SelectTrigger>
                       <SelectValue />
@@ -159,16 +332,18 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                   </Select>
                 </div>
               </div>
-              <div className="flex gap-2">
+              
+              <div className="flex gap-2 pt-4">
                 <Button 
-                  onClick={handleAddMember}
-                  disabled={!selectedUserId || !selectedRole}
+                  onClick={handleCreateUser}
+                  disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || !formData.senha}
                 >
-                  Adicionar
+                  {isSubmitting ? "Criando..." : "Criar Usuário"}
                 </Button>
                 <Button 
                   variant="outline" 
-                  onClick={() => setShowAddUser(false)}
+                  onClick={handleCancel}
+                  disabled={isSubmitting}
                 >
                   Cancelar
                 </Button>
