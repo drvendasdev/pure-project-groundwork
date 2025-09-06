@@ -36,7 +36,13 @@ export function CreateWorkspaceModal({ open, onOpenChange, workspace }: CreateWo
   // Update form data when workspace prop changes
   React.useEffect(() => {
     if (workspace) {
+      console.log('Workspace data received:', workspace);
       setFormData({
+        name: workspace.name,
+        cnpj: workspace.cnpj || "",
+        connectionLimit: workspace.connectionLimit || 1,
+      });
+      console.log('Form data set to:', {
         name: workspace.name,
         cnpj: workspace.cnpj || "",
         connectionLimit: workspace.connectionLimit || 1,

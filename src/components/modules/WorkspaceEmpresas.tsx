@@ -52,20 +52,40 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
   };
 
   const handleEditClick = async (workspace: any) => {
-    // Fetch the connection limit for this workspace
-    const { data: limitData } = await supabase
-      .from('workspace_limits')
-      .select('connection_limit')
-      .eq('workspace_id', workspace.workspace_id)
-      .single();
+    console.log('Editing workspace:', workspace);
     
-    setEditingWorkspace({
-      workspace_id: workspace.workspace_id,
-      name: workspace.name,
-      cnpj: workspace.cnpj,
-      connectionLimit: limitData?.connection_limit || 1
-    });
-    setShowCreateModal(true);
+    try {
+      // Fetch the connection limit for this workspace
+      const { data: limitData, error } = await supabase
+        .from('workspace_limits')
+        .select('connection_limit')
+        .eq('workspace_id', workspace.workspace_id)
+        .single();
+      
+      console.log('Limit data from DB:', limitData);
+      console.log('Limit error:', error);
+      
+      const workspaceData = {
+        workspace_id: workspace.workspace_id,
+        name: workspace.name,
+        cnpj: workspace.cnpj,
+        connectionLimit: limitData?.connection_limit || 1
+      };
+      
+      console.log('Setting editing workspace to:', workspaceData);
+      setEditingWorkspace(workspaceData);
+      setShowCreateModal(true);
+    } catch (error) {
+      console.error('Error fetching workspace limits:', error);
+      // Fallback to default if there's an error
+      setEditingWorkspace({
+        workspace_id: workspace.workspace_id,
+        name: workspace.name,
+        cnpj: workspace.cnpj,
+        connectionLimit: 1
+      });
+      setShowCreateModal(true);
+    }
   };
 
   const handleDeleteClick = (workspace: any) => {
