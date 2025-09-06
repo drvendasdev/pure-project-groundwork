@@ -149,13 +149,24 @@ serve(async (req) => {
     const token = crypto.randomUUID().replace(/-/g, '')
 
     // Store connection secrets
-    await supabase
+    const { error: secretError } = await supabase
       .from('connection_secrets')
       .insert({
         connection_id: connection.id,
         token: token,
         evolution_url: evolutionConfig.url
       })
+
+    if (secretError) {
+      console.error("Error saving connection secrets:", secretError)
+      // Clean up connection if secret creation fails
+      await supabase.from('connections').delete().eq('id', connection.id)
+      
+      return new Response(
+        JSON.stringify({ success: false, error: `Failed to save connection secrets: ${secretError.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     if (!evolutionConfig.apiKey) {
       // Clean up if no API key
@@ -179,19 +190,23 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         instanceName: instanceName,
+        token: token,
         qrcode: true,
-        integration: 'WHATSAPP-BAILEYS',
+        number: false,
         webhook: webhookUrl,
-        webhook_by_events: true,
+        webhook_by_events: false,
         events: [
-          'MESSAGES_UPSERT',
-          'CONNECTION_UPDATE',
-          'QRCODE_UPDATED'
+          "APPLICATION_STARTUP",
+          "QRCODE_UPDATED", 
+          "CONNECTION_UPDATE",
+          "MESSAGES_UPSERT",
+          "MESSAGES_UPDATE",
+          "SEND_MESSAGE"
         ]
       })
     })
 
-    const evolutionData = await evolutionResponse.json()
+    console.log("Evolution API response status:", evolutionResponse.status)
 
     if (!evolutionResponse.ok) {
       const errorText = await evolutionResponse.text()
@@ -201,7 +216,8 @@ serve(async (req) => {
         body: errorText
       })
       
-      // Clean up failed creation - delete connection and secrets
+      // CRITICAL: Clean up failed creation - delete connection and secrets FIRST
+      console.log("Cleaning up failed creation...")
       await supabase
         .from('connection_secrets')
         .delete()
@@ -212,15 +228,21 @@ serve(async (req) => {
         .delete()
         .eq('id', connection.id)
 
+      console.log("Cleanup completed, returning error")
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: `Evolution API error: ${evolutionResponse.status} - ${errorText}`,
-          evolutionResponse: evolutionData
+          details: errorText
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // Parse response data only after confirming success
+    const evolutionData = await evolutionResponse.json()
+    console.log("Evolution API success response:", evolutionData)
 
     // Update connection with Evolution response data
     let updateData: any = {}
