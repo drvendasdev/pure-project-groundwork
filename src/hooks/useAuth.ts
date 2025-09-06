@@ -16,7 +16,7 @@ interface AuthContextType {
   userRole: 'master' | 'admin' | 'user' | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   hasRole: (roles: string[]) => boolean;
 }
 
@@ -64,6 +64,7 @@ export const useAuthState = () => {
 
   const login = async (email: string, password: string) => {
     try {
+      // Primeiro validar credenciais via sistema customizado
       const { data, error } = await supabase.functions.invoke('get-system-user', {
         body: { email, password }
       });
@@ -73,6 +74,31 @@ export const useAuthState = () => {
       }
 
       const user = data.user;
+      
+      // Agora fazer login no Supabase Auth para criar sessão JWT
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (authError) {
+        console.log('Supabase auth error (expected for custom users):', authError.message);
+        // Para usuários customizados, vamos usar signUp para criar a sessão
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/dashboard`
+          }
+        });
+        
+        if (signUpError && !signUpError.message.includes('already registered')) {
+          console.error('Erro ao criar sessão Supabase:', signUpError);
+          return { error: 'Erro ao criar sessão' };
+        }
+      }
+
+      // Definir dados do usuário no estado local
       setUser(user);
       localStorage.setItem('currentUser', JSON.stringify(user));
       
@@ -86,10 +112,17 @@ export const useAuthState = () => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     setUserRole(null);
     localStorage.removeItem('currentUser');
+    
+    // Também fazer logout do Supabase Auth
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.log('Erro ao fazer logout do Supabase:', error);
+    }
   };
 
   const hasRole = (roles: string[]) => {

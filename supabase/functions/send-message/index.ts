@@ -44,8 +44,8 @@ function validateRequestBody(body: any): { isValid: boolean; errors: string[] } 
   return { isValid: errors.length === 0, errors };
 }
 
-// Extrair user ID do JWT
-function extractUserFromJWT(authHeader: string | null): string | null {
+// Extrair email do usuário do JWT para validação no sistema customizado
+function extractUserEmailFromJWT(authHeader: string | null): string | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -53,7 +53,7 @@ function extractUserFromJWT(authHeader: string | null): string | null {
   try {
     const token = authHeader.substring(7);
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.sub || null;
+    return payload.email || null;
   } catch {
     return null;
   }
@@ -133,14 +133,14 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
 
-    // Extrair usuário do JWT para validação de autorização
-    const currentUserId = extractUserFromJWT(authHeader);
+    // Extrair email do usuário do JWT para validação no sistema customizado
+    const currentUserEmail = extractUserEmailFromJWT(authHeader);
     
-    if (!currentUserId) {
-      console.error(`❌ [${requestId}] Invalid JWT token`);
+    if (!currentUserEmail) {
+      console.error(`❌ [${requestId}] Invalid JWT token - no email found`);
       return new Response(JSON.stringify({
         code: 'INVALID_JWT',
-        message: 'Valid JWT token required',
+        message: 'Valid JWT token with email required',
         requestId
       }), {
         status: 401,
@@ -148,22 +148,22 @@ serve(async (req) => {
       });
     }
 
-    console.log(`🔍 [${requestId}] Validating workspace membership for user: ${currentUserId}`);
+    console.log(`🔍 [${requestId}] Validating system user: ${currentUserEmail}`);
 
-    // Validar que o usuário é membro do workspace
-    const { data: membership, error: membershipError } = await supabase
-      .from('workspace_members')
-      .select('role')
-      .eq('workspace_id', workspace_id)
-      .eq('user_id', currentUserId)
+    // Validar que o usuário existe no sistema customizado
+    const { data: systemUser, error: userError } = await supabase
+      .from('system_users')
+      .select('id, profile, status')
+      .eq('email', currentUserEmail)
+      .eq('status', 'active')
       .single();
 
-    if (membershipError || !membership) {
-      console.error(`❌ [${requestId}] User not a member of workspace:`, membershipError);
+    if (userError || !systemUser) {
+      console.error(`❌ [${requestId}] System user not found or inactive:`, userError);
       return new Response(JSON.stringify({
         code: 'FORBIDDEN',
-        reason: 'NOT_A_MEMBER',
-        message: 'User is not a member of the specified workspace',
+        reason: 'INVALID_USER',
+        message: 'User not found or inactive in system',
         requestId
       }), {
         status: 403,
@@ -171,7 +171,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`✅ [${requestId}] User authorized with role: ${membership.role}`);
+    console.log(`✅ [${requestId}] System user authorized: ${systemUser.id} (${systemUser.profile})`);
 
     // Verificar que a conversa pertence ao mesmo workspace
     const { data: conversation, error: convError } = await supabase
