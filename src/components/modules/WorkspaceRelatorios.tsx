@@ -24,41 +24,41 @@ export function WorkspaceRelatorios() {
   const fetchStats = async () => {
     setIsLoading(true);
     try {
-      const { data: orgsData, error: orgsError } = await supabase
-        .from('orgs')
+      const { data: workspacesData, error: workspacesError } = await supabase
+        .from('workspaces')
         .select('id, name');
 
-      if (orgsError) throw orgsError;
+      if (workspacesError) throw workspacesError;
 
-      const statsPromises = orgsData.map(async (org) => {
+      const statsPromises = workspacesData.map(async (workspace) => {
         // Get connections count
         const { count: connectionsCount } = await supabase
           .from('connections')
           .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', org.id);
+          .eq('workspace_id', workspace.id);
 
         // Get conversations count
         const { count: conversationsCount } = await supabase
           .from('conversations')
           .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', org.id);
+          .eq('workspace_id', workspace.id);
 
         // Get messages count
         const { count: messagesCount } = await supabase
           .from('messages')
           .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', org.id);
+          .eq('workspace_id', workspace.id);
 
         // Get active conversations (last 24h)
         const { count: activeConversations } = await supabase
           .from('conversations')
           .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', org.id)
+          .eq('workspace_id', workspace.id)
           .gte('last_activity_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
         return {
-          workspace_id: org.id,
-          workspace_name: org.name,
+          workspace_id: workspace.id,
+          workspace_name: workspace.name,
           connections_count: connectionsCount || 0,
           conversations_count: conversationsCount || 0,
           messages_count: messagesCount || 0,
