@@ -96,12 +96,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       icon: <Phone className="w-5 h-5" />
     },
     {
-      id: "workspace-empresas",
-      label: "Empresas",
-      icon: <Building2 className="w-5 h-5" />,
-      group: "workspace"
-    },
-    {
       id: "workspace-relatorios",
       label: "Relatórios",
       icon: <BarChart3 className="w-5 h-5" />,
