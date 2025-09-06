@@ -27,12 +27,16 @@ export function useWorkspaceMembers(workspaceId?: string) {
     
     setIsLoading(true);
     try {
+      console.log('Fetching members for workspace:', workspaceId);
+      
       // First try to get workspace members
       const { data: membersData, error: membersError } = await supabase
         .from('workspace_members')
         .select('*')
         .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: false });
+
+      console.log('Members query result:', { membersData, membersError });
 
       if (membersError) {
         console.error('Error fetching workspace members:', membersError);
@@ -42,11 +46,14 @@ export function useWorkspaceMembers(workspaceId?: string) {
       // If we have members, get their user details
       if (membersData && membersData.length > 0) {
         const userIds = membersData.map(member => member.user_id);
+        console.log('Fetching user details for IDs:', userIds);
         
         const { data: usersData, error: usersError } = await supabase
           .from('system_users')
           .select('id, name, email, profile')
           .in('id', userIds);
+
+        console.log('Users query result:', { usersData, usersError });
 
         if (usersError) {
           console.error('Error fetching user details:', usersError);
@@ -59,8 +66,10 @@ export function useWorkspaceMembers(workspaceId?: string) {
           user: usersData?.find(user => user.id === member.user_id)
         }));
 
+        console.log('Final members with users:', membersWithUsers);
         setMembers(membersWithUsers);
       } else {
+        console.log('No members found for workspace');
         setMembers([]);
       }
     } catch (error) {
