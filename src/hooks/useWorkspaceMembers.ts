@@ -138,31 +138,26 @@ export function useWorkspaceMembers(workspaceId?: string) {
 
       const newUserId = createResponse.user.id;
 
-      // Add user to workspace
-      const { data: memberData, error: memberError } = await supabase
-        .from('workspace_members')
-        .insert({
-          workspace_id: workspaceId,
-          user_id: newUserId,
-          role
-        })
-        .select(`
-          *,
-          user:system_users(
-            id,
-            name,
-            email,
-            profile
-          )
-        `)
-        .single();
+      // Add user to workspace via edge function to handle RLS
+      const { data: memberResponse, error: memberError } = await supabase.functions.invoke('manage-workspace-members', {
+        body: {
+          action: 'add',
+          workspaceId: workspaceId,
+          userId: newUserId,
+          role: role
+        }
+      });
 
       if (memberError) {
         throw memberError;
       }
 
+      if (!memberResponse.success) {
+        throw new Error(memberResponse.error || 'Falha ao adicionar membro ao workspace');
+      }
+
       fetchMembers();
-      return memberData;
+      return memberResponse.member;
     } catch (error) {
       console.error('Error creating user and adding to workspace:', error);
       toast({

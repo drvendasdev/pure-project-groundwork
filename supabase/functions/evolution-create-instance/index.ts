@@ -125,10 +125,15 @@ serve(async (req) => {
     const evolutionData = await evolutionResponse.json()
 
     if (!evolutionResponse.ok) {
-      // Update connection status to error
+      // Clean up failed creation - delete connection and secrets
+      await supabase
+        .from('connection_secrets')
+        .delete()
+        .eq('connection_id', connection.id)
+
       await supabase
         .from('connections')
-        .update({ status: 'error' })
+        .delete()
         .eq('id', connection.id)
 
       return new Response(

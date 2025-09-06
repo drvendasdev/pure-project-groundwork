@@ -25,8 +25,8 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
         .eq('workspace_id', workspaceId)
         .order('instance_name');
 
-      if (error) {
-        console.error('Error fetching connections directly:', error);
+      if (error || !data || data.length === 0) {
+        console.warn('Error fetching connections directly or empty results, trying fallback:', error);
         // Fallback to edge function
         try {
           const { data: functionData, error: functionError } = await supabase.functions.invoke('evolution-list-connections', {
@@ -43,7 +43,16 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
             return;
           }
 
-          setConnections(functionData?.connections || []);
+          if (functionData?.success && functionData.connections) {
+            setConnections(functionData.connections.map((conn: any) => ({
+              id: conn.id,
+              instance_name: conn.instance_name,
+              phone_number: conn.phone_number,
+              status: conn.status
+            })));
+          } else {
+            setConnections([]);
+          }
         } catch (fallbackError) {
           console.error('Fallback error:', fallbackError);
           toast({

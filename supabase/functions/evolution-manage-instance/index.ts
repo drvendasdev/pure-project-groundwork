@@ -73,8 +73,9 @@ serve(async (req) => {
           headers: { 'apikey': evolutionApiKey }
         })
         
-        // If Evolution API deletion successful, remove from our database
-        if (response.ok) {
+        // Check if deletion was successful or if instance doesn't exist (404)
+        if (response.ok || response.status === 404) {
+          // Remove from our database regardless of Evolution API response
           await supabase
             .from('connection_secrets')
             .delete()
