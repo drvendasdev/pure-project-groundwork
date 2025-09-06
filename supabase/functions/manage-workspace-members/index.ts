@@ -42,15 +42,7 @@ serve(async (req) => {
             user_id: userId,
             role
           })
-          .select(`
-            *,
-            user:system_users(
-              id,
-              name,
-              email,
-              profile
-            )
-          `)
+          .select()
           .single()
 
         if (memberError) {
