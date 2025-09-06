@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { useSessionManager } from "@/hooks/useSessionManager";
 
 import { Dashboard } from "./Dashboard";
 import { Conversas } from "./modules/Conversas";
@@ -59,6 +60,9 @@ export type ModuleType =
   | "editar-agente";
 
 export function TezeusCRM() {
+  // Monitor de sessão global
+  useSessionManager();
+  
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
