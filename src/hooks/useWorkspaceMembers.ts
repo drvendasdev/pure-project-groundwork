@@ -23,63 +23,38 @@ export function useWorkspaceMembers(workspaceId?: string) {
   const { toast } = useToast();
 
   const fetchMembers = async () => {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      setMembers([]);
+      return;
+    }
     
     setIsLoading(true);
     try {
-      console.log('Fetching members for workspace:', workspaceId);
-      
-      // First try to get workspace members
-      const { data: membersData, error: membersError } = await supabase
-        .from('workspace_members')
-        .select('*')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false });
-
-      console.log('Members query result:', { membersData, membersError });
-
-      if (membersError) {
-        console.error('Error fetching workspace members:', membersError);
-        throw membersError;
-      }
-
-      // If we have members, get their user details
-      if (membersData && membersData.length > 0) {
-        const userIds = membersData.map(member => member.user_id);
-        console.log('Fetching user details for IDs:', userIds);
-        
-        const { data: usersData, error: usersError } = await supabase
-          .from('system_users')
-          .select('id, name, email, profile')
-          .in('id', userIds);
-
-        console.log('Users query result:', { usersData, usersError });
-
-        if (usersError) {
-          console.error('Error fetching user details:', usersError);
-          throw usersError;
+      const { data, error } = await supabase.functions.invoke('manage-workspace-members', {
+        body: {
+          action: 'list',
+          workspaceId
         }
+      });
 
-        // Combine the data
-        const membersWithUsers = membersData.map(member => ({
-          ...member,
-          user: usersData?.find(user => user.id === member.user_id)
-        }));
-
-        console.log('Final members with users:', membersWithUsers);
-        setMembers(membersWithUsers);
-      } else {
-        console.log('No members found for workspace');
-        setMembers([]);
+      if (error) {
+        console.error('Error calling manage-workspace-members function:', error);
+        throw error;
       }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch members');
+      }
+
+      setMembers(data.members || []);
     } catch (error) {
-      console.error('Error fetching workspace members:', error);
+      console.error('Error in fetchMembers:', error);
+      setMembers([]);
       toast({
         title: "Erro",
-        description: "Falha ao carregar membros do workspace",
-        variant: "destructive"
+        description: "Erro ao carregar membros do workspace.",
+        variant: "destructive",
       });
-      setMembers([]);
     } finally {
       setIsLoading(false);
     }
@@ -93,43 +68,38 @@ export function useWorkspaceMembers(workspaceId?: string) {
     if (!workspaceId) return;
 
     try {
-      const { data, error } = await supabase
-        .from('workspace_members')
-        .insert({
-          workspace_id: workspaceId,
-          user_id: userId,
+      const { data, error } = await supabase.functions.invoke('manage-workspace-members', {
+        body: {
+          action: 'add',
+          workspaceId,
+          userId,
           role
-        })
-        .select(`
-          *,
-          user:system_users(
-            id,
-            name,
-            email,
-            profile
-          )
-        `)
-        .single();
+        }
+      });
 
       if (error) {
+        console.error('Error calling manage-workspace-members function:', error);
         throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to add member');
       }
 
       toast({
         title: "Sucesso",
-        description: "Membro adicionado com sucesso"
+        description: "Membro adicionado ao workspace com sucesso.",
       });
 
-      fetchMembers();
-      return data;
+      // Refresh the members list
+      await fetchMembers();
     } catch (error) {
-      console.error('Error adding workspace member:', error);
+      console.error('Error in addMember:', error);
       toast({
         title: "Erro",
-        description: "Falha ao adicionar membro",
-        variant: "destructive"
+        description: "Erro ao adicionar membro ao workspace.",
+        variant: "destructive",
       });
-      throw error;
     }
   };
 
@@ -209,58 +179,79 @@ export function useWorkspaceMembers(workspaceId?: string) {
   };
 
   const updateMember = async (memberId: string, updates: { role?: 'colaborador' | 'gestor' | 'mentor_master'; is_hidden?: boolean }) => {
+    if (!workspaceId) return;
+
     try {
-      const { error } = await supabase
-        .from('workspace_members')
-        .update(updates)
-        .eq('id', memberId);
+      const { data, error } = await supabase.functions.invoke('manage-workspace-members', {
+        body: {
+          action: 'update',
+          workspaceId,
+          memberId,
+          updates
+        }
+      });
 
       if (error) {
+        console.error('Error calling manage-workspace-members function:', error);
         throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to update member');
       }
 
       toast({
         title: "Sucesso",
-        description: "Membro atualizado com sucesso"
+        description: "Membro atualizado com sucesso.",
       });
 
-      fetchMembers();
+      // Refresh the members list
+      await fetchMembers();
     } catch (error) {
-      console.error('Error updating workspace member:', error);
+      console.error('Error in updateMember:', error);
       toast({
         title: "Erro",
-        description: "Falha ao atualizar membro",
-        variant: "destructive"
+        description: "Erro ao atualizar membro.",
+        variant: "destructive",
       });
-      throw error;
     }
   };
 
   const removeMember = async (memberId: string) => {
+    if (!workspaceId) return;
+
     try {
-      const { error } = await supabase
-        .from('workspace_members')
-        .delete()
-        .eq('id', memberId);
+      const { data, error } = await supabase.functions.invoke('manage-workspace-members', {
+        body: {
+          action: 'remove',
+          workspaceId,
+          memberId
+        }
+      });
 
       if (error) {
+        console.error('Error calling manage-workspace-members function:', error);
         throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to remove member');
       }
 
       toast({
         title: "Sucesso",
-        description: "Membro removido com sucesso"
+        description: "Membro removido do workspace com sucesso.",
       });
 
-      fetchMembers();
+      // Refresh the members list
+      await fetchMembers();
     } catch (error) {
-      console.error('Error removing workspace member:', error);
+      console.error('Error in removeMember:', error);
       toast({
         title: "Erro",
-        description: "Falha ao remover membro",
-        variant: "destructive"
+        description: "Erro ao remover membro do workspace.",
+        variant: "destructive",
       });
-      throw error;
     }
   };
 

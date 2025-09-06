@@ -27,6 +27,47 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     switch (action) {
+      case 'list':
+        const { data: membersData, error: listError } = await supabase
+          .from('workspace_members')
+          .select(`
+            id,
+            user_id,
+            role,
+            is_hidden,
+            created_at,
+            system_users!inner (
+              id,
+              name,
+              email,
+              profile
+            )
+          `)
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false })
+
+        if (listError) {
+          return new Response(
+            JSON.stringify({ success: false, error: listError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const members = membersData?.map(member => ({
+          id: member.id,
+          workspace_id: workspaceId,
+          user_id: member.user_id,
+          role: member.role,
+          is_hidden: member.is_hidden,
+          created_at: member.created_at,
+          user: member.system_users
+        })) || []
+
+        return new Response(
+          JSON.stringify({ success: true, members }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+
       case 'add':
         if (!userId || !role) {
           return new Response(
