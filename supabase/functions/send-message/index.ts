@@ -21,10 +21,13 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Buscar conversa
+    // Buscar conversa com contato
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('*')
+      .select(`
+        *,
+        contact:contacts(phone)
+      `)
       .eq('id', conversationId)
       .single();
 
@@ -52,18 +55,18 @@ serve(async (req) => {
     let evolutionInstance = conversation.evolution_instance;
     let instanceSource = 'conversation';
     
-    // Se não tem instância na conversa, tentar resolver hierarquicamente
+    // Se não tem instância na conversa, usar instância padrão ou a primeira disponível
     if (!evolutionInstance) {
-      // Tentar org default
-      const { data: orgSettings } = await supabase
-        .from('org_messaging_settings')
-        .select('default_instance')
-        .eq('org_id', conversation.org_id)
-        .maybeSingle();
+      // Buscar instâncias do workspace da conversa
+      const { data: instances } = await supabase
+        .from('evolution_instance_tokens')
+        .select('instance_name')
+        .eq('workspace_id', conversation.workspace_id)
+        .limit(1);
       
-      if (orgSettings?.default_instance) {
-        evolutionInstance = orgSettings.default_instance;
-        instanceSource = 'orgDefault';
+      if (instances && instances.length > 0) {
+        evolutionInstance = instances[0].instance_name;
+        instanceSource = 'workspaceDefault';
       }
     }
     
@@ -104,7 +107,7 @@ serve(async (req) => {
     let evolutionPayload: any;
     let endpoint: string;
 
-    const phoneNumber = conversation.phone_number;
+    const phoneNumber = conversation.contact?.phone;
 
     if (messageType === 'text') {
       evolutionPayload = {
