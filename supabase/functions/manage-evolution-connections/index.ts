@@ -692,7 +692,6 @@ serve(async (req) => {
                }
              }
            }
-         }
 
           // Final check if instance creation failed
           if (!createInstanceResponse.ok) {
