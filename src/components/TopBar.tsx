@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { WalletModal } from "./modals/WalletModal";
+import { WorkspaceSelector } from "./WorkspaceSelector";
 
 interface TopBarProps {
   onNavigateToConversation?: (conversationId: string) => void;
@@ -13,6 +14,11 @@ export function TopBar({ onNavigateToConversation }: TopBarProps) {
   return (
     <>
       <div className="flex gap-2 mx-4 mt-4 mb-4">
+        {/* Workspace Selector */}
+        <div className="flex items-center">
+          <WorkspaceSelector />
+        </div>
+        
         {/* Welcome Card */}
         <Card className="flex-1 relative overflow-hidden">
           <div 

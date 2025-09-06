@@ -60,11 +60,21 @@ export const ChatWidget = ({
         if (existingContact) {
           contact = existingContact;
         } else {
+          if (!selectedWorkspace) {
+            toast({
+              title: "Erro",
+              description: "Nenhuma empresa selecionada",
+              variant: "destructive"
+            });
+            return;
+          }
+
           const { data: newContact, error: contactError } = await supabase
             .from('contacts')
             .insert({
               name: customerName,
-              email: customerEmail
+              email: customerEmail,
+              workspace_id: selectedWorkspace.workspace_id
             })
             .select()
             .single();
@@ -73,12 +83,22 @@ export const ChatWidget = ({
           contact = newContact;
         }
       } else {
+        if (!selectedWorkspace) {
+          toast({
+            title: "Erro",
+            description: "Nenhuma empresa selecionada",
+            variant: "destructive"
+          });
+          return;
+        }
+
         // Criar contato temporário para visitante anônimo
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert({
             name: `${customerName} ${Date.now()}`,
-            email: `temp_${Date.now()}@temp.com`
+            email: `temp_${Date.now()}@temp.com`,
+            workspace_id: selectedWorkspace.workspace_id
           })
           .select()
           .single();

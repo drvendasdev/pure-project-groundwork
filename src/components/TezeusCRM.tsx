@@ -25,6 +25,8 @@ import { AdministracaoUsuarios } from "./modules/AdministracaoUsuarios";
 import { AdministracaoFinanceiro } from "./modules/AdministracaoFinanceiro";
 import { AdministracaoConfiguracoes } from "./modules/AdministracaoConfiguracoes";
 import { ParceirosClientes } from "./modules/ParceirosClientes";
+import { WorkspaceEmpresas } from "./modules/WorkspaceEmpresas";
+import { WorkspaceRelatorios } from "./modules/WorkspaceRelatorios";
 
 export type ModuleType = 
   | "dashboard"
@@ -46,6 +48,8 @@ export type ModuleType =
   | "automacoes-api"
   | "automacoes-webhooks"
   | "conexoes"
+  | "workspace-empresas"
+  | "workspace-relatorios"
   | "parceiros-clientes"
   | "administracao-usuarios"
   | "administracao-financeiro"
@@ -140,6 +144,10 @@ export function TezeusCRM() {
         return <AutomacoesAPI />;
       case "conexoes":
         return <Conexoes />;
+      case "workspace-empresas":
+        return <WorkspaceEmpresas />;
+      case "workspace-relatorios":
+        return <WorkspaceRelatorios />;
       case "parceiros-clientes":
         return <ParceirosClientes />;
       case "administracao-usuarios":
