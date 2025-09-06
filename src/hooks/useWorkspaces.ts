@@ -45,8 +45,8 @@ export function useWorkspaces() {
           throw error;
         }
 
-        // Filter workspaces based on user role
-        // Gestores only see workspaces where they are gestores
+        // Filter workspaces based on user role with strict isolation
+        // Gestores only see workspaces where they are gestores (not mentor_master workspaces)
         // MentorMaster can see all assigned workspaces
         const filteredWorkspaces = data?.filter(membership => {
           if (membership.role === 'mentor_master') return true;

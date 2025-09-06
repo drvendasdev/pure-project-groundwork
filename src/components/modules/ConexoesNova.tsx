@@ -82,12 +82,9 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       const response = await evolutionProvider.listConnections(workspaceId);
       setConnections(response.connections);
     } catch (error) {
-      console.error('Error loading connections:', error);
-      toast({
-        title: 'Erro',
-        description: 'Erro ao carregar conexões',
-        variant: 'destructive',
-      });
+      console.warn('Error loading connections:', error);
+      // Silently set empty connections array instead of showing error toast
+      setConnections([]);
     } finally {
       setIsLoading(false);
     }
