@@ -64,11 +64,12 @@ serve(async (req) => {
       )
     }
 
-    // Call Evolution API to get QR code
-    const qrResponse = await fetch(`${evolutionConfig.url}/instance/connect/${connection.instance_name}`, {
-      method: 'GET',
+    // Call Evolution API to restart the instance to get a fresh QR code
+    const qrResponse = await fetch(`${evolutionConfig.url}/instance/restart/${connection.instance_name}`, {
+      method: 'PUT',
       headers: {
-        'apikey': evolutionConfig.apiKey
+        'apikey': evolutionConfig.apiKey,
+        'Content-Type': 'application/json'
       }
     })
 
