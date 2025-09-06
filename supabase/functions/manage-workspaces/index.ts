@@ -86,39 +86,52 @@ Deno.serve(async (req) => {
 
       // Update connection limit if provided
       if (connectionLimit !== undefined) {
-        // First check if the workspace limit already exists
-        const { data: existingLimit } = await supabase
+        console.log('Updating connection limit for workspace:', workspaceId, 'to:', connectionLimit);
+        
+        // Use service role to bypass RLS for workspace_limits operations
+        const { data: existingLimit, error: checkError } = await supabase
           .from('workspace_limits')
-          .select('workspace_id')
+          .select('id')
           .eq('workspace_id', workspaceId)
-          .single();
+          .maybeSingle();
+
+        if (checkError) {
+          console.error('Error checking existing limit:', checkError);
+          return new Response(
+            JSON.stringify({ error: 'Falha ao verificar limite existente' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
         let limitError;
         if (existingLimit) {
+          console.log('Updating existing limit');
           // Update existing limit
-          const result = await supabase
+          const { error } = await supabase
             .from('workspace_limits')
-            .update({ connection_limit: connectionLimit })
+            .update({ connection_limit: connectionLimit, updated_at: new Date().toISOString() })
             .eq('workspace_id', workspaceId);
-          limitError = result.error;
+          limitError = error;
         } else {
+          console.log('Creating new limit');
           // Insert new limit
-          const result = await supabase
+          const { error } = await supabase
             .from('workspace_limits')
             .insert({ 
               workspace_id: workspaceId, 
               connection_limit: connectionLimit 
             });
-          limitError = result.error;
+          limitError = error;
         }
 
         if (limitError) {
           console.error('Error updating workspace limits:', limitError);
           return new Response(
-            JSON.stringify({ error: 'Falha ao atualizar limite de conexões' }),
+            JSON.stringify({ error: 'Falha ao atualizar limite de conexões: ' + limitError.message }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+        console.log('Connection limit updated successfully');
       }
 
       return new Response(
