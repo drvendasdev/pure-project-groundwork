@@ -181,12 +181,50 @@ serve(async (req) => {
       )
     }
 
-    // Call Evolution API to create instance - use required fields
+    // Get webhook token for authentication
+    const webhookToken = Deno.env.get('N8N_WEBHOOK_TOKEN') || Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || 'default-token'
+    
+    // Call Evolution API to create instance - use required fields with webhook
     const evolutionPayload = {
       instanceName: instanceName,
       token: token,
       qrcode: true,
-      integration: "WHATSAPP-BAILEYS"
+      integration: "WHATSAPP-BAILEYS",
+      webhook: {
+        url: "https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response",
+        byEvents: false,
+        base64: true,
+        headers: {
+          "autorization": `Bearer ${webhookToken}`,
+          "Content-Type": "application/json"
+        },
+        events: [
+          "APPLICATION_STARTUP",
+          "QRCODE_UPDATED",
+          "MESSAGES_SET",
+          "MESSAGES_UPSERT",
+          "MESSAGES_UPDATE",
+          "MESSAGES_DELETE",
+          "SEND_MESSAGE",
+          "CONTACTS_SET",
+          "CONTACTS_UPSERT",
+          "CONTACTS_UPDATE",
+          "PRESENCE_UPDATE",
+          "CHATS_SET",
+          "CHATS_UPSERT",
+          "CHATS_UPDATE",
+          "CHATS_DELETE",
+          "GROUPS_UPSERT",
+          "GROUP_UPDATE",
+          "GROUP_PARTICIPANTS_UPDATE",
+          "CONNECTION_UPDATE",
+          "LABELS_EDIT",
+          "LABELS_ASSOCIATION",
+          "CALL",
+          "TYPEBOT_START",
+          "TYPEBOT_CHANGE_STATUS"
+        ]
+      }
     }
 
     console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))
