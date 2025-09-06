@@ -6,6 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Get Evolution API configuration from secrets
+function getEvolutionConfig() {
+  const url = Deno.env.get('EVOLUTION_API_URL') || 
+              Deno.env.get('EVOLUTION_URL') || 
+              'https://evo.eventoempresalucrativa.com.br';
+  
+  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                 Deno.env.get('EVOLUTION_APIKEY') || 
+                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+  
+  return { url, apiKey };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -15,6 +28,10 @@ serve(async (req) => {
     console.log('=== Evolution Create Instance Function Started ===')
     const { instanceName, historyRecovery = 'none', workspaceId } = await req.json()
     console.log('Request params:', { instanceName, historyRecovery, workspaceId })
+
+    const evolutionConfig = getEvolutionConfig()
+    console.log('Evolution URL:', evolutionConfig.url)
+    console.log('Evolution API Key:', evolutionConfig.apiKey ? 'Present' : 'Missing')
 
     if (!instanceName || !workspaceId) {
       console.error('Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
@@ -137,19 +154,28 @@ serve(async (req) => {
       .insert({
         connection_id: connection.id,
         token: token,
-        evolution_url: 'https://evo.eventoempresalucrativa.com.br'
+        evolution_url: evolutionConfig.url
       })
 
+    if (!evolutionConfig.apiKey) {
+      // Clean up if no API key
+      await supabase.from('connection_secrets').delete().eq('connection_id', connection.id)
+      await supabase.from('connections').delete().eq('id', connection.id)
+      
+      return new Response(
+        JSON.stringify({ success: false, error: 'Evolution API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Call Evolution API to create instance
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY')!
-    const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'
     const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/evolution-webhook`
 
-    const evolutionResponse = await fetch(`${evolutionUrl}/instance/create`, {
+    const evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': evolutionApiKey
+        'apikey': evolutionConfig.apiKey
       },
       body: JSON.stringify({
         instanceName: instanceName,
@@ -168,6 +194,13 @@ serve(async (req) => {
     const evolutionData = await evolutionResponse.json()
 
     if (!evolutionResponse.ok) {
+      const errorText = await evolutionResponse.text()
+      console.error('Evolution API error:', {
+        status: evolutionResponse.status,
+        statusText: evolutionResponse.statusText,
+        body: errorText
+      })
+      
       // Clean up failed creation - delete connection and secrets
       await supabase
         .from('connection_secrets')
@@ -182,7 +215,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Evolution API error: ${evolutionData.message || 'Unknown error'}`,
+          error: `Evolution API error: ${evolutionResponse.status} - ${errorText}`,
           evolutionResponse: evolutionData
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
