@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
+  const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
 
     // Initialize Supabase client
     const supabase = createClient(
@@ -55,22 +55,108 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update') {
-      const { error } = await supabase
+      if (!workspaceId) {
+        return new Response(
+          JSON.stringify({ error: 'Workspace ID é obrigatório para atualização' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update workspace
+      const { error: workspaceError } = await supabase
         .from('workspaces')
         .update({ name, cnpj })
         .eq('id', workspaceId);
 
-      if (error) {
-        console.error('Error updating workspace:', error);
+      if (workspaceError) {
+        console.error('Error updating workspace:', workspaceError);
         return new Response(
-          JSON.stringify({ error: 'Failed to update workspace' }),
+          JSON.stringify({ error: 'Falha ao atualizar workspace' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update connection limit if provided
+      if (connectionLimit !== undefined) {
+        const { error: limitError } = await supabase
+          .from('workspace_limits')
+          .upsert({ 
+            workspace_id: workspaceId, 
+            connection_limit: connectionLimit 
+          });
+
+        if (limitError) {
+          console.error('Error updating workspace limits:', limitError);
+          return new Response(
+            JSON.stringify({ error: 'Falha ao atualizar limite de conexões' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ message: 'Workspace atualizado com sucesso' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete') {
+      if (!workspaceId) {
+        return new Response(
+          JSON.stringify({ error: 'Workspace ID é obrigatório para exclusão' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if workspace has connections
+      const { data: connections, error: connectionsError } = await supabase
+        .from('connections')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .limit(1);
+
+      if (connectionsError) {
+        console.error('Error checking connections:', connectionsError);
+        return new Response(
+          JSON.stringify({ error: 'Erro ao verificar conexões' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (connections && connections.length > 0) {
+        return new Response(
+          JSON.stringify({ error: 'Não é possível excluir uma empresa que possui conexões ativas' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Delete workspace limits first
+      const { error: limitsError } = await supabase
+        .from('workspace_limits')
+        .delete()
+        .eq('workspace_id', workspaceId);
+
+      if (limitsError) {
+        console.error('Error deleting workspace limits:', limitsError);
+      }
+
+      // Delete workspace
+      const { error: deleteError } = await supabase
+        .from('workspaces')
+        .delete()
+        .eq('id', workspaceId);
+
+      if (deleteError) {
+        console.error('Error deleting workspace:', deleteError);
+        return new Response(
+          JSON.stringify({ error: 'Falha ao excluir workspace' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ message: 'Workspace excluído com sucesso' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

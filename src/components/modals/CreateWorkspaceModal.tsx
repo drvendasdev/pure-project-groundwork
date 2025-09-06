@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,16 +14,37 @@ import { useWorkspaces } from "@/hooks/useWorkspaces";
 interface CreateWorkspaceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workspace?: {
+    workspace_id: string;
+    name: string;
+    cnpj?: string;
+    connectionLimit?: number;
+  };
 }
 
-export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModalProps) {
+export function CreateWorkspaceModal({ open, onOpenChange, workspace }: CreateWorkspaceModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     cnpj: "",
     connectionLimit: 1,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { createWorkspace } = useWorkspaces();
+  const { createWorkspace, updateWorkspace } = useWorkspaces();
+  
+  const isEditing = !!workspace;
+
+  // Update form data when workspace prop changes
+  React.useEffect(() => {
+    if (workspace) {
+      setFormData({
+        name: workspace.name,
+        cnpj: workspace.cnpj || "",
+        connectionLimit: workspace.connectionLimit || 1,
+      });
+    } else {
+      setFormData({ name: "", cnpj: "", connectionLimit: 1 });
+    }
+  }, [workspace]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +56,15 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
     setIsSubmitting(true);
     
     try {
-      await createWorkspace(formData.name.trim(), formData.cnpj.trim() || undefined, formData.connectionLimit);
+      if (isEditing && workspace) {
+        await updateWorkspace(workspace.workspace_id, {
+          name: formData.name.trim(),
+          cnpj: formData.cnpj.trim() || undefined,
+          connectionLimit: formData.connectionLimit,
+        });
+      } else {
+        await createWorkspace(formData.name.trim(), formData.cnpj.trim() || undefined, formData.connectionLimit);
+      }
       
       // Reset form
       setFormData({ name: "", cnpj: "", connectionLimit: 1 });
@@ -55,7 +85,7 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Nova Empresa</DialogTitle>
+          <DialogTitle>{isEditing ? "Editar Empresa" : "Nova Empresa"}</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -110,7 +140,10 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
               type="submit" 
               disabled={isSubmitting || !formData.name.trim()}
             >
-              {isSubmitting ? "Criando..." : "Criar Empresa"}
+              {isSubmitting 
+                ? (isEditing ? "Salvando..." : "Criando...") 
+                : (isEditing ? "Salvar" : "Criar Empresa")
+              }
             </Button>
           </div>
         </form>

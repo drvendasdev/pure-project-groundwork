@@ -102,7 +102,7 @@ export function useWorkspaces() {
     }
   };
 
-  const updateWorkspace = async (workspaceId: string, updates: { name?: string; cnpj?: string }) => {
+  const updateWorkspace = async (workspaceId: string, updates: { name?: string; cnpj?: string; connectionLimit?: number }) => {
     try {
       const { error } = await supabase.functions.invoke('manage-workspaces', {
         body: { action: 'update', workspaceId, ...updates }
@@ -129,11 +129,39 @@ export function useWorkspaces() {
     }
   };
 
+  const deleteWorkspace = async (workspaceId: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('manage-workspaces', {
+        body: { action: 'delete', workspaceId }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Empresa removida com sucesso"
+      });
+
+      fetchWorkspaces(); // Refresh list
+    } catch (error) {
+      console.error('Error deleting workspace:', error);
+      toast({
+        title: "Erro",
+        description: "Falha ao remover empresa",
+        variant: "destructive"
+      });
+      throw error;
+    }
+  };
+
   return {
     workspaces,
     isLoading,
     fetchWorkspaces,
     createWorkspace,
-    updateWorkspace
+    updateWorkspace,
+    deleteWorkspace
   };
 }

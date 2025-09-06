@@ -1,9 +1,25 @@
 import { useState } from "react";
-import { Plus, Building2, Users, Settings, Calendar, MapPin } from "lucide-react";
+import { Plus, Building2, Users, Settings, Calendar, MapPin, MoreVertical, Edit, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { CreateWorkspaceModal } from "@/components/modals/CreateWorkspaceModal";
 import { WorkspaceConfigModal } from "@/components/modals/WorkspaceConfigModal";
@@ -16,11 +32,14 @@ interface WorkspaceEmpresasProps {
 }
 
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
-  const { workspaces, isLoading } = useWorkspaces();
+  const { workspaces, isLoading, deleteWorkspace } = useWorkspaces();
   const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [selectedWorkspace, setSelectedWorkspace] = useState<{ id: string; name: string } | null>(null);
+  const [editingWorkspace, setEditingWorkspace] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<any>(null);
 
   const handleUsersClick = (workspace: { workspace_id: string; name: string }) => {
     navigate(`/workspace-empresas/${workspace.workspace_id}/usuarios`);
@@ -29,6 +48,40 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
   const handleConfigClick = (workspace: { workspace_id: string; name: string }) => {
     setSelectedWorkspace({ id: workspace.workspace_id, name: workspace.name });
     setShowConfigModal(true);
+  };
+
+  const handleEditClick = (workspace: any) => {
+    setEditingWorkspace({
+      workspace_id: workspace.workspace_id,
+      name: workspace.name,
+      cnpj: workspace.cnpj,
+      connectionLimit: workspace.connectionLimit || 1
+    });
+    setShowCreateModal(true);
+  };
+
+  const handleDeleteClick = (workspace: any) => {
+    setWorkspaceToDelete(workspace);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (workspaceToDelete) {
+      try {
+        await deleteWorkspace(workspaceToDelete.workspace_id);
+        setDeleteDialogOpen(false);
+        setWorkspaceToDelete(null);
+      } catch (error) {
+        // Error handled in hook
+      }
+    }
+  };
+
+  const handleCreateModalClose = (open: boolean) => {
+    setShowCreateModal(open);
+    if (!open) {
+      setEditingWorkspace(null);
+    }
   };
 
   if (isLoading) {
@@ -80,9 +133,31 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   <Building2 className="w-5 h-5 text-primary" />
                   <CardTitle className="text-lg line-clamp-1">{workspace.name}</CardTitle>
                 </div>
-                <Badge variant="outline" className="text-xs">
-                  {workspace.connections_count} conexões
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {workspace.connections_count} conexões
+                  </Badge>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleEditClick(workspace)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleDeleteClick(workspace)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -150,8 +225,30 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
 
       <CreateWorkspaceModal 
         open={showCreateModal} 
-        onOpenChange={setShowCreateModal} 
+        onOpenChange={handleCreateModalClose}
+        workspace={editingWorkspace}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a empresa "{workspaceToDelete?.name}"? 
+              Esta ação não pode ser desfeita e todos os dados relacionados serão perdidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {selectedWorkspace && (
         <WorkspaceConfigModal
