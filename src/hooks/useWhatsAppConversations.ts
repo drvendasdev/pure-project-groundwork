@@ -70,6 +70,31 @@ export const useWhatsAppConversations = () => {
     }
   };
 
+  // Função utilitária para obter tipo de arquivo
+  const getFileType = (fileName: string): string => {
+    const extension = fileName.toLowerCase().split('.').pop();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'webp':
+        return 'image/jpeg';
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+        return 'video/mp4';
+      case 'mp3':
+      case 'wav':
+      case 'ogg':
+        return 'audio/mpeg';
+      case 'pdf':
+        return 'application/pdf';
+      default:
+        return 'application/octet-stream';
+    }
+  };
+
   // Enviar mensagem
   const sendMessage = useCallback(async (
     conversationId: string, 
@@ -79,71 +104,56 @@ export const useWhatsAppConversations = () => {
     fileUrl?: string, 
     fileName?: string
   ) => {
-    let newMessage: any = null;
-    
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
-      // Obter o usuário logado do localStorage ou auth context
-      const userData = localStorage.getItem('currentUser');
-      const currentUser = userData ? JSON.parse(userData) : null;
-
-      // Inserir mensagem no banco com status 'sending' e sender_id
-      const { data: insertedMessage, error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
+      // Enviar via edge function que vai inserir e enviar
+      const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
+        body: {
+          conversationId,
           content,
-          sender_type: 'agent',
-          sender_id: currentUser?.id || null,
-          message_type: messageType,
-          status: 'sending',
-          origem_resposta: 'manual',
-          file_url: fileUrl,
-          file_name: fileName,
-          workspace_id: '00000000-0000-0000-0000-000000000000' // Default workspace_id for now
-        })
-        .select()
-        .single();
+          messageType,
+          fileUrl,
+          mimeType: fileName ? getFileType(fileName) : undefined
+        }
+      });
 
-      if (insertError) {
-        throw insertError;
+      if (apiError) {
+        console.error('Erro ao enviar via edge function:', apiError);
+        throw new Error(apiError.message || 'Erro ao enviar mensagem');
       }
 
-      newMessage = insertedMessage;
+      if (!sendResult?.success) {
+        console.error('Envio falhou:', sendResult);
+        throw new Error(sendResult.error || 'Falha no envio da mensagem');
+      }
 
-      // Atualizar estado local imediatamente
+      // Atualizar estado local com a mensagem enviada
+      const messageId = sendResult.messageId;
       setConversations(prev => prev.map(conv => {
         if (conv.id === conversationId) {
-          return {
-            ...conv,
-            messages: [...conv.messages, {
-              id: newMessage.id,
-              content,
-              sender_type: 'agent',
-              created_at: newMessage.created_at,
-              status: 'sending',
-              message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
-              file_url: fileUrl,
-              file_name: fileName,
-              origem_resposta: 'manual'
-            }]
-          };
+          const messageExists = conv.messages.some(msg => msg.id === messageId);
+          if (!messageExists) {
+            return {
+              ...conv,
+              messages: [...conv.messages, {
+                id: messageId,
+                content,
+                sender_type: 'agent',
+                created_at: new Date().toISOString(),
+                status: 'sent',
+                message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
+                file_url: fileUrl,
+                file_name: fileName,
+                origem_resposta: 'manual'
+              }]
+            };
+          }
         }
         return conv;
       }));
 
-      // Enviar via N8N (não enviamos evolutionInstance para forçar uso da última mensagem inbound)
-      const { data: sendResult, error: apiError } = await supabase.functions.invoke('n8n-send-message', {
-        body: {
-          messageId: newMessage.id,
-          phoneNumber: contactPhone,
-          content,
-          messageType,
-          fileUrl,
-          fileName
-        }
-      });
+      console.log('✅ Mensagem enviada com sucesso:', sendResult);
 
       if (apiError) {
         console.error('Erro ao enviar via N8N:', apiError);
@@ -175,30 +185,15 @@ export const useWhatsAppConversations = () => {
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
       
-      // Atualizar UI para mostrar erro apenas se tivermos o ID da mensagem
-      if (newMessage?.id) {
-        setConversations(prev => prev.map(conv => {
-          if (conv.id === conversationId) {
-            return {
-              ...conv,
-              messages: conv.messages.map(msg => 
-                msg.id === newMessage.id 
-                  ? { ...msg, status: 'failed' as const }
-                  : msg
-              )
-            };
-          }
-          return conv;
-        }));
-      }
-      
       toast({
         title: "Erro",
         description: error instanceof Error ? error.message : "Erro ao enviar mensagem",
         variant: "destructive",
       });
+      
+      throw error;
     }
-  }, [conversations]);
+  }, [setConversations]);
 
   // Assumir atendimento (desativar IA)
   const assumirAtendimento = useCallback(async (conversationId: string) => {
