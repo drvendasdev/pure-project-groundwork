@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Plus, Building2, Users, Settings, Calendar, MapPin } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { CreateWorkspaceModal } from "@/components/modals/CreateWorkspaceModal";
-import { WorkspaceUsersModal } from "@/components/modals/WorkspaceUsersModal";
 import { WorkspaceConfigModal } from "@/components/modals/WorkspaceConfigModal";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,14 +17,13 @@ interface WorkspaceEmpresasProps {
 
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
   const { workspaces, isLoading } = useWorkspaces();
+  const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showUsersModal, setShowUsersModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [selectedWorkspace, setSelectedWorkspace] = useState<{ id: string; name: string } | null>(null);
 
   const handleUsersClick = (workspace: { workspace_id: string; name: string }) => {
-    setSelectedWorkspace({ id: workspace.workspace_id, name: workspace.name });
-    setShowUsersModal(true);
+    navigate(`/workspace-empresas/${workspace.workspace_id}/usuarios`);
   };
 
   const handleConfigClick = (workspace: { workspace_id: string; name: string }) => {
@@ -155,20 +154,12 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
       />
 
       {selectedWorkspace && (
-        <>
-          <WorkspaceUsersModal
-            open={showUsersModal}
-            onOpenChange={setShowUsersModal}
-            workspaceId={selectedWorkspace.id}
-            workspaceName={selectedWorkspace.name}
-          />
-          <WorkspaceConfigModal
-            open={showConfigModal}
-            onOpenChange={setShowConfigModal}
-            workspaceId={selectedWorkspace.id}
-            workspaceName={selectedWorkspace.name}
-          />
-        </>
+        <WorkspaceConfigModal
+          open={showConfigModal}
+          onOpenChange={setShowConfigModal}
+          workspaceId={selectedWorkspace.id}
+          workspaceName={selectedWorkspace.name}
+        />
       )}
     </div>
   );
