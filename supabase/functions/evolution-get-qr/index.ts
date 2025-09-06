@@ -64,14 +64,24 @@ serve(async (req) => {
       )
     }
 
-    // Call Evolution API to restart the instance to get a fresh QR code
-    const qrResponse = await fetch(`${evolutionConfig.url}/instance/restart/${connection.instance_name}`, {
-      method: 'PUT',
+    // Call Evolution API to get QR code - try the connect endpoint first
+    let qrResponse = await fetch(`${evolutionConfig.url}/instance/connect/${connection.instance_name}`, {
+      method: 'GET',
       headers: {
-        'apikey': evolutionConfig.apiKey,
-        'Content-Type': 'application/json'
+        'apikey': evolutionConfig.apiKey
       }
     })
+
+    // If connect fails, try fetchInstance endpoint
+    if (!qrResponse.ok) {
+      console.log('Connect endpoint failed, trying fetchInstance...')
+      qrResponse = await fetch(`${evolutionConfig.url}/instance/fetchInstance/${connection.instance_name}`, {
+        method: 'GET',
+        headers: {
+          'apikey': evolutionConfig.apiKey
+        }
+      })
+    }
 
     console.log('Evolution QR API response status:', qrResponse.status)
 

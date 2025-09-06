@@ -91,7 +91,7 @@ class EvolutionProvider {
   }
 
   async getQRCode(connectionId: string): Promise<{ qr_code: string }> {
-    const { data } = await supabase.functions.invoke('evolution-get-qr', {
+    const { data } = await supabase.functions.invoke('evolution-refresh-qr', {
       body: { connectionId }
     });
     
