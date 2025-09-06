@@ -680,18 +680,19 @@ serve(async (req) => {
                         error: (await setWebhookResponse.text()).substring(0, 200)
                       });
                     }
-                  } catch (webhookError) {
-                    console.warn('Failed to set webhook separately:', { correlationId, error: webhookError.message });
+                   } catch (webhookError) {
+                     console.warn('Failed to set webhook separately:', { correlationId, error: webhookError.message });
                    }
+                 }
 
-                   // Use the successful fallback response
-                   createInstanceResponse = fallbackResponse;
-                } catch (fallbackError) {
-                  console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
-                }
-              }
-            }
-          }
+                 // Use the successful fallback response
+                 createInstanceResponse = fallbackResponse;
+               } catch (fallbackError) {
+                 console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
+               }
+             }
+           }
+         }
 
           // Final check if instance creation failed
           if (!createInstanceResponse.ok) {
