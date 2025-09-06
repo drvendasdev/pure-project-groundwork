@@ -48,6 +48,13 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
   const { canCreateConnections } = useWorkspaceRole();
+  
+  // Calculate current usage based on loaded connections
+  const currentUsage = {
+    current: connections.length,
+    limit: usage?.limit || 1,
+    canCreateMore: connections.length < (usage?.limit || 1)
+  };
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -467,28 +474,27 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
             <Button 
               disabled={
                 !canCreateConnections(workspaceId) || 
-                (usage && !usage.canCreateMore)
+                !currentUsage.canCreateMore
               }
               title={
                 !canCreateConnections(workspaceId) 
                   ? 'Você não tem permissão para criar conexões neste workspace' 
-                  : usage && !usage.canCreateMore 
-                    ? `Limite de conexões atingido (${usage.current}/${usage.limit})` 
+                  : !currentUsage.canCreateMore 
+                    ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` 
                     : ''
               }
             >
               <Plus className="w-4 h-4 mr-2" />
-              Adicionar Instância
-              {usage && ` (${usage.current}/${usage.limit})`}
+              Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
-              {!isEditMode && usage && (
+              {!isEditMode && (
                 <div className="text-sm text-muted-foreground">
-                  Conexões: {usage.current}/{usage.limit}
-                  {usage.current >= usage.limit && (
+                  Conexões: {currentUsage.current}/{currentUsage.limit}
+                  {currentUsage.current >= currentUsage.limit && (
                     <span className="text-destructive font-medium"> - Limite atingido</span>
                   )}
                 </div>
@@ -543,11 +549,11 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                 onClick={isEditMode ? editConnection : createInstance} 
                 disabled={
                   isCreating || 
-                  (!isEditMode && usage && !usage.canCreateMore)
+                  (!isEditMode && !currentUsage.canCreateMore)
                 }
                 title={
-                  !isEditMode && usage && !usage.canCreateMore 
-                    ? `Limite de conexões atingido (${usage.current}/${usage.limit})` 
+                  !isEditMode && !currentUsage.canCreateMore 
+                    ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` 
                     : ''
                 }
               >
@@ -568,12 +574,11 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
             </p>
             <Button 
               onClick={() => setIsCreateModalOpen(true)}
-              disabled={usage && !usage.canCreateMore}
-              title={usage && !usage.canCreateMore ? `Limite de conexões atingido (${usage.current}/${usage.limit})` : ''}
+              disabled={!currentUsage.canCreateMore}
+              title={!currentUsage.canCreateMore ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` : ''}
             >
               <Plus className="w-4 h-4 mr-2" />
-              Adicionar Instância
-              {usage && ` (${usage.current}/${usage.limit})`}
+              Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </CardContent>
         </Card>
