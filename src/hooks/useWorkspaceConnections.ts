@@ -18,24 +18,43 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
+      // First, try direct query to connections table
       const { data, error } = await supabase
         .from('connections')
         .select('id, instance_name, phone_number, status')
         .eq('workspace_id', workspaceId)
-        .eq('status', 'connected')
         .order('instance_name');
 
       if (error) {
-        console.error('Error fetching connections:', error);
-        toast({
-          title: "Erro",
-          description: "Não foi possível carregar as conexões",
-          variant: "destructive",
-        });
-        return;
-      }
+        console.error('Error fetching connections directly:', error);
+        // Fallback to edge function
+        try {
+          const { data: functionData, error: functionError } = await supabase.functions.invoke('evolution-list-connections', {
+            body: { workspaceId }
+          });
 
-      setConnections(data || []);
+          if (functionError) {
+            console.error('Error calling evolution-list-connections:', functionError);
+            toast({
+              title: "Erro",
+              description: "Não foi possível carregar as conexões",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          setConnections(functionData?.connections || []);
+        } catch (fallbackError) {
+          console.error('Fallback error:', fallbackError);
+          toast({
+            title: "Erro",
+            description: "Erro inesperado ao carregar conexões",
+            variant: "destructive",
+          });
+        }
+      } else {
+        setConnections(data || []);
+      }
     } catch (error) {
       console.error('Error fetching connections:', error);
       toast({

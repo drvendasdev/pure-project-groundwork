@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { User, UserPlus, Edit, Trash, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { useWorkspaceMembers, WorkspaceMember } from "@/hooks/useWorkspaceMembers";
 import { useWorkspaceConnections } from "@/hooks/useWorkspaceConnections";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface WorkspaceUsersModalProps {
   open: boolean;
@@ -54,6 +55,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [defaultInstance, setDefaultInstance] = useState<string | null>(null);
   // Form data for new user
   const [formData, setFormData] = useState({
     name: '',
@@ -68,8 +70,43 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
   const { connections, isLoading: connectionsLoading } = useWorkspaceConnections(workspaceId);
   const { toast } = useToast();
 
+  // Fetch default instance when showing add user form
+  useEffect(() => {
+    if (showAddUser && workspaceId && !defaultInstance) {
+      const fetchDefaultInstance = async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('get-default-instance', {
+            body: { workspaceId }
+          });
+          
+          if (!error && data?.defaultInstance) {
+            setDefaultInstance(data.defaultInstance);
+            // Pre-fill the select if default instance exists and is in connections list
+            if (connections.some(conn => conn.id === data.defaultInstance)) {
+              setFormData(prev => ({ ...prev, default_channel: data.defaultInstance }));
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching default instance:', error);
+        }
+      };
+      
+      fetchDefaultInstance();
+    }
+  }, [showAddUser, workspaceId, connections, defaultInstance]);
+
+  // Update form when connections load and default instance is available
+  useEffect(() => {
+    if (defaultInstance && connections.length > 0 && !formData.default_channel) {
+      const defaultConnection = connections.find(conn => conn.id === defaultInstance);
+      if (defaultConnection) {
+        setFormData(prev => ({ ...prev, default_channel: defaultInstance }));
+      }
+    }
+  }, [defaultInstance, connections, formData.default_channel]);
+
   const handleCreateUser = async () => {
-    if (!formData.name || !formData.email || !formData.profile || !formData.senha || !formData.default_channel) {
+    if (!formData.name || !formData.email || !formData.profile || !formData.senha) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios",
@@ -77,10 +114,27 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
       });
       return;
     }
+
+    // Set default_channel if not selected
+    let finalFormData = { ...formData };
+    if (!finalFormData.default_channel) {
+      // Try to use default instance
+      if (defaultInstance && connections.some(conn => conn.id === defaultInstance)) {
+        finalFormData.default_channel = defaultInstance;
+      } else {
+        // Fallback to first connected connection, then first available
+        const connectedConnection = connections.find(conn => conn.status === 'connected');
+        const fallbackConnection = connectedConnection || connections[0];
+        
+        if (fallbackConnection) {
+          finalFormData.default_channel = fallbackConnection.id;
+        }
+      }
+    }
     
     setIsSubmitting(true);
     try {
-      await createUserAndAddToWorkspace(formData, selectedRole);
+      await createUserAndAddToWorkspace(finalFormData, selectedRole);
       
       // Reset form
       setFormData({
@@ -93,6 +147,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
       });
       setSelectedRole('colaborador');
       setShowAddUser(false);
+      setDefaultInstance(null);
       
       toast({
         title: "Sucesso",
@@ -116,6 +171,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
     });
     setSelectedRole('colaborador');
     setShowAddUser(false);
+    setDefaultInstance(null);
   };
 
   const handleUpdateRole = async (memberId: string, newRole: 'colaborador' | 'gestor' | 'mentor_master') => {
@@ -236,15 +292,15 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="default_channel">Canal Padrão *</Label>
+                    <Label htmlFor="default_channel">Canal Padrão</Label>
                     <Select 
                       value={formData.default_channel} 
                       onValueChange={(value) => setFormData(prev => ({ ...prev, default_channel: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={connectionsLoading ? "Carregando..." : "Selecione uma conexão"} />
+                        <SelectValue placeholder={connectionsLoading ? "Carregando..." : "Selecione uma conexão (opcional)"} />
                       </SelectTrigger>
-                      <SelectContent className="bg-background border border-border">
+                      <SelectContent className="z-50 bg-background border border-border">
                         {connections.length === 0 ? (
                           <SelectItem value="no-connections" disabled>
                             Nenhuma conexão disponível
@@ -252,7 +308,8 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                         ) : (
                           connections.map((connection) => (
                             <SelectItem key={connection.id} value={connection.id}>
-                              {connection.instance_name} {connection.phone_number ? `— ${connection.phone_number}` : ''}
+                              {connection.instance_name} {connection.phone_number ? `— ${connection.phone_number}` : ''} 
+                              {connection.status === 'connected' && ' ✓'}
                             </SelectItem>
                           ))
                         )}
@@ -283,7 +340,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
               <div className="flex gap-2 pt-4">
                 <Button 
                   onClick={handleCreateUser}
-                  disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || !formData.senha || !formData.default_channel}
+                  disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || !formData.senha}
                 >
                   {isSubmitting ? "Criando..." : "Criar Usuário"}
                 </Button>
