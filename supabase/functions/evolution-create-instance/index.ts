@@ -184,28 +184,32 @@ serve(async (req) => {
     // Call Evolution API to create instance
     const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/evolution-webhook`
 
+    // Prepare payload for Evolution API (only Evolution-specific fields)
+    const evolutionPayload = {
+      instanceName: instanceName,
+      token: token,
+      qrcode: true,
+      webhook: webhookUrl,
+      webhook_by_events: false,
+      events: [
+        "APPLICATION_STARTUP",
+        "QRCODE_UPDATED", 
+        "CONNECTION_UPDATE",
+        "MESSAGES_UPSERT",
+        "MESSAGES_UPDATE",
+        "SEND_MESSAGE"
+      ]
+    }
+
+    console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))
+
     const evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': evolutionConfig.apiKey
       },
-      body: JSON.stringify({
-        instanceName: instanceName,
-        token: token,
-        qrcode: true,
-        number: false,
-        webhook: webhookUrl,
-        webhook_by_events: false,
-        events: [
-          "APPLICATION_STARTUP",
-          "QRCODE_UPDATED", 
-          "CONNECTION_UPDATE",
-          "MESSAGES_UPSERT",
-          "MESSAGES_UPDATE",
-          "SEND_MESSAGE"
-        ]
-      })
+      body: JSON.stringify(evolutionPayload)
     })
 
     console.log("Evolution API response status:", evolutionResponse.status)
