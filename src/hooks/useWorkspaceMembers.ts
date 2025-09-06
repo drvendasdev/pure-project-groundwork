@@ -27,25 +27,42 @@ export function useWorkspaceMembers(workspaceId?: string) {
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // First try to get workspace members
+      const { data: membersData, error: membersError } = await supabase
         .from('workspace_members')
-        .select(`
-          *,
-          user:system_users(
-            id,
-            name,
-            email,
-            profile
-          )
-        `)
+        .select('*')
         .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        throw error;
+      if (membersError) {
+        console.error('Error fetching workspace members:', membersError);
+        throw membersError;
       }
 
-      setMembers(data || []);
+      // If we have members, get their user details
+      if (membersData && membersData.length > 0) {
+        const userIds = membersData.map(member => member.user_id);
+        
+        const { data: usersData, error: usersError } = await supabase
+          .from('system_users')
+          .select('id, name, email, profile')
+          .in('id', userIds);
+
+        if (usersError) {
+          console.error('Error fetching user details:', usersError);
+          throw usersError;
+        }
+
+        // Combine the data
+        const membersWithUsers = membersData.map(member => ({
+          ...member,
+          user: usersData?.find(user => user.id === member.user_id)
+        }));
+
+        setMembers(membersWithUsers);
+      } else {
+        setMembers([]);
+      }
     } catch (error) {
       console.error('Error fetching workspace members:', error);
       toast({
@@ -53,6 +70,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
         description: "Falha ao carregar membros do workspace",
         variant: "destructive"
       });
+      setMembers([]);
     } finally {
       setIsLoading(false);
     }
