@@ -27,12 +27,12 @@ export function useWorkspaceLimits(workspaceId: string) {
     
     setIsLoading(true);
     try {
-      // Get workspace limits
+      // Get workspace limits - use maybeSingle to avoid 406 errors
       const { data: limitsData, error: limitsError } = await supabase
         .from('workspace_limits')
         .select('*')
         .eq('workspace_id', workspaceId)
-        .single();
+        .maybeSingle();
 
       if (limitsError && limitsError.code !== 'PGRST116') { // Not found error
         throw limitsError;

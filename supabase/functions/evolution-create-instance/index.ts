@@ -6,15 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets
+// Get Evolution API configuration from secrets - FORCE CORRECT URL
 function getEvolutionConfig() {
-  const url = Deno.env.get('EVOLUTION_API_URL') || 
-              Deno.env.get('EVOLUTION_URL') || 
-              'https://evo.eventoempresalucrativa.com.br';
+  // FORCE the correct Evolution URL regardless of what's in secrets
+  const url = 'https://evo.eventoempresalucrativa.com.br';
   
   const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
                  Deno.env.get('EVOLUTION_APIKEY') || 
                  Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+  
+  console.log('Evolution URL:', url);
+  console.log('Evolution API Key:', apiKey ? 'Present' : 'Missing');
   
   return { url, apiKey };
 }

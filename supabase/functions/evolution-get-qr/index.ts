@@ -6,11 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets
+// Get Evolution API configuration from secrets - FORCE CORRECT URL
 function getEvolutionConfig() {
-  const url = Deno.env.get('EVOLUTION_API_URL') || 
-              Deno.env.get('EVOLUTION_URL') || 
-              'https://evo.eventoempresalucrativa.com.br';
+  // FORCE the correct Evolution URL regardless of what's in secrets
+  const url = 'https://evo.eventoempresalucrativa.com.br';
   
   const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
                  Deno.env.get('EVOLUTION_APIKEY') || 
@@ -74,11 +73,14 @@ serve(async (req) => {
     })
 
     if (!qrResponse.ok) {
-      const errorData = await qrResponse.json()
+      // Handle errors as text instead of JSON to prevent parsing issues
+      const errorText = await qrResponse.text()
+      console.error('Evolution API error response:', errorText)
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Evolution API error: ${errorData.message || 'Failed to get QR code'}` 
+          error: `Evolution API error (${qrResponse.status}): ${errorText}` 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
