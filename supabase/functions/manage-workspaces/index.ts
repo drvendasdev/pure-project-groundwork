@@ -12,9 +12,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-  const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
-
-    // Initialize Supabase client
+    const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
+    console.log('Request received:', { action, workspaceId, name, cnpj, connectionLimit });
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
