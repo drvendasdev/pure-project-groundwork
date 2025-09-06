@@ -1,26 +1,27 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import type { Workspace } from '@/contexts/WorkspaceContext';
 
 export function useWorkspaces() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const fetchWorkspaces = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('workspaces_view')
-        .select('*')
-        .order('name');
+      const { data, error } = await supabase.functions.invoke('manage-workspaces', {
+        body: { action: 'list' }
+      });
 
       if (error) {
         throw error;
       }
 
-      setWorkspaces(data || []);
+      setWorkspaces(data.data || []);
     } catch (error) {
       console.error('Error fetching workspaces:', error);
       toast({
@@ -38,12 +39,24 @@ export function useWorkspaces() {
   }, []);
 
   const createWorkspace = async (name: string, cnpj?: string) => {
+    if (!user?.email) {
+      toast({
+        title: "Erro",
+        description: "Usuário não autenticado",
+        variant: "destructive"
+      });
+      throw new Error('User not authenticated');
+    }
+
     try {
-      const { data, error } = await supabase
-        .from('orgs')
-        .insert({ name, cnpj })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('manage-workspaces', {
+        body: { 
+          action: 'create', 
+          name, 
+          cnpj,
+          userEmail: user.email 
+        }
+      });
 
       if (error) {
         throw error;
@@ -55,7 +68,7 @@ export function useWorkspaces() {
       });
 
       fetchWorkspaces(); // Refresh list
-      return data;
+      return data.data;
     } catch (error) {
       console.error('Error creating workspace:', error);
       toast({
