@@ -237,12 +237,13 @@ serve(async (req) => {
     // Parse response data only after confirming success
     const evolutionData = await evolutionResponse.json()
     console.log("Evolution API success response:", evolutionData)
+    console.log("QR code data:", evolutionData.qrcode)
 
     // Update connection with Evolution response data
     let updateData: any = {}
     
-    if (evolutionData.qrcode || evolutionData.qr) {
-      updateData.qr_code = evolutionData.qrcode || evolutionData.qr
+    if (evolutionData.qrcode?.base64 || evolutionData.qrcode?.code || evolutionData.qr) {
+      updateData.qr_code = evolutionData.qrcode?.base64 || evolutionData.qrcode?.code || evolutionData.qr
       updateData.status = 'qr'
     } else if (evolutionData.instance?.state === 'open') {
       updateData.status = 'connected'

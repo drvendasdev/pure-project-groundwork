@@ -92,7 +92,7 @@ serve(async (req) => {
     await supabase
       .from('connections')
       .update({ 
-        qr_code: qrData.qrcode || qrData.qr,
+        qr_code: qrData.qrcode?.base64 || qrData.qrcode?.code || qrData.qrcode || qrData.qr,
         status: 'qr',
         updated_at: new Date().toISOString()
       })
@@ -101,7 +101,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        qr_code: qrData.qrcode || qrData.qr
+        qr_code: qrData.qrcode?.base64 || qrData.qrcode?.code || qrData.qrcode || qrData.qr
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
