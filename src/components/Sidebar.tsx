@@ -96,6 +96,12 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       icon: <Phone className="w-5 h-5" />
     },
     {
+      id: "workspace-empresas",
+      label: "Empresas",
+      icon: <Building2 className="w-5 h-5" />,
+      group: "workspace"
+    },
+    {
       id: "workspace-relatorios",
       label: "Relatórios",
       icon: <BarChart3 className="w-5 h-5" />,
@@ -355,7 +361,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {ungroupedItems.map(renderMenuItem)}
         
-        {renderGroup("workspace", "Workspace", workspaceItems)}
+        {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
         {renderGroup("crm", "CRM", crmItems)}
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}
