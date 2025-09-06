@@ -183,6 +183,7 @@ serve(async (req) => {
           .insert({
             phone: sanitized,
             name: `Contato ${sanitized}`,
+            workspace_id: "00000000-0000-0000-0000-000000000000", // Workspace padrão
             created_at: new Date().toISOString(),
           })
           .select("id, name")
@@ -206,6 +207,7 @@ serve(async (req) => {
           .from("conversations")
           .insert({
             contact_id: contact.id,
+            workspace_id: "00000000-0000-0000-0000-000000000000", // Workspace padrão
             canal: "whatsapp",
             status: "open",
             agente_ativo: false,
@@ -270,6 +272,7 @@ serve(async (req) => {
     // ---------- Insere mensagem ----------
     const insertPayload: any = {
       conversation_id,
+      workspace_id: conversation.workspace_id,  // Adicionar workspace_id da conversa
       content: finalContent,
       sender_type,                  // ex.: 'agent' | 'ia'
       message_type: finalMessageType, // 'text' | 'image' | 'video' | 'audio' | 'document'
