@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { CreateWorkspaceModal } from "@/components/modals/CreateWorkspaceModal";
+import { WorkspaceUsersModal } from "@/components/modals/WorkspaceUsersModal";
+import { WorkspaceConfigModal } from "@/components/modals/WorkspaceConfigModal";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -16,6 +18,19 @@ interface WorkspaceEmpresasProps {
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
   const { workspaces, isLoading } = useWorkspaces();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<{ id: string; name: string } | null>(null);
+
+  const handleUsersClick = (workspace: { workspace_id: string; name: string }) => {
+    setSelectedWorkspace({ id: workspace.workspace_id, name: workspace.name });
+    setShowUsersModal(true);
+  };
+
+  const handleConfigClick = (workspace: { workspace_id: string; name: string }) => {
+    setSelectedWorkspace({ id: workspace.workspace_id, name: workspace.name });
+    setShowConfigModal(true);
+  };
 
   if (isLoading) {
     return (
@@ -100,7 +115,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-2"
-                  onClick={() => onNavigateToUsers?.(workspace.workspace_id)}
+                  onClick={() => handleUsersClick(workspace)}
                 >
                   <Users className="w-4 h-4" />
                   Usuários
@@ -109,7 +124,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-2"
-                  onClick={() => onNavigateToConfig?.(workspace.workspace_id)}
+                  onClick={() => handleConfigClick(workspace)}
                 >
                   <Settings className="w-4 h-4" />
                   Config
@@ -134,10 +149,27 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
         </div>
       )}
 
-      <CreateWorkspaceModal
-        open={showCreateModal}
-        onOpenChange={setShowCreateModal}
+      <CreateWorkspaceModal 
+        open={showCreateModal} 
+        onOpenChange={setShowCreateModal} 
       />
+
+      {selectedWorkspace && (
+        <>
+          <WorkspaceUsersModal
+            open={showUsersModal}
+            onOpenChange={setShowUsersModal}
+            workspaceId={selectedWorkspace.id}
+            workspaceName={selectedWorkspace.name}
+          />
+          <WorkspaceConfigModal
+            open={showConfigModal}
+            onOpenChange={setShowConfigModal}
+            workspaceId={selectedWorkspace.id}
+            workspaceName={selectedWorkspace.name}
+          />
+        </>
+      )}
     </div>
   );
 }

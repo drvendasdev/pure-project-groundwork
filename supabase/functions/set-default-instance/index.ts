@@ -12,11 +12,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { orgId, instance } = await req.json();
+    const { workspaceId, instance } = await req.json();
 
-    if (!orgId || !instance) {
+    if (!workspaceId || !instance) {
       return new Response(
-        JSON.stringify({ error: 'orgId and instance are required' }),
+        JSON.stringify({ error: 'workspaceId and instance are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -27,17 +27,17 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log(`Setting default instance for org ${orgId}: ${instance}`);
+    console.log(`Setting default instance for workspace ${workspaceId}: ${instance}`);
 
     // Upsert the default instance setting
     const { data, error } = await supabase
-      .from('org_messaging_settings')
+      .from('workspace_messaging_settings')
       .upsert({
-        org_id: orgId,
+        workspace_id: workspaceId,
         default_instance: instance,
         updated_at: new Date().toISOString()
       }, {
-        onConflict: 'org_id'
+        onConflict: 'workspace_id'
       })
       .select();
 

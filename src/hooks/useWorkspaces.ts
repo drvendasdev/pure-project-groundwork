@@ -39,11 +39,9 @@ export function useWorkspaces() {
 
   const createWorkspace = async (name: string, cnpj?: string) => {
     try {
-      const { data, error } = await supabase
-        .from('orgs')
-        .insert({ name, cnpj })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('manage-workspaces', {
+        body: { action: 'create', name, cnpj }
+      });
 
       if (error) {
         throw error;
@@ -69,10 +67,9 @@ export function useWorkspaces() {
 
   const updateWorkspace = async (workspaceId: string, updates: { name?: string; cnpj?: string }) => {
     try {
-      const { error } = await supabase
-        .from('orgs')
-        .update(updates)
-        .eq('id', workspaceId);
+      const { error } = await supabase.functions.invoke('manage-workspaces', {
+        body: { action: 'update', workspaceId, ...updates }
+      });
 
       if (error) {
         throw error;

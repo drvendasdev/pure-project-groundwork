@@ -53,7 +53,11 @@ const formatPhoneNumberDisplay = (phone: string): string => {
   return phone;
 };
 
-export function ConexoesNova() {
+interface ConexoesNovaProps {
+  workspaceId?: string;
+}
+
+export function ConexoesNova({ workspaceId }: ConexoesNovaProps = {}) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -83,7 +87,9 @@ export function ConexoesNova() {
 
   // Load connections on component mount
   useEffect(() => {
-    loadConnections();
+    if (workspaceId) {
+      loadConnections();
+    }
     
     return () => {
       if (pollInterval) {
@@ -102,6 +108,7 @@ export function ConexoesNova() {
     try {
       setIsLoading(true);
       
+      // Temporarily use anon function until types are updated
       const { data, error } = await supabase.rpc('list_connections_anon');
 
       if (error) {
@@ -114,7 +121,7 @@ export function ConexoesNova() {
         return;
       }
 
-      const connections = data || [];
+      const connections = Array.isArray(data) ? data : [];
       
       // Check current status for each connection with Evolution API
       const updatedConnections = await Promise.all(
@@ -312,7 +319,7 @@ export function ConexoesNova() {
 
       const result = await response.json();
 
-      // Salvar na tabela connections
+      // Salvar na tabela connections (using temp anon function until types are updated)
       const { data: connectionId, error: dbError } = await supabase.rpc('create_connection_anon', {
         p_instance_name: instanceName.trim(),
         p_history_recovery: historyRecovery,
