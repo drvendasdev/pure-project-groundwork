@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface Tag {
   id: string;
@@ -29,6 +30,7 @@ export function AddTagModal({
   onTagAdded, 
   isDarkMode = false 
 }: AddTagModalProps) {
+  const { selectedWorkspace } = useWorkspace();
   const [tagInput, setTagInput] = useState("");
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,7 +70,7 @@ export function AddTagModal({
         // Criar nova tag
         const { data: newTag, error: tagError } = await supabase
           .from('tags')
-          .insert([{ name: tagName, color: '#808080' }])
+          .insert([{ name: tagName, color: '#808080', workspace_id: selectedWorkspace!.workspace_id }])
           .select()
           .single();
 

@@ -25,6 +25,26 @@ function getConfig() {
   };
 }
 
+function normalizePhoneNumber(phone: string): string | undefined {
+  if (!phone || typeof phone !== 'string') {
+    return undefined;
+  }
+  
+  // Remove all non-digit characters
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  if (cleanPhone.length === 0) {
+    return undefined;
+  }
+  
+  // If doesn't start with 55 (Brazil), add it
+  if (!cleanPhone.startsWith('55')) {
+    return '55' + cleanPhone;
+  }
+  
+  return cleanPhone;
+}
+
 function validateWebhookUrl(url: string): { valid: boolean, error?: string } {
   if (!url) {
     return { valid: false, error: 'URL do webhook não configurada' };
@@ -66,7 +86,7 @@ serve(async (req) => {
     const config = getConfig();
 
     // For operations with instanceToken, we can skip global credentials check
-    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret, orgId } = await req.json();
+    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret, orgId, number, phoneNumber } = await req.json();
     
     // Try to get token from database if not provided
     let finalToken = instanceToken;
@@ -201,6 +221,10 @@ serve(async (req) => {
 
         const webhookUrl = config.supabaseFunctionsWebhook;
 
+        // Normalize phone number if provided
+        const providedNumber = number || phoneNumber;
+        const normalizedNumber = normalizePhoneNumber(providedNumber);
+
         // Criar instância usando o token da instância
         const createResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/create`, {
           method: 'POST',
@@ -208,19 +232,12 @@ serve(async (req) => {
             instanceName: instanceName,
             token: finalToken,
             qrcode: true,
-            number: '',
+            ...(normalizedNumber && { number: normalizedNumber }),
             integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
             business: {
               description: 'WhatsApp Business',
             },
-            webhook: webhookUrl,
-            webhook_by_events: false,
-            webhook_base64: false,
-            ...(config.evolutionWebhookSecret && {
-              webhook_headers: {
-                authorization: `Bearer ${config.evolutionWebhookSecret}`
-              }
-            }),
+            
             events: [
               'APPLICATION_STARTUP',
               'QRCODE_UPDATED',
@@ -297,6 +314,8 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           data: createData,
+          number: normalizedNumber || createData?.instance?.number,
+          numero: normalizedNumber || createData?.instance?.number,
           correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

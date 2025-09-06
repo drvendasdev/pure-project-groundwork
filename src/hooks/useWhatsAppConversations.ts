@@ -100,7 +100,8 @@ export const useWhatsAppConversations = () => {
           status: 'sending',
           origem_resposta: 'manual',
           file_url: fileUrl,
-          file_name: fileName
+          file_name: fileName,
+          workspace_id: '00000000-0000-0000-0000-000000000000' // Default workspace_id for now
         })
         .select()
         .single();

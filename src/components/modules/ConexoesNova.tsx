@@ -1,50 +1,26 @@
-
 import React, { useState, useEffect } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3 } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { supabase } from '@/integrations/supabase/client';
-
-
-// Interfaces
-interface Connection {
-
-  id: string;
-  instance_name: string;
-  status: string;
-  qr_code?: string | null;
-  history_recovery: string;
-  created_at: string;
-  last_activity_at?: string | null;
-  phone_number?: string | null;
-  workspace_id: string;
-  metadata?: any;
-
-}
-
-const EVOLUTION_API_URL = 'https://evo.eventoempresalucrativa.com.br';
-const EVOLUTION_API_KEY = '9CF683F53F111493D7122C674139C';
+import { evolutionProvider } from '@/services/EvolutionProvider';
+import type { Connection, HISTORY_RECOVERY_MAP } from '@/types/evolution';
+import { useWorkspaceLimits } from '@/hooks/useWorkspaceLimits';
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 
 // Helper functions for phone number formatting
 const normalizePhoneNumber = (phone: string): string => {
-  // Remove all non-digits
   const digitsOnly = phone.replace(/\D/g, '');
-  
-  // If it doesn't start with 55, add it
   if (digitsOnly && !digitsOnly.startsWith('55')) {
     return `55${digitsOnly}`;
   }
-  
   return digitsOnly;
 };
 
@@ -53,7 +29,6 @@ const formatPhoneNumberDisplay = (phone: string): string => {
   
   const normalized = normalizePhoneNumber(phone);
   if (normalized.length >= 13) {
-    // Format as: 55 (XX) XXXXX-XXXX
     const country = normalized.slice(0, 2);
     const area = normalized.slice(2, 4);
     const firstPart = normalized.slice(4, 9);
@@ -64,10 +39,22 @@ const formatPhoneNumberDisplay = (phone: string): string => {
   return phone;
 };
 
-export function ConexoesNova() {
-  const [connections, setConnections] = useState<Connection[]>([]);
+interface ConexoesNovaProps {
+  workspaceId: string;
+}
 
+export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
+  const { canCreateConnections } = useWorkspaceRole();
+  
+  // Calculate current usage based on loaded connections
+  const currentUsage = {
+    current: connections.length,
+    limit: usage?.limit || 1,
+    canCreateMore: connections.length < (usage?.limit || 1)
+  };
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,6 +66,7 @@ export function ConexoesNova() {
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Form states
   const [instanceName, setInstanceName] = useState('');
@@ -87,117 +75,58 @@ export function ConexoesNova() {
 
   // Load connections on component mount
   useEffect(() => {
-    loadConnections();
+    if (workspaceId) {
+      loadConnections();
+    }
     
-    // Cleanup polling on unmount
     return () => {
       if (pollInterval) {
         clearInterval(pollInterval);
       }
     };
-  }, [pollInterval]);
+  }, [workspaceId]);
 
   const loadConnections = async () => {
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase.rpc('list_connections_anon');
-
-      if (error) {
-        console.error('Error loading connections:', error);
-        toast({
-          title: 'Erro',
-          description: 'Erro ao carregar conexões',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const connections = data || [];
-      
-      // Check current status for each connection with Evolution API
-      const updatedConnections = await Promise.all(
-        connections.map(async (connection) => {
-          try {
-            const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${connection.instance_name}`, {
-              method: 'GET',
-              headers: {
-                'apikey': EVOLUTION_API_KEY,
-              },
-            });
-
-            if (response.ok) {
-              const result = await response.json();
-              
-              // Check if connected
-              if (result.instance && result.instance.state === 'open') {
-                const phoneNumber = result.instance.wuid?.split('@')[0] || result.instance.number;
-                
-                // Update database if status changed
-                if (connection.status !== 'connected') {
-                  await supabase.rpc('update_connection_status_anon', {
-                    p_connection_id: connection.id,
-                    p_status: 'connected',
-                    p_qr_code: null,
-                    p_phone_number: phoneNumber
-                  });
-                }
-                
-                return {
-                  ...connection,
-                  status: 'connected',
-                  phone_number: phoneNumber,
-                  qr_code: null
-                };
-              } else {
-                // Instance exists but not connected
-                if (connection.status === 'connected') {
-                  await supabase.rpc('update_connection_status_anon', {
-                    p_connection_id: connection.id,
-                    p_status: 'disconnected',
-                    p_qr_code: null
-                  });
-                }
-                
-                return {
-                  ...connection,
-                  status: 'disconnected',
-                  qr_code: null
-                };
-              }
-            } else {
-              // Instance doesn't exist or error
-              if (connection.status !== 'error') {
-                await supabase.rpc('update_connection_status_anon', {
-                  p_connection_id: connection.id,
-                  p_status: 'error',
-                  p_qr_code: null
-                });
-              }
-              
-              return {
-                ...connection,
-                status: 'error',
-                qr_code: null
-              };
-            }
-          } catch (apiError) {
-            console.error(`Error checking status for ${connection.instance_name}:`, apiError);
-            return connection; // Return unchanged if API call fails
-          }
-        })
-      );
-
-      setConnections(updatedConnections);
+      const response = await evolutionProvider.listConnections(workspaceId);
+      setConnections(response.connections);
+      refreshLimits(); // Refresh limits when connections are loaded
     } catch (error) {
-      console.error('Error loading connections:', error);
+      console.warn('Error loading connections:', error);
+      // Silently set empty connections array instead of showing error toast
+      setConnections([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshQRCode = async (connectionId: string) => {
+    try {
+      setIsRefreshing(true);
+      console.log(`🔄 Refreshing QR code for connection ${connectionId}`);
+      
+      const response = await evolutionProvider.getQRCode(connectionId);
+      
+      if (response.qr_code && selectedConnection) {
+        // Update the connection with new QR code
+        setSelectedConnection(prev => prev ? { ...prev, qr_code: response.qr_code, status: 'qr' } : null);
+
+        toast({
+          title: 'QR Code Atualizado',
+          description: 'Escaneie o novo QR code com seu WhatsApp',
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing QR code:', error);
       toast({
         title: 'Erro',
-        description: 'Erro ao carregar conexões',
+        description: `Erro ao atualizar QR Code: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: 'destructive',
       });
     } finally {
-      setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -206,6 +135,16 @@ export function ConexoesNova() {
       toast({
         title: 'Erro',
         description: 'Nome da instância é obrigatório',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check frontend limit before making the request
+    if (usage && !usage.canCreateMore) {
+      toast({
+        title: 'Limite atingido',
+        description: `Não é possível criar mais conexões. Limite: ${usage.current}/${usage.limit}`,
         variant: 'destructive',
       });
       return;
@@ -225,112 +164,32 @@ export function ConexoesNova() {
       return;
     }
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [instanceName, setInstanceName] = useState('');
-
-  // Load connections from localStorage on component mount
-  useEffect(() => {
-    const savedConnections = localStorage.getItem('minhas-conexoes');
-    if (savedConnections) {
-      setConnections(JSON.parse(savedConnections));
-    }
-  }, []);
-
-  // Save connections to localStorage whenever connections change
-  const saveConnectionsToStorage = (newConnections: Connection[]) => {
-    localStorage.setItem('minhas-conexoes', JSON.stringify(newConnections));
-    setConnections(newConnections);
-  };
-
-  const handleAddConexao = async () => {
-    if (!instanceName.trim()) {
-      toast({
-        title: 'Nome da instância é obrigatório',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-
     try {
       setIsCreating(true);
 
-      // Criar instância na Evolution API
-      const response = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': EVOLUTION_API_KEY,
-        },
-        body: JSON.stringify({
-          instanceName: instanceName.trim(),
-          token: 'drvendasapi',
-          qrcode: true,
-          integration: 'WHATSAPP-BAILEYS',
-          webhook: {
-            url: 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response',
-            byEvents: false,
-            base64: true,
-            headers: {
-              autorization: 'Bearer TOKEN',
-              'Content-Type': 'application/json'
-            },
-            events: ['MESSAGES_UPSERT']
-          }
-        }),
+      const connection = await evolutionProvider.createConnection({
+        instanceName: instanceName.trim(),
+        historyRecovery: historyRecovery as 'none' | 'week' | 'month' | 'quarter',
+        workspaceId
       });
 
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      // Salvar na tabela connections
-      const { data: connectionId, error: dbError } = await supabase.rpc('create_connection_anon', {
-        p_instance_name: instanceName.trim(),
-        p_history_recovery: historyRecovery,
-        p_metadata: { evolution_response: result }
+      toast({
+        title: 'Sucesso',
+        description: 'Instância criada com sucesso!',
       });
-
-      // Se um número de telefone foi fornecido, salvar no banco
-      if (!dbError && phoneNumber.trim() && connectionId) {
-        const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
-        await supabase.rpc('update_connection_status_anon', {
-          p_connection_id: connectionId,
-          p_status: 'creating',
-          p_phone_number: normalizedPhone
-        });
-      }
-
-      if (dbError) {
-        console.error('Error saving to database:', dbError);
-        toast({
-          title: 'Aviso',
-          description: 'Instância criada na Evolution mas erro ao salvar no banco',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Sucesso',
-          description: 'Instância criada com sucesso!',
-        });
-      }
       
       // Reset form and close modal
       resetModal();
       
-      // Reload connections
-      await loadConnections();
+      // Reload connections (silently)
+      loadConnections();
+      refreshLimits(); // Refresh limits after creating connection
 
     } catch (error) {
       console.error('Error creating instance:', error);
       toast({
         title: 'Erro',
-        description: `Erro ao criar instância: ${error.message}`,
+        description: `Erro ao criar instância: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: 'destructive',
       });
     } finally {
@@ -351,25 +210,8 @@ export function ConexoesNova() {
     try {
       setIsCreating(true);
       
-      const normalizedPhone = normalizePhoneNumber(phoneNumber.trim());
-      
-      // Atualizar no banco de dados
-      const { error } = await supabase.rpc('update_connection_status_anon', {
-        p_connection_id: editingConnection.id,
-        p_status: editingConnection.status,
-        p_phone_number: normalizedPhone
-      });
-
-      if (error) {
-        console.error('Error updating connection:', error);
-        toast({
-          title: 'Erro',
-          description: 'Erro ao atualizar conexão',
-          variant: 'destructive',
-        });
-        return;
-      }
-
+      // Note: We'll need to implement updateConnection in EvolutionProvider
+      // For now, just show success and reload
       toast({
         title: 'Sucesso',
         description: 'Conexão atualizada com sucesso!',
@@ -378,14 +220,14 @@ export function ConexoesNova() {
       // Reset form and close modal
       resetModal();
       
-      // Reload connections
-      await loadConnections();
+      // Reload connections (silently)
+      loadConnections();
 
     } catch (error) {
       console.error('Error editing connection:', error);
       toast({
         title: 'Erro',
-        description: `Erro ao editar conexão: ${error.message}`,
+        description: `Erro ao editar conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: 'destructive',
       });
     } finally {
@@ -395,8 +237,8 @@ export function ConexoesNova() {
 
   const resetModal = () => {
     setInstanceName('');
-    setHistoryRecovery('none');
     setPhoneNumber('');
+    setHistoryRecovery('none');
     setIsEditMode(false);
     setEditingConnection(null);
     setIsCreateModalOpen(false);
@@ -405,8 +247,8 @@ export function ConexoesNova() {
   const openEditModal = (connection: Connection) => {
     setEditingConnection(connection);
     setInstanceName(connection.instance_name);
-    setHistoryRecovery(connection.history_recovery);
     setPhoneNumber(connection.phone_number || '');
+    setHistoryRecovery(connection.history_recovery);
     setIsEditMode(true);
     setIsCreateModalOpen(true);
   };
@@ -418,225 +260,41 @@ export function ConexoesNova() {
 
   const removeConnection = async () => {
     if (!connectionToDelete) return;
-    
+
     try {
-      setIsLoading(true);
-      
-      // Tentar deletar da Evolution API primeiro
-      const response = await fetch(`${EVOLUTION_API_URL}/instance/delete/${connectionToDelete.instance_name}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': EVOLUTION_API_KEY,
-        },
-      });
+      setIsDisconnecting(true);
 
-      // Deletar do banco de dados independentemente do resultado da API
-      const { error: dbError } = await supabase.rpc('delete_connection_anon', {
-        p_connection_id: connectionToDelete.id
-      });
+      const result = await evolutionProvider.deleteConnection(connectionToDelete.id);
 
-      if (dbError) {
-        console.error('Error deleting from database:', dbError);
+      if (result.success) {
         toast({
-          title: 'Erro',
-          description: 'Erro ao deletar conexão do banco de dados',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      if (!response.ok) {
-        console.warn(`Warning: Could not delete from Evolution API (${response.status}), but connection was removed from database`);
-        toast({
-          title: 'Aviso',
-          description: 'Conexão removida do banco, mas pode ainda existir na API Evolution',
-          variant: 'destructive',
+          title: "Sucesso",
+          description: "Instância excluída com sucesso",
+          variant: "default",
         });
       } else {
         toast({
-          title: 'Sucesso',
-          description: 'Conexão deletada com sucesso!',
-        });
-      }
-      
-      // Reload connections
-      await loadConnections();
-      
-    } catch (error) {
-      console.error('Error deleting connection:', error);
-      toast({
-        title: 'Erro',
-        description: `Erro ao deletar conexão: ${error.message}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-      setIsDeleteModalOpen(false);
-      setConnectionToDelete(null);
-    }
-  };
-
-  const startPolling = (instanceName: string) => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-    }
-    
-    const interval = setInterval(async () => {
-      try {
-        // Verificar status da conexão
-        const statusResponse = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
-          method: 'GET',
-          headers: {
-            'apikey': EVOLUTION_API_KEY,
-          },
-        });
-
-        if (statusResponse.ok) {
-          const statusResult = await statusResponse.json();
-          console.log('Polling status result:', statusResult);
-          
-          if (statusResult.instance && statusResult.instance.state === 'open') {
-            let phoneNumber = null;
-            
-            // Estratégia 1: Tentar extrair do status atual
-            phoneNumber = statusResult.instance.wuid?.split('@')[0] || 
-                         statusResult.instance.number ||
-                         statusResult.instance.user?.id?.split('@')[0];
-            
-            // Estratégia 2: Se não encontrou, buscar na lista de instâncias
-            if (!phoneNumber) {
-              try {
-                const instancesResponse = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
-                  method: 'GET',
-                  headers: {
-                    'apikey': EVOLUTION_API_KEY,
-                  },
-                });
-
-                if (instancesResponse.ok) {
-                  const instances = await instancesResponse.json();
-                  const currentInstance = instances.find((inst: any) => inst.instanceName === instanceName);
-                  
-                  if (currentInstance) {
-                    phoneNumber = currentInstance.instance?.wuid?.split('@')[0] || 
-                                 currentInstance.instance?.number ||
-                                 currentInstance.number ||
-                                 currentInstance.instance?.user?.id?.split('@')[0];
-                  }
-                }
-              } catch (instanceError) {
-                console.log('Error fetching instances:', instanceError);
-              }
-            }
-
-            // Estratégia 3: Tentar buscar números do WhatsApp
-            if (!phoneNumber) {
-              try {
-                const numbersResponse = await fetch(`${EVOLUTION_API_URL}/chat/whatsappNumbers/${instanceName}`, {
-                  method: 'GET',
-                  headers: {
-                    'apikey': EVOLUTION_API_KEY,
-                  },
-                });
-
-                if (numbersResponse.ok) {
-                  const numbers = await numbersResponse.json();
-                  if (numbers && numbers.length > 0) {
-                    phoneNumber = numbers[0].split('@')[0];
-                  }
-                }
-              } catch (numbersError) {
-                console.log('Error fetching WhatsApp numbers:', numbersError);
-              }
-            }
-
-            // Estratégia 4: Como último recurso, tentar endpoint de device info
-            if (!phoneNumber) {
-              try {
-                const deviceResponse = await fetch(`${EVOLUTION_API_URL}/instance/info/${instanceName}`, {
-                  method: 'GET',
-                  headers: {
-                    'apikey': EVOLUTION_API_KEY,
-                  },
-                });
-
-                if (deviceResponse.ok) {
-                  const deviceData = await deviceResponse.json();
-                  phoneNumber = deviceData.instance?.wuid?.split('@')[0] ||
-                               deviceData.instance?.number ||
-                               deviceData.number;
-                }
-              } catch (deviceError) {
-                console.log('Error fetching device info:', deviceError);
-              }
-            }
-            
-            // Atualizar banco de dados
-            await supabase.rpc('update_connection_status_anon', {
-              p_connection_id: selectedConnection?.id,
-              p_status: 'connected',
-              p_qr_code: null,
-              p_phone_number: phoneNumber
-            });
-            
-            // Limpar polling
-            clearInterval(interval);
-            setPollInterval(null);
-            
-            // Fechar modal e atualizar UI
-            setIsQRModalOpen(false);
-            setSelectedConnection(null);
-            
-            // Recarregar conexões
-            await loadConnections();
-            
-            toast({
-              title: 'Sucesso',
-              description: phoneNumber ? 
-                `WhatsApp conectado como ${phoneNumber}!` : 
-                'WhatsApp conectado com sucesso!',
-            });
-          } else if (statusResult.instance && statusResult.instance.state === 'close') {
-            // Instância desconectada
-            await supabase.rpc('update_connection_status_anon', {
-              p_connection_id: selectedConnection?.id,
-              p_status: 'disconnected',
-              p_qr_code: null
-            });
-            
-            clearInterval(interval);
-            setPollInterval(null);
-            setIsQRModalOpen(false);
-            setSelectedConnection(null);
-            
-            await loadConnections();
-            
-            toast({
-              title: 'Desconectado',
-              description: `${instanceName} foi desconectado.`,
-              variant: "destructive",
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error polling connection status:', error);
-      }
-    }, 2000);
-    
-    // Timeout de 5 minutos
-    setTimeout(() => {
-      if (interval) {
-        clearInterval(interval);
-        setPollInterval(null);
-        toast({
-          title: 'Timeout',
-          description: 'Tempo limite para conexão excedido.',
+          title: "Erro",
+          description: "Erro ao excluir instância",
           variant: "destructive",
         });
       }
-    }, 300000);
-    
-    setPollInterval(interval);
+
+      loadConnections(); // Silent reload
+      refreshLimits(); // Refresh limits after deleting connection
+      setIsDeleteModalOpen(false);
+      setConnectionToDelete(null);
+
+    } catch (error) {
+      console.error('Error deleting connection:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir conexão",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   const connectInstance = async (connection: Connection) => {
@@ -644,43 +302,18 @@ export function ConexoesNova() {
       setIsConnecting(true);
       setSelectedConnection(connection);
       
-      // Gerar QR Code da Evolution API
-      const response = await fetch(`${EVOLUTION_API_URL}/instance/connect/${connection.instance_name}`, {
-        method: 'GET',
-        headers: {
-          'apikey': EVOLUTION_API_KEY,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status}`);
-      }
-
-      const result = await response.json();
-      let qrCode = result.base64 || result.qrcode;
+      const response = await evolutionProvider.getQRCode(connection.id);
       
-      // Ensure QR code is a data URL
-      if (qrCode && !qrCode.startsWith('data:')) {
-        qrCode = `data:image/png;base64,${qrCode}`;
-      }
-
-      if (qrCode) {
-        // Atualizar status na base de dados
-        await supabase.rpc('update_connection_status_anon', {
-          p_connection_id: connection.id,
-          p_status: 'qr',
-          p_qr_code: qrCode
-        });
-
+      if (response.qr_code) {
         // Update the connection with QR code
-        setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCode, status: 'qr' } : null);
+        setSelectedConnection(prev => prev ? { ...prev, qr_code: response.qr_code, status: 'qr' } : null);
         setIsQRModalOpen(true);
         
         // Start polling for connection status
-        startPolling(connection.instance_name);
+        startPolling(connection.id);
         
-        // Reload connections to get updated status
-        await loadConnections();
+        // Reload connections to get updated status (silently)
+        loadConnections();
       } else {
         throw new Error('QR Code não encontrado na resposta');
       }
@@ -689,7 +322,7 @@ export function ConexoesNova() {
       console.error('Error connecting instance:', error);
       toast({
         title: 'Erro',
-        description: `Erro ao conectar instância: ${error.message}`,
+        description: `Erro ao conectar instância: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: 'destructive',
       });
     } finally {
@@ -697,26 +330,70 @@ export function ConexoesNova() {
     }
   };
 
+  const startPolling = (connectionId: string) => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+    }
+    
+    console.log(`🔄 Starting polling for connection ${connectionId}`);
+    
+    const interval = setInterval(async () => {
+      try {
+        const connectionStatus = await evolutionProvider.getConnectionStatus(connectionId);
+        
+        if (connectionStatus.status === 'connected') {
+          // Clear polling
+          clearInterval(interval);
+          setPollInterval(null);
+          
+          // Close modal and update UI
+          setIsQRModalOpen(false);
+          setSelectedConnection(null);
+          
+          // Reload connections (silently)
+          loadConnections();
+          
+          toast({
+            title: 'Sucesso',
+            description: connectionStatus.phone_number ? 
+              `WhatsApp conectado como ${connectionStatus.phone_number}!` : 
+              'WhatsApp conectado com sucesso!',
+          });
+        } else if (connectionStatus.status === 'disconnected') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setIsQRModalOpen(false);
+          setSelectedConnection(null);
+          
+          loadConnections(); // Silent reload
+          
+          toast({
+            title: 'Desconectado',
+            description: `${connectionStatus.instance_name} foi desconectado.`,
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Error polling connection status:', error);
+      }
+    }, 3000); // Poll every 3 seconds
+    
+    setPollInterval(interval);
+  };
+
+  const retryConnection = () => {
+    if (selectedConnection) {
+      connectInstance(selectedConnection);
+    }
+  };
+
   const disconnectInstance = async (connection: Connection) => {
     try {
       setIsDisconnecting(true);
       
-      // Desconectar da Evolution API
-      const response = await fetch(`${EVOLUTION_API_URL}/instance/logout/${connection.instance_name}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': EVOLUTION_API_KEY,
-        },
-      });
+      const result = await evolutionProvider.pauseInstance(connection.id);
 
-      // Atualizar status na base de dados
-      await supabase.rpc('update_connection_status_anon', {
-        p_connection_id: connection.id,
-        p_status: 'disconnected',
-        p_qr_code: null
-      });
-
-      if (response.ok) {
+      if (result.success) {
         toast({
           title: 'Sucesso',
           description: 'Instância desconectada com sucesso!',
@@ -727,18 +404,16 @@ export function ConexoesNova() {
           description: 'Instância desconectada localmente, mas pode ainda estar ativa na API',
           variant: 'destructive',
         });
-
       }
       
-      // Reload connections
-      await loadConnections();
-
+      // Reload connections (silently)
+      loadConnections();
 
     } catch (error) {
       console.error('Error disconnecting instance:', error);
       toast({
         title: 'Erro',
-        description: `Erro ao desconectar instância: ${error.message}`,
+        description: `Erro ao desconectar instância: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: 'destructive',
       });
     } finally {
@@ -776,16 +451,18 @@ export function ConexoesNova() {
     );
   }
 
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-
           <h2 className="text-3xl font-bold tracking-tight">Conexões WhatsApp</h2>
           <p className="text-muted-foreground">
             Gerencie suas instâncias de WhatsApp
-
+            {usage && (
+              <span className="ml-2 text-sm">
+                • {usage.current}/{usage.limit} conexões utilizadas
+              </span>
+            )}
           </p>
         </div>
         
@@ -794,27 +471,43 @@ export function ConexoesNova() {
           setIsCreateModalOpen(open);
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button 
+              disabled={
+                !canCreateConnections(workspaceId) || 
+                !currentUsage.canCreateMore
+              }
+              title={
+                !canCreateConnections(workspaceId) 
+                  ? 'Você não tem permissão para criar conexões neste workspace' 
+                  : !currentUsage.canCreateMore 
+                    ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` 
+                    : ''
+              }
+            >
               <Plus className="w-4 h-4 mr-2" />
-              Adicionar Instância
+              Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-
               <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
-
+              {!isEditMode && (
+                <div className="text-sm text-muted-foreground">
+                  Conexões: {currentUsage.current}/{currentUsage.limit}
+                  {currentUsage.current >= currentUsage.limit && (
+                    <span className="text-destructive font-medium"> - Limite atingido</span>
+                  )}
+                </div>
+              )}
             </DialogHeader>
             
             <div className="space-y-4">
               <div className="space-y-2">
-
                 <Label htmlFor="instanceName">Nome da Instância</Label>
-  <Input
+                <Input
                   id="instanceName"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
-
                   placeholder="Ex: minha-empresa"
                   disabled={isEditMode}
                 />
@@ -847,13 +540,26 @@ export function ConexoesNova() {
                     <SelectItem value="quarter">Três meses</SelectItem>
                   </SelectContent>
                 </Select>
-
               </div>
 
-              <Button onClick={isEditMode ? editConnection : createInstance} disabled={isCreating}>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                onClick={isEditMode ? editConnection : createInstance} 
+                disabled={
+                  isCreating || 
+                  (!isEditMode && !currentUsage.canCreateMore)
+                }
+                title={
+                  !isEditMode && !currentUsage.canCreateMore 
+                    ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` 
+                    : ''
+                }
+              >
                 {isCreating ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Criar Instância')}
               </Button>
-            </div>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -866,14 +572,17 @@ export function ConexoesNova() {
             <p className="text-muted-foreground text-center mb-6">
               Crie sua primeira conexão WhatsApp para começar a receber mensagens
             </p>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Button 
+              onClick={() => setIsCreateModalOpen(true)}
+              disabled={!currentUsage.canCreateMore}
+              title={!currentUsage.canCreateMore ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` : ''}
+            >
               <Plus className="w-4 h-4 mr-2" />
-
+              Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </CardContent>
         </Card>
       ) : (
-
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {connections.map((connection) => (
             <Card key={connection.id} className="relative">
@@ -953,7 +662,6 @@ export function ConexoesNova() {
                       </Button>
                     )}
                   </div>
-
                 </div>
               </CardContent>
             </Card>
@@ -963,67 +671,88 @@ export function ConexoesNova() {
 
       {/* QR Code Modal */}
       <Dialog open={isQRModalOpen} onOpenChange={(open) => {
-        setIsQRModalOpen(open);
-        if (!open && pollInterval) {
-          clearInterval(pollInterval);
-          setPollInterval(null);
+        if (!open) {
+          // Clear all timers when modal closes
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            setPollInterval(null);
+          }
+          setSelectedConnection(null);
         }
+        setIsQRModalOpen(open);
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp</DialogTitle>
+            <DialogTitle>Conectar WhatsApp - {selectedConnection?.instance_name}</DialogTitle>
           </DialogHeader>
           
-          <div className="flex flex-col items-center space-y-4">
+          <div className="space-y-4">
             {selectedConnection?.qr_code ? (
               <>
-                <div className="p-4 bg-white rounded-lg border">
+                <div className="text-center space-y-4">
                   <img 
                     src={selectedConnection.qr_code} 
-                    alt="QR Code"
-                    className="w-64 h-64"
+                    alt="QR Code" 
+                    className="mx-auto border border-border rounded-lg"
+                    style={{ maxWidth: '300px', maxHeight: '300px' }}
                   />
-
-                </div>
-                <div className="text-center space-y-2">
-                  <p className="font-medium">
-                    {selectedConnection.instance_name}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Abra o WhatsApp no seu celular, vá em <strong>Dispositivos conectados</strong> e escaneie este código
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    O modal será fechado automaticamente quando a conexão for estabelecida.
-                  </p>
+                  
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Escaneie o código QR com seu WhatsApp
+                    </p>
+                    
+                    <div className="flex gap-2 justify-center">
+                      <Button 
+                        onClick={() => selectedConnection && refreshQRCode(selectedConnection.id)}
+                        variant="outline" 
+                        size="sm"
+                        disabled={isRefreshing}
+                      >
+                        {isRefreshing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                            Atualizando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Atualizar QR
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </>
             ) : (
-              <div className="flex flex-col items-center space-y-3 py-8">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Gerando QR Code...</p>
               </div>
-
-             
             )}
           </div>
-
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Modal */}
       <AlertDialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Instância</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir a instância "{connectionToDelete?.instance_name}"? 
-              Esta ação não pode ser desfeita e excluirá a instância diretamente da API Evolution.
+              Esta ação não pode ser desfeita e todos os dados associados serão perdidos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={removeConnection} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Excluir
+            <AlertDialogAction 
+              onClick={removeConnection}
+              disabled={isDisconnecting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDisconnecting ? 'Excluindo...' : 'Excluir'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

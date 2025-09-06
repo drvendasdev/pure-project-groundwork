@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { TezeusCRM } from "@/components/TezeusCRM";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./components/AuthProvider";
+import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { RoleProtectedRoute } from "./components/RoleProtectedRoute";
 import { Login } from "./pages/Login";
@@ -18,7 +19,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        <WorkspaceProvider>
+          <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -45,11 +47,15 @@ const App = () => (
             <Route path="/administracao-usuarios" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master', 'admin']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
             <Route path="/administracao-financeiro" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master', 'admin']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
             <Route path="/administracao-configuracoes" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master', 'admin']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
+            <Route path="/workspace-empresas" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
+            <Route path="/workspace-empresas/:workspaceId/usuarios" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['master']}><TezeusCRM /></RoleProtectedRoute></ProtectedRoute>} />
+            <Route path="/workspace-relatorios" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/editar-agente/:agentId" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+        </WorkspaceProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

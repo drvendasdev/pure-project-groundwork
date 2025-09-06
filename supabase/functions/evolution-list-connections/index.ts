@@ -6,6 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Get Evolution API configuration from secrets
+function getEvolutionConfig() {
+  const url = Deno.env.get('EVOLUTION_API_URL') || 
+              Deno.env.get('EVOLUTION_URL') || 
+              'https://evo.eventoempresalucrativa.com.br';
+  
+  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                 Deno.env.get('EVOLUTION_APIKEY') || 
+                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+  
+  return { url, apiKey };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -25,13 +38,14 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const evolutionConfig = getEvolutionConfig()
 
     // Get workspace connection limit
     const { data: limitData } = await supabase
       .from('workspace_limits')
       .select('connection_limit')
       .eq('workspace_id', workspaceId)
-      .single()
+      .maybeSingle()
 
     const connectionLimit = limitData?.connection_limit || 1
 
@@ -47,15 +61,14 @@ serve(async (req) => {
     }
 
     // Get current status for each connection from Evolution API
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY')!
-    const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'
-
     const connectionsWithStatus = await Promise.all(
       (connections || []).map(async (connection) => {
         try {
+          if (!evolutionConfig.apiKey) return connection // Skip if no API key
+          
           // Check current status from Evolution API
-          const statusResponse = await fetch(`${evolutionUrl}/instance/connectionState/${connection.instance_name}`, {
-            headers: { 'apikey': evolutionApiKey }
+          const statusResponse = await fetch(`${evolutionConfig.url}/instance/connectionState/${connection.instance_name}`, {
+            headers: { 'apikey': evolutionConfig.apiKey }
           })
 
           if (statusResponse.ok) {

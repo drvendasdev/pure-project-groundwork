@@ -17,17 +17,17 @@ export function useInstances() {
         setIsLoading(true);
         setError(null);
 
-        // First try to get instances from channels table
-        const { data: channelsData, error: channelsError } = await supabase
-          .from('channels')
-          .select('instance, name')
-          .order('name');
+        // Get instances from connections table
+        const { data: connectionsData, error: connectionsError } = await supabase
+          .from('connections')
+          .select('instance_name, phone_number')
+          .order('instance_name');
 
-        if (channelsError) {
-          console.warn('Error fetching from channels:', channelsError);
+        if (connectionsError) {
+          console.warn('Error fetching from connections:', connectionsError);
         }
 
-        // Then try to get from instance_user_assignments (current instances in use)
+        // Get from instance_user_assignments (current instances in use)
         const { data: assignmentsData, error: assignmentsError } = await supabase
           .from('instance_user_assignments')
           .select('instance')
@@ -40,10 +40,10 @@ export function useInstances() {
         // Combine and deduplicate instances
         const allInstances = new Set<string>();
         
-        if (channelsData) {
-          channelsData.forEach(channel => {
-            if (channel.instance) {
-              allInstances.add(channel.instance);
+        if (connectionsData) {
+          connectionsData.forEach(connection => {
+            if (connection.instance_name) {
+              allInstances.add(connection.instance_name);
             }
           });
         }
@@ -58,10 +58,14 @@ export function useInstances() {
 
         // Convert to array with display names
         const instanceList: Instance[] = Array.from(allInstances).map(instance => {
-          const channel = channelsData?.find(c => c.instance === instance);
+          const connection = connectionsData?.find(c => c.instance_name === instance);
+          const displayName = connection?.phone_number 
+            ? `${instance} (${connection.phone_number})`
+            : instance;
+          
           return {
             instance,
-            displayName: channel?.name || instance
+            displayName
           };
         });
 

@@ -14,14 +14,14 @@ export function AdministracaoConfiguracoes() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Get the first available org as default
-        const { data: orgData } = await supabase
-          .from('orgs')
+        // Get the first available workspace as default
+        const { data: workspaceData } = await supabase
+          .from('workspaces')
           .select('id')
           .limit(1)
           .maybeSingle();
         
-        const orgId = orgData?.id || '00000000-0000-0000-0000-000000000000';
+        const orgId = workspaceData?.id || null;
         setDefaultOrgId(orgId);
 
         // Get current settings

@@ -6,6 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Get Evolution API configuration from secrets
+function getEvolutionConfig() {
+  const url = Deno.env.get('EVOLUTION_API_URL') || 
+              Deno.env.get('EVOLUTION_URL') || 
+              'https://evo.eventoempresalucrativa.com.br';
+  
+  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                 Deno.env.get('EVOLUTION_APIKEY') || 
+                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+  
+  return { url, apiKey };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -25,6 +38,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const evolutionConfig = getEvolutionConfig()
 
     // Get connection details
     let query = supabase.from('connections').select('*')
@@ -44,37 +58,42 @@ serve(async (req) => {
       )
     }
 
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY')!
-    const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'
+    if (!evolutionConfig.apiKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Evolution API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     let response: Response
     let newStatus = connection.status
 
     switch (action) {
       case 'reconnect':
-        response = await fetch(`${evolutionUrl}/instance/restart/${connection.instance_name}`, {
+        response = await fetch(`${evolutionConfig.url}/instance/restart/${connection.instance_name}`, {
           method: 'PUT',
-          headers: { 'apikey': evolutionApiKey }
+          headers: { 'apikey': evolutionConfig.apiKey }
         })
         newStatus = 'connecting'
         break
 
       case 'disconnect':
-        response = await fetch(`${evolutionUrl}/instance/logout/${connection.instance_name}`, {
+        response = await fetch(`${evolutionConfig.url}/instance/logout/${connection.instance_name}`, {
           method: 'DELETE',
-          headers: { 'apikey': evolutionApiKey }
+          headers: { 'apikey': evolutionConfig.apiKey }
         })
         newStatus = 'disconnected'
         break
 
       case 'delete':
-        response = await fetch(`${evolutionUrl}/instance/delete/${connection.instance_name}`, {
+        response = await fetch(`${evolutionConfig.url}/instance/delete/${connection.instance_name}`, {
           method: 'DELETE',
-          headers: { 'apikey': evolutionApiKey }
+          headers: { 'apikey': evolutionConfig.apiKey }
         })
         
-        // If Evolution API deletion successful, remove from our database
-        if (response.ok) {
+        // Check if deletion was successful or if instance doesn't exist (404)
+        if (response.ok || response.status === 404) {
+          // Remove from our database regardless of Evolution API response
           await supabase
             .from('connection_secrets')
             .delete()
@@ -93,8 +112,8 @@ serve(async (req) => {
         break
 
       case 'status':
-        response = await fetch(`${evolutionUrl}/instance/connectionState/${connection.instance_name}`, {
-          headers: { 'apikey': evolutionApiKey }
+        response = await fetch(`${evolutionConfig.url}/instance/connectionState/${connection.instance_name}`, {
+          headers: { 'apikey': evolutionConfig.apiKey }
         })
         
         if (response.ok) {

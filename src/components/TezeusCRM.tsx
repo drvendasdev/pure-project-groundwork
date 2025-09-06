@@ -25,6 +25,9 @@ import { AdministracaoUsuarios } from "./modules/AdministracaoUsuarios";
 import { AdministracaoFinanceiro } from "./modules/AdministracaoFinanceiro";
 import { AdministracaoConfiguracoes } from "./modules/AdministracaoConfiguracoes";
 import { ParceirosClientes } from "./modules/ParceirosClientes";
+import { WorkspaceEmpresas } from "./modules/WorkspaceEmpresas";
+import { WorkspaceUsersPage } from "./modules/WorkspaceUsersPage";
+import { WorkspaceRelatorios } from "./modules/WorkspaceRelatorios";
 
 export type ModuleType = 
   | "dashboard"
@@ -46,6 +49,9 @@ export type ModuleType =
   | "automacoes-api"
   | "automacoes-webhooks"
   | "conexoes"
+  | "workspace-empresas"
+  | "workspace-usuarios"
+  | "workspace-relatorios"
   | "parceiros-clientes"
   | "administracao-usuarios"
   | "administracao-financeiro"
@@ -85,6 +91,7 @@ export function TezeusCRM() {
     const path = pathname.substring(1); // Remove leading slash
     if (!path || path === "dashboard") return "dashboard";
     if (path.startsWith("editar-agente/")) return "editar-agente";
+    if (path.includes("/usuarios")) return "workspace-usuarios";
     return path as ModuleType;
   };
 
@@ -140,6 +147,12 @@ export function TezeusCRM() {
         return <AutomacoesAPI />;
       case "conexoes":
         return <Conexoes />;
+      case "workspace-empresas":
+        return <WorkspaceEmpresas />;
+      case "workspace-usuarios":
+        return <WorkspaceUsersPage />;
+      case "workspace-relatorios":
+        return <WorkspaceRelatorios />;
       case "parceiros-clientes":
         return <ParceirosClientes />;
       case "administracao-usuarios":

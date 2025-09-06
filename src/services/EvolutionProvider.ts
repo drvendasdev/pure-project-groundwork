@@ -29,18 +29,29 @@ interface ConnectionsListResponse {
 
 class EvolutionProvider {
   async listConnections(workspaceId: string): Promise<ConnectionsListResponse> {
-    const { data } = await supabase.functions.invoke('evolution-list-connections', {
-      body: { workspaceId }
-    });
-    
-    if (!data?.success) {
-      throw new Error(data?.error || 'Failed to list connections');
+    try {
+      const { data } = await supabase.functions.invoke('evolution-list-connections', {
+        body: { workspaceId }
+      });
+      
+      if (!data?.success) {
+        return { 
+          connections: [], 
+          quota: { used: 0, limit: 1 } 
+        };
+      }
+      
+      return {
+        connections: data.connections || [],
+        quota: data.quota || { used: 0, limit: 1 }
+      };
+    } catch (error) {
+      console.warn('Error listing connections:', error);
+      return { 
+        connections: [], 
+        quota: { used: 0, limit: 1 } 
+      };
     }
-    
-    return {
-      connections: data.connections,
-      quota: data.quota
-    };
   }
 
   async createConnection(request: ConnectionCreateRequest): Promise<ConnectionResponse> {

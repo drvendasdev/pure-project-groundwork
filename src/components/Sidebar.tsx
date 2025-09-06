@@ -31,7 +31,9 @@ import {
   User,
   LogOut,
   Handshake,
-  FileText
+  FileText,
+  Building2,
+  BarChart3
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -92,6 +94,18 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       id: "ds-voice",
       label: "DS Voice",
       icon: <Phone className="w-5 h-5" />
+    },
+    {
+      id: "workspace-empresas",
+      label: "Empresas",
+      icon: <Building2 className="w-5 h-5" />,
+      group: "workspace"
+    },
+    {
+      id: "workspace-relatorios",
+      label: "Relatórios",
+      icon: <BarChart3 className="w-5 h-5" />,
+      group: "workspace"
     },
     {
       id: "crm-negocios",
@@ -281,6 +295,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   };
 
   const ungroupedItems = menuItems.filter(item => !item.group);
+  const workspaceItems = menuItems.filter(item => item.group === "workspace");
   const crmItems = menuItems.filter(item => item.group === "crm");
   const recursosItems = menuItems.filter(item => item.group === "recursos");
   const automacoesItems = menuItems.filter(item => item.group === "automacoes");
@@ -346,6 +361,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {ungroupedItems.map(renderMenuItem)}
         
+        {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
         {renderGroup("crm", "CRM", crmItems)}
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}

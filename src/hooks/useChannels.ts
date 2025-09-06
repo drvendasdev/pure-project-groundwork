@@ -20,14 +20,15 @@ export const useChannels = () => {
   const fetchChannels = async () => {
     setLoading(true);
     try {
+      // Since channels table doesn't exist, we'll use connections instead
       const { data, error } = await supabase
-        .from('channels')
-        .select('*')
+        .from('connections')
+        .select('id, instance_name, phone_number, status, created_at, updated_at')
         .eq('status', 'connected')
-        .order('name');
+        .order('instance_name');
 
       if (error) {
-        console.error('Error fetching channels:', error);
+        console.error('Error fetching connections:', error);
         toast({
           title: "Erro ao carregar canais",
           description: "Não foi possível carregar a lista de canais",
@@ -36,9 +37,20 @@ export const useChannels = () => {
         return;
       }
 
-      setChannels(data || []);
+      // Map connections to channels format
+      const mappedChannels = (data || []).map(connection => ({
+        id: connection.id,
+        name: connection.instance_name,
+        number: connection.phone_number || '',
+        instance: connection.instance_name,
+        status: connection.status,
+        created_at: connection.created_at,
+        updated_at: connection.updated_at
+      }));
+
+      setChannels(mappedChannels);
     } catch (error) {
-      console.error('Error fetching channels:', error);
+      console.error('Error fetching connections:', error);
       toast({
         title: "Erro ao carregar canais",
         description: "Erro interno do servidor",

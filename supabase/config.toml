@@ -1,5 +1,17 @@
 project_id = "zldeaozqxjwvzgrblyrh"
 
+[functions.evolution-create-instance]
+verify_jwt = false
+
+[functions.evolution-list-connections]
+verify_jwt = false
+
+[functions.evolution-get-qr]
+verify_jwt = false
+
+[functions.evolution-manage-instance]
+verify_jwt = false
+
 [functions.manage-whatsapp-instances]
 
 [functions.delete-cargo]
@@ -160,4 +172,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.test-evolution-connection]
+verify_jwt = false
+
+[functions.manage-workspace-members]
 verify_jwt = false

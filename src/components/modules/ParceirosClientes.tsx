@@ -42,7 +42,7 @@ interface Cliente {
   telefone: string;
   status: string;
   created_at: string;
-  org_id: string;
+  workspace_id: string;
 }
 
 export function ParceirosClientes() {
@@ -129,7 +129,7 @@ export function ParceirosClientes() {
         email: formData.email,
         telefone: formData.telefone,
         status: formData.status,
-        org_id: '00000000-0000-0000-0000-000000000000' // Default org_id
+        workspace_id: '00000000-0000-0000-0000-000000000000' // Default workspace_id
       };
 
       const { error } = await supabase

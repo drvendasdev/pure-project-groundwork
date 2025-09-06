@@ -1561,7 +1561,7 @@ export function DSVoice() {
                     {selectedStepType === "mensagem" && messages.map(message => (
                       <SelectItem key={message.id} value={message.title}>{message.title}</SelectItem>
                     ))}
-                    {!selectedStepType && <SelectItem value="" disabled>Selecione um tipo primeiro</SelectItem>}
+                    {!selectedStepType && <SelectItem value="no-type" disabled>Selecione um tipo primeiro</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
