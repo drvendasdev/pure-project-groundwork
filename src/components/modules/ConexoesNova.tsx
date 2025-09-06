@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -485,6 +485,14 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
+              {!isEditMode && usage && (
+                <div className="text-sm text-muted-foreground">
+                  Conexões: {usage.current}/{usage.limit}
+                  {usage.current >= usage.limit && (
+                    <span className="text-destructive font-medium"> - Limite atingido</span>
+                  )}
+                </div>
+              )}
             </DialogHeader>
             
             <div className="space-y-4">
@@ -528,10 +536,24 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                 </Select>
               </div>
 
-              <Button onClick={isEditMode ? editConnection : createInstance} disabled={isCreating}>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                onClick={isEditMode ? editConnection : createInstance} 
+                disabled={
+                  isCreating || 
+                  (!isEditMode && usage && !usage.canCreateMore)
+                }
+                title={
+                  !isEditMode && usage && !usage.canCreateMore 
+                    ? `Limite de conexões atingido (${usage.current}/${usage.limit})` 
+                    : ''
+                }
+              >
                 {isCreating ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Criar Instância')}
               </Button>
-            </div>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
