@@ -23,20 +23,32 @@ serve(async (req) => {
 
     console.log('🔍 Buscando conversa:', conversationId);
     
-    // Buscar conversa com contato
+    // Buscar conversa
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select(`
-        *,
-        contact:contacts(phone)
-      `)
+      .select('*')
       .eq('id', conversationId)
       .single();
 
     console.log('📋 Conversa encontrada:', { conversation: !!conversation, error: convError });
 
     if (convError) {
+      console.error('❌ Erro ao buscar conversa:', convError);
       throw new Error(`Conversa não encontrada: ${convError.message}`);
+    }
+
+    // Buscar dados do contato separadamente
+    const { data: contact, error: contactError } = await supabase
+      .from('contacts')
+      .select('phone')
+      .eq('id', conversation.contact_id)
+      .single();
+
+    console.log('📱 Contato encontrado:', { contact: !!contact, error: contactError });
+
+    if (contactError) {
+      console.error('❌ Erro ao buscar contato:', contactError);
+      throw new Error(`Contato não encontrado: ${contactError.message}`);
     }
 
     // Salvar mensagem no banco
@@ -111,7 +123,7 @@ serve(async (req) => {
     let evolutionPayload: any;
     let endpoint: string;
 
-    const phoneNumber = conversation.contact?.phone;
+    const phoneNumber = contact?.phone;
 
     if (messageType === 'text') {
       evolutionPayload = {
