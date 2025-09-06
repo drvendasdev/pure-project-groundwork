@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from 'react-router-dom';
 import { Plus, Building2, Users, Settings, Calendar, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
-import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { CreateWorkspaceModal } from "@/components/modals/CreateWorkspaceModal";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,27 +15,7 @@ interface WorkspaceEmpresasProps {
 
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
   const { workspaces, isLoading } = useWorkspaces();
-  const { setSelectedWorkspace } = useWorkspace();
-  const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
-
-  const handleNavigateToUsers = (workspace: any) => {
-    if (onNavigateToUsers) {
-      onNavigateToUsers(workspace.workspace_id);
-    } else {
-      setSelectedWorkspace(workspace);
-      navigate(`/workspace-usuarios/${workspace.workspace_id}`);
-    }
-  };
-
-  const handleNavigateToConfig = (workspace: any) => {
-    if (onNavigateToConfig) {
-      onNavigateToConfig(workspace.workspace_id);
-    } else {
-      setSelectedWorkspace(workspace);
-      navigate(`/administracao-configuracoes?workspaceId=${workspace.workspace_id}`);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -122,7 +100,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-2"
-                  onClick={() => handleNavigateToUsers(workspace)}
+                  onClick={() => onNavigateToUsers?.(workspace.workspace_id)}
                 >
                   <Users className="w-4 h-4" />
                   Usuários
@@ -131,7 +109,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-2"
-                  onClick={() => handleNavigateToConfig(workspace)}
+                  onClick={() => onNavigateToConfig?.(workspace.workspace_id)}
                 >
                   <Settings className="w-4 h-4" />
                   Config

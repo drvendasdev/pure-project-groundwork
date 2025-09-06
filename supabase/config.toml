@@ -161,9 +161,3 @@ verify_jwt = false
 
 [functions.test-evolution-connection]
 verify_jwt = false
-
-[functions.manage-workspaces]
-verify_jwt = false
-
-[functions.workspace-users]
-verify_jwt = false
