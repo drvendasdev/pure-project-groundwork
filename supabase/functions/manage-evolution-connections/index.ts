@@ -688,9 +688,9 @@ serve(async (req) => {
 
                   // Use the successful fallback response
                   createInstanceResponse = fallbackResponse;
-                } catch (fallbackError) {
-                  console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
                 }
+              } catch (fallbackError) {
+                console.warn('Fallback method also failed:', { correlationId, error: fallbackError.message });
               }
             }
           }
