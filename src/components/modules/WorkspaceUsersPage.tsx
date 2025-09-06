@@ -396,23 +396,7 @@ export function WorkspaceUsersPage() {
             </div>
           </div>
 
-          {/* Função no Workspace */}
-          <div className="space-y-4">
-            <h5 className="font-medium text-sm text-muted-foreground">Função no Workspace</h5>
-            <div className="space-y-2">
-              <Label>Função</Label>
-              <Select value={selectedRole} onValueChange={(value: 'colaborador' | 'gestor' | 'mentor_master') => setSelectedRole(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="colaborador">Colaborador</SelectItem>
-                  <SelectItem value="gestor">Gestor</SelectItem>
-                  <SelectItem value="mentor_master">Mentor Master</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+         
           
           <div className="flex gap-2 pt-4">
             <Button 
