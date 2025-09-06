@@ -101,7 +101,8 @@ serve(async (req) => {
       )
     }
 
-    // Create connection record first
+    // Create connection record first (using service role to bypass RLS)
+    console.log('Creating connection record...')
     const { data: connection, error: connectionError } = await supabase
       .from('connections')
       .insert({
@@ -116,7 +117,11 @@ serve(async (req) => {
     if (connectionError) {
       console.error('Failed to create connection record:', connectionError)
       return new Response(
-        JSON.stringify({ success: false, error: `Failed to create connection record: ${connectionError.message}` }),
+        JSON.stringify({ 
+          success: false, 
+          error: `Failed to create connection record: ${connectionError.message}`,
+          details: connectionError
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }

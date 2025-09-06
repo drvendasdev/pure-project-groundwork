@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { evolutionProvider } from '@/services/EvolutionProvider';
 import type { Connection, HISTORY_RECOVERY_MAP } from '@/types/evolution';
 import { useWorkspaceLimits } from '@/hooks/useWorkspaceLimits';
+import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
 
 // Helper functions for phone number formatting
 const normalizePhoneNumber = (phone: string): string => {
@@ -46,6 +47,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
+  const { canCreateConnections } = useWorkspaceRole();
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -463,8 +465,17 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         }}>
           <DialogTrigger asChild>
             <Button 
-              disabled={usage && !usage.canCreateMore}
-              title={usage && !usage.canCreateMore ? `Limite de conexões atingido (${usage.current}/${usage.limit})` : ''}
+              disabled={
+                !canCreateConnections(workspaceId) || 
+                (usage && !usage.canCreateMore)
+              }
+              title={
+                !canCreateConnections(workspaceId) 
+                  ? 'Você não tem permissão para criar conexões neste workspace' 
+                  : usage && !usage.canCreateMore 
+                    ? `Limite de conexões atingido (${usage.current}/${usage.limit})` 
+                    : ''
+              }
             >
               <Plus className="w-4 h-4 mr-2" />
               Adicionar Instância

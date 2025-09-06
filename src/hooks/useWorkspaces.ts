@@ -13,8 +13,8 @@ export function useWorkspaces() {
   const fetchWorkspaces = async () => {
     setIsLoading(true);
     try {
-      // If user is master or admin, show all workspaces
-      if (userRole === 'master' || userRole === 'admin') {
+      // If user is master, show all workspaces (except reserved)
+      if (userRole === 'master') {
         const { data, error } = await supabase
           .from('workspaces_view')
           .select('*')
@@ -33,29 +33,53 @@ export function useWorkspaces() {
           return;
         }
 
-        const { data, error } = await supabase
+        // Check if user is mentor_master (can see all workspaces)
+        const { data: mentorMasterCheck } = await supabase
           .from('workspace_members')
-          .select(`
-            workspace_id,
-            role,
-            workspaces_view!inner(*)
-          `)
-          .eq('user_id', user.id);
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'mentor_master')
+          .limit(1);
 
-        if (error) {
-          throw error;
+        if (mentorMasterCheck && mentorMasterCheck.length > 0) {
+          // User is mentor_master, show all workspaces
+          const { data, error } = await supabase
+            .from('workspaces_view')
+            .select('*')
+            .neq('workspace_id', '00000000-0000-0000-0000-000000000000')
+            .order('name');
+
+          if (error) {
+            throw error;
+          }
+
+          setWorkspaces(data || []);
+        } else {
+          // User is gestor or colaborador, filter by their workspace assignments
+          const { data, error } = await supabase
+            .from('workspace_members')
+            .select(`
+              workspace_id,
+              role,
+              workspaces_view!inner(*)
+            `)
+            .eq('user_id', user.id);
+
+          if (error) {
+            throw error;
+          }
+
+          // Filter workspaces based on user role with proper access control
+          // Gestores and mentor_master can see workspace management
+          // Colaboradores don't see workspace management
+          const filteredWorkspaces = data?.filter(membership => {
+            if (membership.role === 'mentor_master') return true;
+            if (membership.role === 'gestor') return true;
+            return false; // Colaboradores don't see workspace management
+          }).map(membership => membership.workspaces_view) || [];
+
+          setWorkspaces(filteredWorkspaces);
         }
-
-        // Filter workspaces based on user role with strict isolation
-        // Gestores only see workspaces where they are gestores (not mentor_master workspaces)
-        // MentorMaster can see all assigned workspaces
-        const filteredWorkspaces = data?.filter(membership => {
-          if (membership.role === 'mentor_master') return true;
-          if (membership.role === 'gestor') return true;
-          return false; // Colaboradores don't see workspace management
-        }).map(membership => membership.workspaces_view) || [];
-
-        setWorkspaces(filteredWorkspaces);
       }
     } catch (error) {
       console.error('Error fetching workspaces:', error);
