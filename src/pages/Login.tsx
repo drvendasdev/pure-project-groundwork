@@ -46,14 +46,11 @@ export const Login = () => {
           variant: "destructive"
         });
       } else {
-        // Aguardar um pouco para garantir que a sessão Supabase seja criada
-        setTimeout(() => {
-          toast({
-            title: "Login realizado com sucesso!",
-            description: "Redirecionando...",
-          });
-          navigate('/dashboard');
-        }, 500);
+        toast({
+          title: "Login realizado com sucesso!",
+          description: "Redirecionando...",
+        });
+        navigate('/dashboard');
       }
     } catch (error) {
       toast({

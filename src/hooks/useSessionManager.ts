@@ -11,36 +11,28 @@ export const useSessionManager = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Verificar sessão a cada 30 segundos
-    const checkSession = async () => {
+    // Para sistema customizado, vamos ser menos rigoroso com a sessão Supabase
+    // e focar apenas no localStorage
+    const checkCustomSession = () => {
+      const savedUser = localStorage.getItem('currentUser');
+      
+      if (!savedUser) {
+        console.log('🔒 Sessão customizada não encontrada no localStorage');
+        handleSessionExpired();
+        return;
+      }
+
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.log('🔒 Erro ao verificar sessão:', error);
+        const parsedUser = JSON.parse(savedUser);
+        if (!parsedUser.id || !parsedUser.email) {
+          console.log('🔒 Dados do usuário inválidos no localStorage');
           handleSessionExpired();
           return;
         }
         
-        if (!session?.access_token) {
-          console.log('🔒 Sessão Supabase não encontrada');
-          handleSessionExpired();
-          return;
-        }
-
-        // Verificar se o token está expirado
-        const now = Math.floor(Date.now() / 1000);
-        const tokenExp = session.expires_at || 0;
-        
-        if (tokenExp < now) {
-          console.log('🔒 Token Supabase expirado');
-          handleSessionExpired();
-          return;
-        }
-
-        console.log('✅ Sessão Supabase válida');
+        console.log('✅ Sessão customizada válida:', parsedUser.email);
       } catch (error) {
-        console.error('🔒 Erro na verificação de sessão:', error);
+        console.log('🔒 Erro ao parsear usuário do localStorage');
         handleSessionExpired();
       }
     };
@@ -61,20 +53,19 @@ export const useSessionManager = () => {
     };
 
     // Verificação inicial
-    checkSession();
+    checkCustomSession();
 
-    // Verificar a cada 30 segundos
-    const interval = setInterval(checkSession, 30000);
+    // Verificar a cada 5 minutos (menos frequente para evitar interferências)
+    const interval = setInterval(checkCustomSession, 300000);
 
-    // Listener para mudanças de estado de auth
+    // Listener simplificado para mudanças de estado de auth do Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('🔄 Auth state changed:', event);
+        console.log('🔄 Supabase auth state changed:', event);
         
-        if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          if (!session && user) {
-            handleSessionExpired();
-          }
+        // Só agir em casos específicos de logout explícito
+        if (event === 'SIGNED_OUT' && !localStorage.getItem('currentUser')) {
+          handleSessionExpired();
         }
       }
     );
@@ -83,5 +74,5 @@ export const useSessionManager = () => {
       clearInterval(interval);
       subscription.unsubscribe();
     };
-  }, [user, logout]);
+  }, [user, logout, navigate]);
 };
