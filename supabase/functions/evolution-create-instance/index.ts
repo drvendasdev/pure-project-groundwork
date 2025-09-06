@@ -12,11 +12,14 @@ serve(async (req) => {
   }
 
   try {
+    console.log('=== Evolution Create Instance Function Started ===')
     const { instanceName, historyRecovery = 'none', workspaceId } = await req.json()
+    console.log('Request params:', { instanceName, historyRecovery, workspaceId })
 
     if (!instanceName || !workspaceId) {
+      console.error('Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing required fields' }),
+        JSON.stringify({ success: false, error: 'Missing required fields: instanceName and workspaceId are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -26,20 +29,39 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    console.log('Creating instance for workspace:', workspaceId, 'instance:', instanceName)
+
     // Check workspace connection limit
-    const { data: limitData } = await supabase
+    const { data: limitData, error: limitError } = await supabase
       .from('workspace_limits')
       .select('connection_limit')
       .eq('workspace_id', workspaceId)
       .maybeSingle()
 
+    if (limitError) {
+      console.error('Error checking workspace limits:', limitError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Erro ao verificar limites do workspace' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const connectionLimit = limitData?.connection_limit || 1
+    console.log('Connection limit for workspace:', connectionLimit)
 
     // Count existing connections
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('connections')
       .select('*', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
+
+    if (countError) {
+      console.error('Error counting connections:', countError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Erro ao contar conexões existentes' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     if (count && count >= connectionLimit) {
       return new Response(
@@ -83,8 +105,14 @@ serve(async (req) => {
       .single()
 
     if (connectionError) {
-      throw new Error(`Failed to create connection record: ${connectionError.message}`)
+      console.error('Failed to create connection record:', connectionError)
+      return new Response(
+        JSON.stringify({ success: false, error: `Failed to create connection record: ${connectionError.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
+
+    console.log('Connection record created:', connection.id)
 
     // Generate unique token for this instance
     const token = crypto.randomUUID().replace(/-/g, '')
