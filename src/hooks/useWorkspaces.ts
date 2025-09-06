@@ -71,12 +71,32 @@ export function useWorkspaces() {
 
           // Filter workspaces based on user role with proper access control
           // Gestores and mentor_master can see workspace management
-          // Colaboradores don't see workspace management
-          const filteredWorkspaces = data?.filter(membership => {
-            if (membership.role === 'mentor_master') return true;
-            if (membership.role === 'gestor') return true;
-            return false; // Colaboradores don't see workspace management
-          }).map(membership => membership.workspaces_view) || [];
+          // Colaboradores see only workspaces they're assigned to
+          const filteredWorkspaces = data?.map(membership => membership.workspaces_view) || [];
+
+          // If no workspaces found for the user, add a default workspace for colaboradores
+          if (filteredWorkspaces.length === 0) {
+            // Check if user has colaborador role but no workspace access
+            const { data: colaboradorCheck } = await supabase
+              .from('workspace_members')
+              .select('role, workspace_id')
+              .eq('user_id', user.id)
+              .eq('role', 'colaborador')
+              .limit(1);
+
+            if (colaboradorCheck && colaboradorCheck.length > 0) {
+              // Add a basic workspace representation for colaborador users
+              filteredWorkspaces.push({
+                workspace_id: '00000000-0000-0000-0000-000000000000',
+                name: 'Workspace Padrão',
+                cnpj: null,
+                slug: 'default',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                connections_count: 0
+              });
+            }
+          }
 
           setWorkspaces(filteredWorkspaces);
         }

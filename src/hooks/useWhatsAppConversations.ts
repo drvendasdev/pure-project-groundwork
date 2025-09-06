@@ -117,14 +117,18 @@ export const useWhatsAppConversations = () => {
         throw new Error('Usuário não autenticado');
       }
 
-      // Verificar se há workspace selecionado
-      if (!selectedWorkspace?.workspace_id) {
-        throw new Error('Nenhum workspace selecionado');
+      // Verificar se há workspace selecionado ou usar fallback
+      let workspaceId = selectedWorkspace?.workspace_id;
+      
+      if (!workspaceId) {
+        // Fallback para workspace padrão se não há selecionado
+        workspaceId = "00000000-0000-0000-0000-000000000000";
+        console.warn('⚠️ Nenhum workspace selecionado, usando workspace padrão');
       }
 
       // Montar payload conforme novo contrato da função
       const payload = {
-        workspace_id: selectedWorkspace.workspace_id,
+        workspace_id: workspaceId,
         conversation_id: conversationId,
         content: content,
         message_type: messageType,
