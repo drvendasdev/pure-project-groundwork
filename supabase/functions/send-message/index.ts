@@ -99,7 +99,21 @@ serve(async (req) => {
 
     const { workspace_id, conversation_id, content, message_type, sender_id, sender_type, file_url, file_name } = body;
 
-    // Inicializar Supabase com Service Role
+    // Validar Authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error(`❌ [${requestId}] No Authorization header`);
+      return new Response(JSON.stringify({
+        code: 'NO_AUTH_HEADER',
+        message: 'Authorization header with Bearer token required',
+        requestId
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Inicializar Supabase com Service Role e propagar JWT
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
@@ -115,16 +129,17 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
 
     // Extrair usuário do JWT para validação de autorização
-    const authHeader = req.headers.get('authorization');
     const currentUserId = extractUserFromJWT(authHeader);
     
     if (!currentUserId) {
-      console.error(`❌ [${requestId}] No valid user in JWT`);
+      console.error(`❌ [${requestId}] Invalid JWT token`);
       return new Response(JSON.stringify({
-        code: 'UNAUTHORIZED',
+        code: 'INVALID_JWT',
         message: 'Valid JWT token required',
         requestId
       }), {

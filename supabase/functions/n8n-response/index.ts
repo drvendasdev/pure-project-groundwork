@@ -160,9 +160,17 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Resolver workspace_id
+    // Resolver workspace_id com estratégia robusta
     let workspaceId: string | null = null;
     let finalConversationId: string | null = conversationId;
+    let resolvedConnectionId: string | null = connectionId;
+
+    console.log(`🔍 [${requestId}] Starting workspace resolution with data:`, {
+      conversationId,
+      connectionId, 
+      evolutionInstance,
+      phoneNumber
+    });
 
     if (conversationId) {
       // Caso 1: Temos conversation_id - buscar workspace_id da conversa
@@ -170,12 +178,25 @@ serve(async (req) => {
       
       const { data: conversation, error: convError } = await supabase
         .from('conversations')
-        .select('workspace_id')
+        .select('workspace_id, connection_id')
         .eq('id', conversationId)
-        .single();
+        .maybeSingle();
 
-      if (convError || !conversation) {
-        console.error(`❌ [${requestId}] Conversation not found:`, convError);
+      if (convError) {
+        console.error(`❌ [${requestId}] Error querying conversation:`, convError);
+        return new Response(JSON.stringify({
+          code: 'DATABASE_ERROR',
+          message: 'Error querying conversation',
+          details: convError.message,
+          requestId
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!conversation) {
+        console.error(`❌ [${requestId}] Conversation not found: ${conversationId}`);
         return new Response(JSON.stringify({
           code: 'CONVERSATION_NOT_FOUND',
           message: 'Specified conversation_id not found',
@@ -187,6 +208,7 @@ serve(async (req) => {
       }
 
       workspaceId = conversation.workspace_id;
+      resolvedConnectionId = conversation.connection_id || connectionId;
       console.log(`✅ [${requestId}] Workspace resolved from conversation: ${workspaceId}`);
 
     } else if (connectionId) {
@@ -195,12 +217,25 @@ serve(async (req) => {
       
       const { data: connection, error: connError } = await supabase
         .from('connections')
-        .select('workspace_id')
+        .select('workspace_id, instance_name')
         .eq('id', connectionId)
-        .single();
+        .maybeSingle();
 
-      if (connError || !connection) {
-        console.error(`❌ [${requestId}] Connection not found:`, connError);
+      if (connError) {
+        console.error(`❌ [${requestId}] Error querying connection:`, connError);
+        return new Response(JSON.stringify({
+          code: 'DATABASE_ERROR', 
+          message: 'Error querying connection',
+          details: connError.message,
+          requestId
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!connection) {
+        console.error(`❌ [${requestId}] Connection not found: ${connectionId}`);
         return new Response(JSON.stringify({
           code: 'CONNECTION_NOT_FOUND',
           message: 'Specified connection_id not found',
@@ -220,12 +255,25 @@ serve(async (req) => {
       
       const { data: connection, error: connError } = await supabase
         .from('connections')
-        .select('workspace_id')
+        .select('id, workspace_id, instance_name')
         .eq('instance_name', evolutionInstance)
-        .single();
+        .maybeSingle();
 
-      if (connError || !connection) {
-        console.error(`❌ [${requestId}] Instance not found:`, connError);
+      if (connError) {
+        console.error(`❌ [${requestId}] Error querying instance:`, connError);
+        return new Response(JSON.stringify({
+          code: 'DATABASE_ERROR',
+          message: 'Error querying evolution instance',
+          details: connError.message,
+          requestId
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!connection) {
+        console.error(`❌ [${requestId}] Instance not found: ${evolutionInstance}`);
         return new Response(JSON.stringify({
           code: 'INSTANCE_NOT_FOUND',
           message: 'Specified evolution_instance not found',
@@ -237,7 +285,8 @@ serve(async (req) => {
       }
 
       workspaceId = connection.workspace_id;
-      console.log(`✅ [${requestId}] Workspace resolved from instance: ${workspaceId}`);
+      resolvedConnectionId = connection.id;
+      console.log(`✅ [${requestId}] Workspace resolved from instance: ${workspaceId}, connection: ${resolvedConnectionId}`);
     }
 
     if (!workspaceId) {
@@ -254,23 +303,14 @@ serve(async (req) => {
     }
 
     // Se ainda não temos conversation_id, precisar resolver via phoneNumber
-    if (!finalConversationId && phoneNumber) {
-      console.log(`🔍 [${requestId}] Creating/finding conversation for phone: ${phoneNumber}`);
+    if (!finalConversationId && phoneNumber && workspaceId) {
+      console.log(`🔍 [${requestId}] Creating/finding conversation for phone: ${phoneNumber} in workspace: ${workspaceId}`);
       
       const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
       
-      // Transação para criar/encontrar contato e conversa
-      const { data: contact, error: contactError } = await supabase.rpc('upsert_contact_and_conversation', {
-        p_phone: sanitizedPhone,
-        p_workspace_id: workspaceId,
-        p_evolution_instance: evolutionInstance
-      });
-
-      if (contactError) {
-        console.error(`❌ [${requestId}] Failed to upsert contact/conversation:`, contactError);
-        
-        // Fallback manual se a RPC não existir
-        console.log(`🔄 [${requestId}] Falling back to manual upsert`);
+      try {
+        // Executar upsert em transação simples para evitar problemas de concorrência
+        console.log(`🔄 [${requestId}] Starting contact/conversation upsert for phone: ${sanitizedPhone}`);
         
         // Buscar ou criar contato
         let { data: existingContact, error: findContactError } = await supabase
@@ -278,14 +318,23 @@ serve(async (req) => {
           .select('id, name')
           .eq('phone', sanitizedPhone)
           .eq('workspace_id', workspaceId)
-          .single();
+          .maybeSingle();
 
-        if (findContactError && findContactError.code !== 'PGRST116') {
+        if (findContactError) {
           console.error(`❌ [${requestId}] Error finding contact:`, findContactError);
-          throw findContactError;
+          return new Response(JSON.stringify({
+            code: 'DATABASE_ERROR',
+            message: 'Error finding contact',
+            details: findContactError.message,
+            requestId
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
 
         if (!existingContact) {
+          console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone}`);
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
             .insert({
@@ -298,11 +347,21 @@ serve(async (req) => {
 
           if (createContactError) {
             console.error(`❌ [${requestId}] Error creating contact:`, createContactError);
-            throw createContactError;
+            return new Response(JSON.stringify({
+              code: 'DATABASE_ERROR',
+              message: 'Error creating contact',
+              details: createContactError.message,
+              requestId
+            }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
           }
           
           existingContact = newContact;
         }
+
+        console.log(`👤 [${requestId}] Contact resolved: ${existingContact.id} - ${existingContact.name}`);
 
         // Buscar ou criar conversa
         let { data: existingConv, error: findConvError } = await supabase
@@ -311,19 +370,29 @@ serve(async (req) => {
           .eq('contact_id', existingContact.id)
           .eq('workspace_id', workspaceId)
           .eq('status', 'open')
-          .single();
+          .maybeSingle();
 
-        if (findConvError && findConvError.code !== 'PGRST116') {
+        if (findConvError) {
           console.error(`❌ [${requestId}] Error finding conversation:`, findConvError);
-          throw findConvError;
+          return new Response(JSON.stringify({
+            code: 'DATABASE_ERROR',
+            message: 'Error finding conversation',
+            details: findConvError.message,
+            requestId
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
 
         if (!existingConv) {
+          console.log(`➕ [${requestId}] Creating new conversation for contact: ${existingContact.id}`);
           const { data: newConv, error: createConvError } = await supabase
             .from('conversations')
             .insert({
               contact_id: existingContact.id,
               workspace_id: workspaceId,
+              connection_id: resolvedConnectionId,
               status: 'open',
               agente_ativo: false,
               evolution_instance: evolutionInstance || null,
@@ -336,18 +405,36 @@ serve(async (req) => {
 
           if (createConvError) {
             console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
-            throw createConvError;
+            return new Response(JSON.stringify({
+              code: 'DATABASE_ERROR',
+              message: 'Error creating conversation',
+              details: createConvError.message,
+              requestId
+            }), {
+              status: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
           }
           
           finalConversationId = newConv.id;
         } else {
           finalConversationId = existingConv.id;
         }
-      } else {
-        finalConversationId = contact.conversation_id;
-      }
 
-      console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
+        console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
+
+      } catch (error) {
+        console.error(`❌ [${requestId}] Unexpected error during upsert:`, error);
+        return new Response(JSON.stringify({
+          code: 'UNEXPECTED_ERROR',
+          message: 'Error during contact/conversation creation',
+          details: String(error?.message ?? error),
+          requestId
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (!finalConversationId) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 export interface WhatsAppMessage {
   id: string;
@@ -36,6 +37,7 @@ export interface WhatsAppConversation {
 export const useWhatsAppConversations = () => {
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedWorkspace } = useWorkspace();
 
   const fetchConversations = async () => {
     try {
@@ -115,9 +117,14 @@ export const useWhatsAppConversations = () => {
         throw new Error('Usuário não autenticado');
       }
 
+      // Verificar se há workspace selecionado
+      if (!selectedWorkspace?.workspace_id) {
+        throw new Error('Nenhum workspace selecionado');
+      }
+
       // Montar payload conforme novo contrato da função
       const payload = {
-        workspace_id: "00000000-0000-0000-0000-000000000000", // Workspace padrão
+        workspace_id: selectedWorkspace.workspace_id,
         conversation_id: conversationId,
         content: content,
         message_type: messageType,
@@ -127,7 +134,13 @@ export const useWhatsAppConversations = () => {
         file_name: fileName
       };
 
-      // Enviar via edge function
+      // Verificar sessão ativa antes de enviar
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+
+      // Enviar via edge function com o supabase client autenticado
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
         body: payload
       });
