@@ -72,6 +72,8 @@ serve(async (req) => {
       }
     })
 
+    console.log('Evolution QR API response status:', qrResponse.status)
+
     if (!qrResponse.ok) {
       // Handle errors as text instead of JSON to prevent parsing issues
       const errorText = await qrResponse.text()
@@ -87,12 +89,27 @@ serve(async (req) => {
     }
 
     const qrData = await qrResponse.json()
+    console.log('Evolution QR API response data:', qrData)
+    
+    // Extract QR code from response
+    const extractedQRCode = qrData.qrcode?.base64 || qrData.qrcode?.code || qrData.qrcode || qrData.qr;
+    
+    if (!extractedQRCode) {
+      console.error('No QR code found in Evolution API response:', qrData)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'QR Code não encontrado na resposta da API Evolution' 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
     
     // Update connection with new QR code
     await supabase
       .from('connections')
       .update({ 
-        qr_code: qrData.qrcode?.base64 || qrData.qrcode?.code || qrData.qrcode || qrData.qr,
+        qr_code: extractedQRCode,
         status: 'qr',
         updated_at: new Date().toISOString()
       })
@@ -101,7 +118,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        qr_code: qrData.qrcode?.base64 || qrData.qrcode?.code || qrData.qrcode || qrData.qr
+        qr_code: extractedQRCode
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
