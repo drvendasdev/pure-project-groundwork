@@ -14,8 +14,8 @@ Deno.serve(async (req) => {
     const requestBody = await req.text();
     console.log('Request received:', requestBody);
     
-    const { action, userData } = JSON.parse(requestBody);
-    console.log('Action:', action, 'UserData keys:', Object.keys(userData || {}));
+    const { action, userData, userId } = JSON.parse(requestBody);
+    console.log('Action:', action, 'UserData keys:', Object.keys(userData || {}), 'UserId:', userId);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -140,12 +140,30 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update') {
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'User ID is required for update' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const { cargo_ids, ...userUpdateData } = userData;
+      
+      // Clean up empty string values and convert to null for UUID fields
+      const cleanedData = { ...userUpdateData };
+      if (cleanedData.default_channel === '' || cleanedData.default_channel === 'undefined') {
+        cleanedData.default_channel = null;
+      }
+      if (cleanedData.phone === '') {
+        cleanedData.phone = null;
+      }
+      
+      console.log('Updating user with cleaned data:', cleanedData);
       
       const { data, error } = await supabase
         .from('system_users')
-        .update(userUpdateData)
-        .eq('id', userData.id)
+        .update(cleanedData)
+        .eq('id', userId)
         .select()
         .single();
 
@@ -163,14 +181,14 @@ Deno.serve(async (req) => {
         await supabase
           .from('system_user_cargos')
           .delete()
-          .eq('user_id', userData.id);
+          .eq('user_id', userId);
 
         // Add new cargos
         if (Array.isArray(cargo_ids) && cargo_ids.length > 0) {
           for (const cargoId of cargo_ids) {
             await supabase
               .from('system_user_cargos')
-              .insert({ user_id: userData.id, cargo_id: cargoId });
+              .insert({ user_id: userId, cargo_id: cargoId });
           }
         }
       }
@@ -182,16 +200,23 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete') {
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'User ID is required for delete' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // First delete cargo assignments
       await supabase
         .from('system_user_cargos')
         .delete()
-        .eq('user_id', userData.id);
+        .eq('user_id', userId);
 
       const { data, error } = await supabase
         .from('system_users')
         .delete()
-        .eq('id', userData.id)
+        .eq('id', userId)
         .select()
         .single();
 
