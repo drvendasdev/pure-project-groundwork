@@ -28,21 +28,10 @@ serve(async (req) => {
 
     switch (action) {
       case 'list':
+        // First get workspace members
         const { data: membersData, error: listError } = await supabase
           .from('workspace_members')
-          .select(`
-            id,
-            user_id,
-            role,
-            is_hidden,
-            created_at,
-            system_users!inner (
-              id,
-              name,
-              email,
-              profile
-            )
-          `)
+          .select('*')
           .eq('workspace_id', workspaceId)
           .order('created_at', { ascending: false })
 
@@ -53,15 +42,49 @@ serve(async (req) => {
           )
         }
 
-        const members = membersData?.map(member => ({
-          id: member.id,
-          workspace_id: workspaceId,
-          user_id: member.user_id,
-          role: member.role,
-          is_hidden: member.is_hidden,
-          created_at: member.created_at,
-          user: member.system_users
-        })) || []
+        if (!membersData || membersData.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, members: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        // Get user IDs from members
+        const userIds = membersData.map(member => member.user_id)
+
+        // Fetch user details separately 
+        const { data: users, error: usersError } = await supabase
+          .from('system_users')
+          .select('id, name, email, profile, phone')
+          .in('id', userIds)
+
+        if (usersError) {
+          console.error('Error fetching users:', usersError)
+          return new Response(
+            JSON.stringify({ success: false, error: usersError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        // Transform the data to match the expected format
+        const members = membersData.map(member => {
+          const user = users?.find(u => u.id === member.user_id)
+          return {
+            id: member.id,
+            workspace_id: workspaceId,
+            user_id: member.user_id,
+            role: member.role,
+            is_hidden: member.is_hidden,
+            created_at: member.created_at,
+            user: user ? {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              profile: user.profile,
+              phone: user.phone
+            } : null
+          }
+        })
 
         return new Response(
           JSON.stringify({ success: true, members }),

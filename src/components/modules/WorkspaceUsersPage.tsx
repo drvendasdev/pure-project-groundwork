@@ -45,6 +45,7 @@ export function WorkspaceUsersPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'colaborador' | 'gestor' | 'mentor_master'>('colaborador');
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
+  const [editingUser, setEditingUser] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [defaultInstance, setDefaultInstance] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function WorkspaceUsersPage() {
   });
   
   const workspace = workspaces.find(w => w.workspace_id === workspaceId);
-  const { members, isLoading, createUserAndAddToWorkspace, updateMember, removeMember } = useWorkspaceMembers(workspaceId || '');
+  const { members, isLoading, createUserAndAddToWorkspace, updateMember, updateUser, removeMember } = useWorkspaceMembers(workspaceId || '');
   const { connections, isLoading: connectionsLoading } = useWorkspaceConnections(workspaceId || '');
   const { toast } = useToast();
   
@@ -170,6 +171,7 @@ export function WorkspaceUsersPage() {
     });
     setSelectedRole('colaborador');
     setShowAddUser(false);
+    setEditingUser(null);
     setDefaultInstance(null);
   };
 
@@ -179,6 +181,65 @@ export function WorkspaceUsersPage() {
       setEditingMember(null);
     } catch (error) {
       // Error handled in hook
+    }
+  };
+
+  const handleEditUser = (member: WorkspaceMember) => {
+    if (!member.user) return;
+    
+    setEditingUser(member);
+    setFormData({
+      name: member.user.name || '',
+      email: member.user.email || '',
+      profile: member.user.profile || 'user',
+      senha: '', // Always empty for security
+      phone: member.user.phone || '',
+      default_channel: '' // We'll keep this empty for now
+    });
+    setSelectedRole(member.role);
+    setShowAddUser(true);
+  };
+
+  const handleSaveUser = async () => {
+    if (!editingUser?.user) return;
+    
+    setIsSubmitting(true);
+    try {
+      // Update user data
+      const userData: any = {
+        name: formData.name,
+        email: formData.email,
+        profile: formData.profile,
+        phone: formData.phone,
+      };
+
+      // Only include password if it's provided
+      if (formData.senha.trim()) {
+        userData.senha = formData.senha;
+      }
+
+      // Include default_channel if provided
+      if (formData.default_channel) {
+        userData.default_channel = formData.default_channel;
+      }
+
+      await updateUser(editingUser.user.id, userData);
+
+      // Update workspace role if it changed
+      if (selectedRole !== editingUser.role) {
+        await updateMember(editingUser.id, { role: selectedRole });
+      }
+
+      handleCancel();
+      
+      toast({
+        title: "Sucesso",
+        description: "Usuário atualizado com sucesso"
+      });
+    } catch (error) {
+      console.error('Error updating user:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -229,7 +290,9 @@ export function WorkspaceUsersPage() {
 
       {showAddUser && (
         <div className="border rounded-lg p-6 space-y-6">
-          <h4 className="font-medium text-lg">Criar Novo Usuário</h4>
+          <h4 className="font-medium text-lg">
+            {editingUser ? 'Editar Usuário' : 'Criar Novo Usuário'}
+          </h4>
           
           {/* Dados Básicos */}
           <div className="space-y-4">
@@ -271,12 +334,15 @@ export function WorkspaceUsersPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="senha">Senha *</Label>
+                <Label htmlFor="senha">
+                  Senha {editingUser ? '' : '*'}
+                  {editingUser && <span className="text-muted-foreground text-sm ml-1">(deixe vazio para manter atual)</span>}
+                </Label>
                 <div className="relative">
                   <Input
                     id="senha"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Digite a senha"
+                    placeholder={editingUser ? "Nova senha (opcional)" : "Digite a senha"}
                     value={formData.senha}
                     onChange={(e) => setFormData(prev => ({ ...prev, senha: e.target.value }))}
                   />
@@ -350,10 +416,10 @@ export function WorkspaceUsersPage() {
           
           <div className="flex gap-2 pt-4">
             <Button 
-              onClick={handleCreateUser}
-              disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || !formData.senha}
+              onClick={editingUser ? handleSaveUser : handleCreateUser}
+              disabled={isSubmitting || !formData.name || !formData.email || !formData.profile || (!editingUser && !formData.senha)}
             >
-              {isSubmitting ? "Criando..." : "Criar Usuário"}
+              {isSubmitting ? (editingUser ? "Salvando..." : "Criando...") : (editingUser ? "Salvar" : "Criar Usuário")}
             </Button>
             <Button 
               variant="outline" 
@@ -431,14 +497,24 @@ export function WorkspaceUsersPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setEditingMember(editingMember?.id === member.id ? null : member)}
+                        onClick={() => handleEditUser(member)}
+                        title="Editar usuário"
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
+                        onClick={() => setEditingMember(editingMember?.id === member.id ? null : member)}
+                        title="Editar função"
+                      >
+                        <User className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         onClick={() => handleRemoveMember(member.id)}
+                        title="Remover membro"
                       >
                         <Trash className="w-4 h-4" />
                       </Button>

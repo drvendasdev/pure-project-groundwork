@@ -14,6 +14,7 @@ export interface WorkspaceMember {
     name: string;
     email: string;
     profile: string;
+    phone?: string;
   };
 }
 
@@ -217,6 +218,50 @@ export function useWorkspaceMembers(workspaceId?: string) {
     }
   };
 
+  const updateUser = async (userId: string, userData: {
+    name?: string;
+    email?: string;
+    profile?: string;
+    senha?: string;
+    phone?: string;
+    default_channel?: string;
+  }) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-system-user', {
+        body: {
+          action: 'update',
+          userId,
+          userData
+        }
+      });
+
+      if (error) {
+        console.error('Error calling manage-system-user function:', error);
+        throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to update user');
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Usuário atualizado com sucesso.",
+      });
+
+      // Refresh the members list to show updated data
+      await fetchMembers();
+    } catch (error) {
+      console.error('Error in updateUser:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar usuário.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   const removeMember = async (memberId: string) => {
     if (!workspaceId) return;
 
@@ -262,6 +307,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
     addMember,
     createUserAndAddToWorkspace,
     updateMember,
+    updateUser,
     removeMember
   };
 }

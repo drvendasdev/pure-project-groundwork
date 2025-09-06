@@ -1016,6 +1016,7 @@ export type Database = {
           email: string | null
           id: string
           name: string
+          phone: string | null
           profile: string
           senha: string | null
           status: string
@@ -1029,6 +1030,7 @@ export type Database = {
           email?: string | null
           id?: string
           name: string
+          phone?: string | null
           profile: string
           senha?: string | null
           status?: string
@@ -1042,6 +1044,7 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string
+          phone?: string | null
           profile?: string
           senha?: string | null
           status?: string
