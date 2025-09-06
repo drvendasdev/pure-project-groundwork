@@ -246,7 +246,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                       </SelectTrigger>
                       <SelectContent className="bg-background border border-border">
                         {connections.length === 0 ? (
-                          <SelectItem value="" disabled>
+                          <SelectItem value="no-connections" disabled>
                             Nenhuma conexão disponível
                           </SelectItem>
                         ) : (
