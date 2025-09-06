@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, workspaceId, name, cnpj } = await req.json();
+    const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
 
     // Initialize Supabase client
     const supabase = createClient(
@@ -33,6 +33,19 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: 'Failed to create workspace' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      // Create workspace limits record
+      const { error: limitsError } = await supabase
+        .from('workspace_limits')
+        .insert({ 
+          workspace_id: data.id, 
+          connection_limit: connectionLimit || 1 
+        });
+
+      if (limitsError) {
+        console.error('Error creating workspace limits:', limitsError);
+        // Don't fail the workspace creation, just log the error
       }
 
       return new Response(

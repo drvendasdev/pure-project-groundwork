@@ -74,10 +74,10 @@ export function useWorkspaces() {
     }
   }, [user, userRole]);
 
-  const createWorkspace = async (name: string, cnpj?: string) => {
+  const createWorkspace = async (name: string, cnpj?: string, connectionLimit?: number) => {
     try {
       const { data, error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'create', name, cnpj }
+        body: { action: 'create', name, cnpj, connectionLimit }
       });
 
       if (error) {

@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { evolutionProvider } from '@/services/EvolutionProvider';
 import type { Connection, HISTORY_RECOVERY_MAP } from '@/types/evolution';
+import { useWorkspaceLimits } from '@/hooks/useWorkspaceLimits';
 
 // Helper functions for phone number formatting
 const normalizePhoneNumber = (phone: string): string => {
@@ -44,6 +45,7 @@ interface ConexoesNovaProps {
 export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,6 +83,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       
       const response = await evolutionProvider.listConnections(workspaceId);
       setConnections(response.connections);
+      refreshLimits(); // Refresh limits when connections are loaded
     } catch (error) {
       console.warn('Error loading connections:', error);
       // Silently set empty connections array instead of showing error toast
@@ -128,6 +131,16 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       return;
     }
 
+    // Check frontend limit before making the request
+    if (usage && !usage.canCreateMore) {
+      toast({
+        title: 'Limite atingido',
+        description: `Não é possível criar mais conexões. Limite: ${usage.current}/${usage.limit}`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Check for duplicate instance names
     const existingConnection = connections.find(conn => 
       conn.instance_name.toLowerCase() === instanceName.trim().toLowerCase()
@@ -161,6 +174,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       
       // Reload connections (silently)
       loadConnections();
+      refreshLimits(); // Refresh limits after creating connection
 
     } catch (error) {
       console.error('Error creating instance:', error);
@@ -258,6 +272,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       }
 
       loadConnections(); // Silent reload
+      refreshLimits(); // Refresh limits after deleting connection
       setIsDeleteModalOpen(false);
       setConnectionToDelete(null);
 
@@ -434,6 +449,11 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           <h2 className="text-3xl font-bold tracking-tight">Conexões WhatsApp</h2>
           <p className="text-muted-foreground">
             Gerencie suas instâncias de WhatsApp
+            {usage && (
+              <span className="ml-2 text-sm">
+                • {usage.current}/{usage.limit} conexões utilizadas
+              </span>
+            )}
           </p>
         </div>
         
@@ -442,9 +462,13 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           setIsCreateModalOpen(open);
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button 
+              disabled={usage && !usage.canCreateMore}
+              title={usage && !usage.canCreateMore ? `Limite de conexões atingido (${usage.current}/${usage.limit})` : ''}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Adicionar Instância
+              {usage && ` (${usage.current}/${usage.limit})`}
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -509,9 +533,14 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
             <p className="text-muted-foreground text-center mb-6">
               Crie sua primeira conexão WhatsApp para começar a receber mensagens
             </p>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Button 
+              onClick={() => setIsCreateModalOpen(true)}
+              disabled={usage && !usage.canCreateMore}
+              title={usage && !usage.canCreateMore ? `Limite de conexões atingido (${usage.current}/${usage.limit})` : ''}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Adicionar Instância
+              {usage && ` (${usage.current}/${usage.limit})`}
             </Button>
           </CardContent>
         </Card>

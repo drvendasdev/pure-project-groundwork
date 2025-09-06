@@ -19,6 +19,7 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
   const [formData, setFormData] = useState({
     name: "",
     cnpj: "",
+    connectionLimit: 1,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { createWorkspace } = useWorkspaces();
@@ -33,10 +34,10 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
     setIsSubmitting(true);
     
     try {
-      await createWorkspace(formData.name.trim(), formData.cnpj.trim() || undefined);
+      await createWorkspace(formData.name.trim(), formData.cnpj.trim() || undefined, formData.connectionLimit);
       
       // Reset form
-      setFormData({ name: "", cnpj: "" });
+      setFormData({ name: "", cnpj: "", connectionLimit: 1 });
       onOpenChange(false);
     } catch (error) {
       // Error is handled in the hook
@@ -46,7 +47,7 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
   };
 
   const handleCancel = () => {
-    setFormData({ name: "", cnpj: "" });
+    setFormData({ name: "", cnpj: "", connectionLimit: 1 });
     onOpenChange(false);
   };
 
@@ -77,6 +78,23 @@ export function CreateWorkspaceModal({ open, onOpenChange }: CreateWorkspaceModa
               onChange={(e) => setFormData(prev => ({ ...prev, cnpj: e.target.value }))}
               placeholder="00.000.000/0000-00"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="connectionLimit">Limite de Conexões *</Label>
+            <Input
+              id="connectionLimit"
+              type="number"
+              min="1"
+              max="100"
+              value={formData.connectionLimit}
+              onChange={(e) => setFormData(prev => ({ ...prev, connectionLimit: parseInt(e.target.value) || 1 }))}
+              placeholder="1"
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              Número máximo de conexões WhatsApp permitidas para esta empresa
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
