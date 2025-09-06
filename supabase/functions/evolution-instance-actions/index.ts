@@ -237,14 +237,7 @@ serve(async (req) => {
             business: {
               description: 'WhatsApp Business',
             },
-            webhook: webhookUrl,
-            webhook_by_events: false,
-            webhook_base64: false,
-            ...(config.evolutionWebhookSecret && {
-              webhook_headers: {
-                authorization: `Bearer ${config.evolutionWebhookSecret}`
-              }
-            }),
+            
             events: [
               'APPLICATION_STARTUP',
               'QRCODE_UPDATED',
