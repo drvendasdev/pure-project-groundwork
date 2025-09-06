@@ -181,24 +181,12 @@ serve(async (req) => {
       )
     }
 
-    // Call Evolution API to create instance
-    const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/evolution-webhook`
-
-    // Prepare payload for Evolution API (only Evolution-specific fields)
+    // Call Evolution API to create instance - use minimal payload
+    // Prepare minimal payload for Evolution API (remove webhook integration that's causing "Invalid integration")
     const evolutionPayload = {
       instanceName: instanceName,
       token: token,
-      qrcode: true,
-      webhook: webhookUrl,
-      webhook_by_events: false,
-      events: [
-        "APPLICATION_STARTUP",
-        "QRCODE_UPDATED", 
-        "CONNECTION_UPDATE",
-        "MESSAGES_UPSERT",
-        "MESSAGES_UPDATE",
-        "SEND_MESSAGE"
-      ]
+      qrcode: true
     }
 
     console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))
