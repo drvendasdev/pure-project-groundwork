@@ -1,26 +1,61 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import type { Workspace } from '@/contexts/WorkspaceContext';
 
 export function useWorkspaces() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { user, userRole } = useAuth();
 
   const fetchWorkspaces = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('workspaces_view')
-        .select('*')
-        .order('name');
+      // If user is master or admin, show all workspaces
+      if (userRole === 'master' || userRole === 'admin') {
+        const { data, error } = await supabase
+          .from('workspaces_view')
+          .select('*')
+          .order('name');
 
-      if (error) {
-        throw error;
+        if (error) {
+          throw error;
+        }
+
+        setWorkspaces(data || []);
+      } else {
+        // For regular users, filter by their workspace memberships
+        if (!user?.id) {
+          setWorkspaces([]);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('workspace_members')
+          .select(`
+            workspace_id,
+            role,
+            workspaces_view!inner(*)
+          `)
+          .eq('user_id', user.id);
+
+        if (error) {
+          throw error;
+        }
+
+        // Filter workspaces based on user role
+        // Gestores only see workspaces where they are gestores
+        // MentorMaster can see all assigned workspaces
+        const filteredWorkspaces = data?.filter(membership => {
+          if (membership.role === 'mentor_master') return true;
+          if (membership.role === 'gestor') return true;
+          return false; // Colaboradores don't see workspace management
+        }).map(membership => membership.workspaces_view) || [];
+
+        setWorkspaces(filteredWorkspaces);
       }
-
-      setWorkspaces(data || []);
     } catch (error) {
       console.error('Error fetching workspaces:', error);
       toast({
@@ -34,8 +69,10 @@ export function useWorkspaces() {
   };
 
   useEffect(() => {
-    fetchWorkspaces();
-  }, []);
+    if (user) {
+      fetchWorkspaces();
+    }
+  }, [user, userRole]);
 
   const createWorkspace = async (name: string, cnpj?: string) => {
     try {
