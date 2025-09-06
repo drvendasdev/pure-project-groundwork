@@ -1,328 +1,431 @@
-// deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const defaultCorsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Vary": "Origin",
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-function cors(req: Request, extra: Record<string, string> = {}) {
-  const reqHeaders =
-    req.headers.get("access-control-request-headers") ??
-    "authorization, x-client-info, apikey, content-type";
-  return {
-    ...defaultCorsHeaders,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": reqHeaders,
-    ...extra,
-  };
+// Gerar ID único para cada request
+function generateRequestId(): string {
+  return `webhook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Sanitizar número de telefone
+function sanitizePhoneNumber(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+// Inferir tipo de mensagem baseado na URL
+function inferMessageType(url?: string): string {
+  if (!url) return "text";
+  const ext = url.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "jpg": case "jpeg": case "png": case "gif": case "webp": return "image";
+    case "mp4": case "mov": case "avi": case "webm": return "video";
+    case "mp3": case "wav": case "ogg": case "m4a": case "opus": return "audio";
+    case "pdf": case "doc": case "docx": case "txt": return "document";
+    default: return "document";
+  }
+}
+
+// Gerar conteúdo placeholder para mídia
+function generateContentForMedia(type: string, name?: string): string {
+  switch (type) {
+    case "image": return `📷 Imagem${name ? `: ${name}` : ""}`;
+    case "video": return `🎥 Vídeo${name ? `: ${name}` : ""}`;
+    case "audio": return `🎵 Áudio${name ? `: ${name}` : ""}`;
+    case "document": return `📄 Documento${name ? `: ${name}` : ""}`;
+    default: return name || "Arquivo";
+  }
 }
 
 serve(async (req) => {
-  // Preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: cors(req) });
+  const requestId = generateRequestId();
+  
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ success: false, error: "Method not allowed" }),
-      { status: 405, headers: { ...cors(req), "Content-Type": "application/json" } },
-    );
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({
+      code: 'METHOD_NOT_ALLOWED',
+      message: 'Only POST method is allowed',
+      requestId
+    }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
-
-  // ---------- Parse robusto do body ----------
-  let payload: any = {};
-  const ctype = req.headers.get("content-type")?.toLowerCase() ?? "";
 
   try {
-    if (ctype.includes("application/json")) {
-      payload = await req.json();
-    } else if (
-      ctype.includes("application/x-www-form-urlencoded") ||
-      ctype.includes("multipart/form-data")
-    ) {
-      const form = await req.formData();
-      payload = Object.fromEntries(form.entries());
-      for (const k of Object.keys(payload)) {
-        const v = payload[k];
-        if (typeof v === "string" && v.trim().startsWith("{") && v.trim().endsWith("}")) {
-          try { payload[k] = JSON.parse(v); } catch { /* ignore */ }
+    console.log(`🎣 [${requestId}] N8N Response webhook received`);
+    
+    // Parse robusto do body
+    let payload: any = {};
+    const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+
+    try {
+      if (contentType.includes("application/json")) {
+        payload = await req.json();
+      } else if (
+        contentType.includes("application/x-www-form-urlencoded") ||
+        contentType.includes("multipart/form-data")
+      ) {
+        const form = await req.formData();
+        payload = Object.fromEntries(form.entries());
+        // Tentar fazer parse de valores JSON em strings
+        for (const k of Object.keys(payload)) {
+          const v = payload[k];
+          if (typeof v === "string" && v.trim().startsWith("{") && v.trim().endsWith("}")) {
+            try { payload[k] = JSON.parse(v); } catch { /* ignore */ }
+          }
+        }
+      } else {
+        const text = await req.text();
+        if (text?.trim()) {
+          try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
         }
       }
-    } else {
-      const text = await req.text();
-      if (text?.trim()) {
-        try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
-      }
+    } catch (e) {
+      console.error(`❌ [${requestId}] Failed to parse request body:`, e);
+      return new Response(JSON.stringify({
+        code: 'INVALID_PAYLOAD',
+        message: 'Invalid request body format',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
-  } catch (e) {
-    return new Response(
-      JSON.stringify({ success: false, error: "Invalid request body", details: String(e) }),
-      { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } },
-    );
-  }
 
-  // ---------- Aliases & normalização ----------
-  const convIdAlias =
-    payload.conversation_id ??
-    payload.conversationId ??
-    payload.conversationID ??
-    payload.conversation ??
-    null;
+    console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
 
-  const response_message =
-    payload.response_message ??
-    payload.message ??
-    payload.text ??
-    payload.caption ??
-    payload.content ??
-    null;
+    // Extrair e normalizar campos do payload
+    const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
+    const phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
+    const responseMessage = payload.response_message ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? null;
+    const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? "text").toString().toLowerCase();
+    const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? null;
+    const fileName = payload.file_name ?? payload.fileName ?? payload.filename ?? null;
+    const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
+    const connectionId = payload.connection_id ?? payload.connectionId ?? null;
+    const externalId = payload.external_id ?? payload.externalId ?? payload.message_id ?? payload.messageId ?? null;
+    const metadata = payload.metadata ?? payload.meta ?? null;
+    const senderType = (payload.sender_type ?? "agent").toString().toLowerCase();
 
-  const phone_number =
-    payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
+    const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
+    const hasValidContent = !!(responseMessage || (fileUrl && finalMessageType !== "text"));
 
-  const message_type_raw = (payload.message_type ?? payload.messageType ?? payload.type ?? "text");
-  const file_url  = payload.file_url  ?? payload.fileUrl  ?? payload.url      ?? null;
-  const file_name = payload.file_name ?? payload.fileName ?? payload.filename ?? null;
-
-  const evolution_instance =
-    payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
-
-  const metadata = payload.metadata ?? payload.meta ?? null;
-
-  const sender_type = (payload.sender_type ?? "agent").toString().toLowerCase();
-
-  const inferMessageType = (url?: string): string => {
-    if (!url) return "text";
-    const ext = url.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "jpg": case "jpeg": case "png": case "gif": case "webp": return "image";
-      case "mp4": case "mov": case "avi": case "webm": return "video";
-      case "mp3": case "wav": case "ogg": case "m4a": case "opus": return "audio";
-      case "pdf": case "doc": case "docx": case "txt": return "document";
-      default: return "document";
+    // Validações mínimas
+    if (!conversationId && !phoneNumber) {
+      console.error(`❌ [${requestId}] Missing required identifiers`);
+      return new Response(JSON.stringify({
+        code: 'MISSING_IDENTIFIERS',
+        message: 'Either conversation_id or phone_number is required',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
-  };
 
-  const finalMessageType = (message_type_raw || "").toString().toLowerCase() ||
-    inferMessageType(file_url || "");
+    if (!hasValidContent) {
+      console.error(`❌ [${requestId}] Missing content`);
+      return new Response(JSON.stringify({
+        code: 'MISSING_CONTENT',
+        message: 'Either response_message or valid file_url is required',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-  const hasValidContent = !!(response_message || (file_url && finalMessageType !== "text"));
+    // Inicializar Supabase com Service Role
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error(`❌ [${requestId}] Missing environment variables`);
+      return new Response(JSON.stringify({
+        code: 'CONFIGURATION_ERROR',
+        message: 'Missing required environment variables',
+        requestId
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-  // Ping: nada relevante enviado
-  if (!convIdAlias && !phone_number && !response_message && !file_url) {
-    return new Response(JSON.stringify({
-      success: true,
-      message: "Webhook ativo. Envie { conversation_id ou phone_number, response_message ou file_url } para registrar.",
-    }), { headers: { ...cors(req), "Content-Type": "application/json" } });
-  }
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  // Regras mínimas
-  if (!convIdAlias && !phone_number) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: "conversation_id ou phone_number são obrigatórios",
-    }), { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } });
-  }
+    // Resolver workspace_id
+    let workspaceId: string | null = null;
+    let finalConversationId: string | null = conversationId;
 
-  if (!hasValidContent) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: "É necessário response_message ou file_url com tipo válido",
-    }), { status: 400, headers: { ...cors(req), "Content-Type": "application/json" } });
-  }
-
-  // ---- Env vars / Supabase ----
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!SUPABASE_URL || !SERVICE_ROLE) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: "Configuração ausente: SUPABASE_URL e/ou SUPABASE_SERVICE_ROLE_KEY",
-    }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
-  }
-
-  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
-    auth: { persistSession: false },
-    global: { headers: { "X-Client-Info": "lovable-n8n-responder" } },
-  });
-
-  console.log('📥 N8N Response received:', {
-    conversation_id: convIdAlias,
-    phone_number,
-    response_message: response_message?.substring(0, 100),
-    message_type: finalMessageType,
-    file_url,
-    file_name,
-    sender_type,
-    metadata: metadata ? 'present' : 'none'
-  });
-
-  try {
-    // ---------- Resolver conversation_id (fallback por phone_number) ----------
-    let conversation_id: string | null = convIdAlias;
-
-    if (!conversation_id && phone_number) {
-      const sanitized = String(phone_number).replace(/\D/g, "");
-      // 1) Busca/Cria contato
-      let { data: contact, error: contactErr } = await supabase
-        .from("contacts")
-        .select("id, name")
-        .eq("phone", sanitized)
+    if (conversationId) {
+      // Caso 1: Temos conversation_id - buscar workspace_id da conversa
+      console.log(`🔍 [${requestId}] Resolving workspace from conversation_id: ${conversationId}`);
+      
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select('workspace_id')
+        .eq('id', conversationId)
         .single();
 
-      if (contactErr && contactErr.code !== "PGRST116") {
-        throw new Error(`Erro ao buscar contato: ${contactErr.message}`);
+      if (convError || !conversation) {
+        console.error(`❌ [${requestId}] Conversation not found:`, convError);
+        return new Response(JSON.stringify({
+          code: 'CONVERSATION_NOT_FOUND',
+          message: 'Specified conversation_id not found',
+          requestId
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
 
-      if (!contact) {
-        const ins = await supabase
-          .from("contacts")
-          .insert({
-            phone: sanitized,
-            name: `Contato ${sanitized}`,
-            workspace_id: "00000000-0000-0000-0000-000000000000", // Workspace padrão
-            created_at: new Date().toISOString(),
-          })
-          .select("id, name")
-          .single();
-        if (ins.error) throw new Error(`Erro ao criar contato: ${ins.error.message}`);
-        contact = ins.data;
-      }
+      workspaceId = conversation.workspace_id;
+      console.log(`✅ [${requestId}] Workspace resolved from conversation: ${workspaceId}`);
 
-      // 2) Busca conversa aberta no WhatsApp
-      const { data: existingConv, error: convSearchErr } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("contact_id", contact.id)
-        .eq("canal", "whatsapp")
-        .eq("status", "open")
+    } else if (connectionId) {
+      // Caso 2: Temos connection_id - buscar workspace_id da conexão
+      console.log(`🔍 [${requestId}] Resolving workspace from connection_id: ${connectionId}`);
+      
+      const { data: connection, error: connError } = await supabase
+        .from('connections')
+        .select('workspace_id')
+        .eq('id', connectionId)
         .single();
 
-      if (!existingConv) {
-        // Cria conversa
-        const insConv = await supabase
-          .from("conversations")
-          .insert({
-            contact_id: contact.id,
-            workspace_id: "00000000-0000-0000-0000-000000000000", // Workspace padrão
-            canal: "whatsapp",
-            status: "open",
-            agente_ativo: false,
-            evolution_instance: evolution_instance || null,
-            last_activity_at: new Date().toISOString(),
-            last_message_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select("id")
+      if (connError || !connection) {
+        console.error(`❌ [${requestId}] Connection not found:`, connError);
+        return new Response(JSON.stringify({
+          code: 'CONNECTION_NOT_FOUND',
+          message: 'Specified connection_id not found',
+          requestId
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      workspaceId = connection.workspace_id;
+      console.log(`✅ [${requestId}] Workspace resolved from connection: ${workspaceId}`);
+
+    } else if (evolutionInstance) {
+      // Caso 3: Temos evolution_instance - buscar workspace_id via instance_name
+      console.log(`🔍 [${requestId}] Resolving workspace from evolution_instance: ${evolutionInstance}`);
+      
+      const { data: connection, error: connError } = await supabase
+        .from('connections')
+        .select('workspace_id')
+        .eq('instance_name', evolutionInstance)
+        .single();
+
+      if (connError || !connection) {
+        console.error(`❌ [${requestId}] Instance not found:`, connError);
+        return new Response(JSON.stringify({
+          code: 'INSTANCE_NOT_FOUND',
+          message: 'Specified evolution_instance not found',
+          requestId
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      workspaceId = connection.workspace_id;
+      console.log(`✅ [${requestId}] Workspace resolved from instance: ${workspaceId}`);
+    }
+
+    if (!workspaceId) {
+      console.error(`❌ [${requestId}] Cannot resolve workspace_id from payload`);
+      return new Response(JSON.stringify({
+        code: 'MISSING_WORKSPACE',
+        detail: 'Cannot resolve workspace_id from payload',
+        message: 'Unable to determine workspace from provided identifiers',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Se ainda não temos conversation_id, precisar resolver via phoneNumber
+    if (!finalConversationId && phoneNumber) {
+      console.log(`🔍 [${requestId}] Creating/finding conversation for phone: ${phoneNumber}`);
+      
+      const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
+      
+      // Transação para criar/encontrar contato e conversa
+      const { data: contact, error: contactError } = await supabase.rpc('upsert_contact_and_conversation', {
+        p_phone: sanitizedPhone,
+        p_workspace_id: workspaceId,
+        p_evolution_instance: evolutionInstance
+      });
+
+      if (contactError) {
+        console.error(`❌ [${requestId}] Failed to upsert contact/conversation:`, contactError);
+        
+        // Fallback manual se a RPC não existir
+        console.log(`🔄 [${requestId}] Falling back to manual upsert`);
+        
+        // Buscar ou criar contato
+        let { data: existingContact, error: findContactError } = await supabase
+          .from('contacts')
+          .select('id, name')
+          .eq('phone', sanitizedPhone)
+          .eq('workspace_id', workspaceId)
           .single();
-        if (insConv.error) throw new Error(`Erro ao criar conversa: ${insConv.error.message}`);
-        conversation_id = insConv.data.id;
+
+        if (findContactError && findContactError.code !== 'PGRST116') {
+          console.error(`❌ [${requestId}] Error finding contact:`, findContactError);
+          throw findContactError;
+        }
+
+        if (!existingContact) {
+          const { data: newContact, error: createContactError } = await supabase
+            .from('contacts')
+            .insert({
+              phone: sanitizedPhone,
+              name: `Contato ${sanitizedPhone}`,
+              workspace_id: workspaceId,
+            })
+            .select('id, name')
+            .single();
+
+          if (createContactError) {
+            console.error(`❌ [${requestId}] Error creating contact:`, createContactError);
+            throw createContactError;
+          }
+          
+          existingContact = newContact;
+        }
+
+        // Buscar ou criar conversa
+        let { data: existingConv, error: findConvError } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('contact_id', existingContact.id)
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'open')
+          .single();
+
+        if (findConvError && findConvError.code !== 'PGRST116') {
+          console.error(`❌ [${requestId}] Error finding conversation:`, findConvError);
+          throw findConvError;
+        }
+
+        if (!existingConv) {
+          const { data: newConv, error: createConvError } = await supabase
+            .from('conversations')
+            .insert({
+              contact_id: existingContact.id,
+              workspace_id: workspaceId,
+              status: 'open',
+              agente_ativo: false,
+              evolution_instance: evolutionInstance || null,
+              canal: 'whatsapp',
+              last_activity_at: new Date().toISOString(),
+              last_message_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+
+          if (createConvError) {
+            console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
+            throw createConvError;
+          }
+          
+          finalConversationId = newConv.id;
+        } else {
+          finalConversationId = existingConv.id;
+        }
       } else {
-        conversation_id = existingConv.id;
+        finalConversationId = contact.conversation_id;
       }
+
+      console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
     }
 
-    // ---------- Confirma conversa e opcionalmente atualiza evolution_instance ----------
-    const { data: conversation, error: convErr } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("id", conversation_id)
-      .single();
-
-    if (convErr) {
+    if (!finalConversationId) {
+      console.error(`❌ [${requestId}] Could not resolve conversation_id`);
       return new Response(JSON.stringify({
-        success: false,
-        error: "Erro ao buscar conversa",
-        details: convErr.message,
-        hint: (convErr as any).hint ?? (convErr as any).details ?? null,
-      }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
+        code: 'CONVERSATION_RESOLUTION_FAILED',
+        message: 'Could not create or find conversation',
+        requestId
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    if (!conversation) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: "Conversa não encontrado",
-      }), { status: 404, headers: { ...cors(req), "Content-Type": "application/json" } });
-    }
+    // Preparar conteúdo final
+    const finalContent = responseMessage || generateContentForMedia(finalMessageType, fileName);
 
-    if (evolution_instance && evolution_instance !== conversation.evolution_instance) {
-      await supabase
-        .from("conversations")
-        .update({ evolution_instance })
-        .eq("id", conversation_id);
-    }
-
-    // ---------- Monta conteúdo (placeholder para mídia sem texto) ----------
-    const generateContentForMedia = (type: string, name?: string): string => {
-      switch (type) {
-        case "image": return `📷 Imagem${name ? `: ${name}` : ""}`;
-        case "video": return `🎥 Vídeo${name ? `: ${name}` : ""}`;
-        case "audio": return `🎵 Áudio${name ? `: ${name}` : ""}`;
-        case "document": return `📄 Documento${name ? `: ${name}` : ""}`;
-        default: return name || "Arquivo";
-      }
-    };
-
-    const finalContent = response_message || generateContentForMedia(finalMessageType, file_name);
-
-    // ---------- Insere mensagem ----------
-    const insertPayload: any = {
-      conversation_id,
-      workspace_id: conversation.workspace_id,  // Adicionar workspace_id da conversa
+    // Inserir mensagem com idempotência (usando external_id se fornecido)
+    const messagePayload: any = {
+      conversation_id: finalConversationId,
+      workspace_id: workspaceId,
       content: finalContent,
-      sender_type,                  // ex.: 'agent' | 'ia'
-      message_type: finalMessageType, // 'text' | 'image' | 'video' | 'audio' | 'document'
-      file_url,
-      file_name,
+      sender_type: senderType,
+      message_type: finalMessageType,
+      file_url: fileUrl,
+      file_name: fileName,
       status: "sent",
       origem_resposta: "automatica",
-      metadata: metadata ? { n8n_data: metadata, source: "n8n" } : { source: "n8n" },
+      metadata: metadata ? { n8n_data: metadata, source: "n8n", requestId } : { source: "n8n", requestId },
     };
 
-    console.log('💾 Inserting message with payload:', {
-      conversation_id,
-      content_length: finalContent.length,
-      sender_type,
-      message_type: finalMessageType,
-      has_file: !!file_url,
-      metadata_present: !!metadata
-    });
+    if (externalId) {
+      messagePayload.external_id = externalId;
+    }
 
-    const { data: newMessage, error: msgErr } = await supabase
+    console.log(`💾 [${requestId}] Inserting message into conversation: ${finalConversationId}`);
+
+    const { data: newMessage, error: msgError } = await supabase
       .from("messages")
-      .insert(insertPayload)
+      .insert(messagePayload)
       .select()
       .single();
 
-    if (msgErr) {
-      console.error('❌ Database insertion failed:', {
-        error: msgErr.message,
-        code: msgErr.code,
-        hint: (msgErr as any).hint,
-        details: (msgErr as any).details,
-        payload: insertPayload
+    if (msgError) {
+      console.error(`❌ [${requestId}] Failed to insert message:`, {
+        error: msgError.message,
+        code: msgError.code,
+        hint: (msgError as any).hint,
+        details: (msgError as any).details,
+        payload: messagePayload
       });
+      
+      // Se for erro de duplicata por external_id, retornar sucesso
+      if (msgError.code === '23505' && msgError.message.includes('external_id')) {
+        console.log(`ℹ️ [${requestId}] Duplicate message ignored (idempotent)`);
+        return new Response(JSON.stringify({
+          ok: true,
+          message: 'Message already processed (idempotent)',
+          requestId
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
       return new Response(JSON.stringify({
-        success: false,
-        error: "Erro ao inserir resposta",
-        details: msgErr.message,
-        hint: (msgErr as any).hint ?? (msgErr as any).details ?? null,
-        payload: insertPayload,
-      }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
+        code: 'DATABASE_ERROR',
+        message: 'Failed to insert message',
+        details: msgError.message,
+        hint: (msgError as any).hint ?? (msgError as any).details ?? null,
+        requestId
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log('✅ Message inserted successfully:', {
-      message_id: newMessage.id,
-      conversation_id,
-      content: finalContent.substring(0, 50) + (finalContent.length > 50 ? '...' : ''),
-      created_at: newMessage.created_at
-    });
-
-    // ---------- Atualiza conversa ----------
+    // Atualizar timestamps da conversa
     await supabase
       .from("conversations")
       .update({
@@ -330,22 +433,34 @@ serve(async (req) => {
         last_message_at: new Date().toISOString(),
         unread_count: 0,
       })
-      .eq("id", conversation_id);
+      .eq("id", finalConversationId);
+
+    console.log(`✅ [${requestId}] Message processed successfully: ${newMessage.id}`);
 
     return new Response(JSON.stringify({
-      success: true,
+      ok: true,
       data: {
         message_id: newMessage.id,
-        conversation_id,
+        conversation_id: finalConversationId,
+        workspace_id: workspaceId,
         registered_at: newMessage.created_at,
       },
-    }), { headers: { ...cors(req), "Content-Type": "application/json" } });
+      requestId
+    }), {
+      status: 201,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
-  } catch (err: any) {
+  } catch (error) {
+    console.error(`❌ [${requestId}] Unexpected error:`, error);
     return new Response(JSON.stringify({
-      success: false,
-      error: "Falha inesperada",
-      details: String(err?.message ?? err),
-    }), { status: 500, headers: { ...cors(req), "Content-Type": "application/json" } });
+      code: 'UNEXPECTED_ERROR',
+      message: 'An unexpected error occurred',
+      details: String(error?.message ?? error),
+      requestId
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });

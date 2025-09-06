@@ -107,15 +107,40 @@ export const useWhatsAppConversations = () => {
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
-      // Enviar via edge function que vai inserir e enviar
+  const sendMessage = useCallback(async (
+    conversationId: string, 
+    content: string, 
+    contactPhone: string, 
+    messageType: string = 'text', 
+    fileUrl?: string, 
+    fileName?: string
+  ) => {
+    try {
+      console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
+
+      // Obter dados do usuário logado
+      const userData = localStorage.getItem('currentUser');
+      const currentUser = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUser?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Montar payload conforme novo contrato da função
+      const payload = {
+        workspace_id: "00000000-0000-0000-0000-000000000000", // Workspace padrão
+        conversation_id: conversationId,
+        content: content,
+        message_type: messageType,
+        sender_id: currentUser.id,
+        sender_type: "agent",
+        file_url: fileUrl,
+        file_name: fileName
+      };
+
+      // Enviar via edge function
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
-        body: {
-          conversationId,
-          content,
-          messageType,
-          fileUrl,
-          mimeType: fileName ? getFileType(fileName) : undefined
-        }
+        body: payload
       });
 
       if (apiError) {
@@ -129,56 +154,30 @@ export const useWhatsAppConversations = () => {
       }
 
       // Atualizar estado local com a mensagem enviada
-      const messageId = sendResult.messageId;
-      setConversations(prev => prev.map(conv => {
-        if (conv.id === conversationId) {
-          const messageExists = conv.messages.some(msg => msg.id === messageId);
-          if (!messageExists) {
-            return {
-              ...conv,
-              messages: [...conv.messages, {
-                id: messageId,
-                content,
-                sender_type: 'agent',
-                created_at: new Date().toISOString(),
-                status: 'sent',
-                message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
-                file_url: fileUrl,
-                file_name: fileName,
-                origem_resposta: 'manual'
-              }]
-            };
+      const messageId = sendResult.message?.id;
+      if (messageId) {
+        setConversations(prev => prev.map(conv => {
+          if (conv.id === conversationId) {
+            const messageExists = conv.messages.some(msg => msg.id === messageId);
+            if (!messageExists) {
+              return {
+                ...conv,
+                messages: [...conv.messages, {
+                  id: messageId,
+                  content,
+                  sender_type: 'agent',
+                  created_at: sendResult.message.created_at || new Date().toISOString(),
+                  status: 'sent',
+                  message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
+                  file_url: fileUrl,
+                  file_name: fileName,
+                  origem_resposta: 'manual'
+                }]
+              };
+            }
           }
-        }
-        return conv;
-      }));
-
-      console.log('✅ Mensagem enviada com sucesso:', sendResult);
-
-      if (apiError) {
-        console.error('Erro ao enviar via N8N:', apiError);
-        
-        // Verificar se é problema de configuração
-        let errorMessage = "Erro ao enviar mensagem";
-        if (apiError.message?.includes('N8N não configurado')) {
-          errorMessage = 'Sistema de mensagens não configurado. Entre em contato com o administrador.';
-        } else if (apiError.message?.includes('Evolution API')) {
-          errorMessage = 'API de WhatsApp não configurada. Verifique as configurações.';
-        } else if (apiError.message?.includes('senderId is empty')) {
-          errorMessage = 'Usuário não identificado. Faça login novamente.';
-        } else if (apiError.message?.includes('No evolution instance found')) {
-          errorMessage = 'Nenhuma instância de WhatsApp configurada para este usuário.';
-        } else {
-          errorMessage = `Erro no envio: ${apiError.message || 'Erro desconhecido'}`;
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      // Verificar se o resultado indica falha
-      if (sendResult && !sendResult.success) {
-        console.error('Envio falhou:', sendResult);
-        throw new Error(sendResult.error || 'Falha no envio da mensagem');
+          return conv;
+        }));
       }
 
       console.log('✅ Mensagem enviada com sucesso:', sendResult);
