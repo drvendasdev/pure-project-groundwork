@@ -18,6 +18,7 @@ export function useWorkspaces() {
         const { data, error } = await supabase
           .from('workspaces_view')
           .select('*')
+          .neq('workspace_id', '00000000-0000-0000-0000-000000000000')
           .order('name');
 
         if (error) {
