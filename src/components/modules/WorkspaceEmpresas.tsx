@@ -25,6 +25,7 @@ import { CreateWorkspaceModal } from "@/components/modals/CreateWorkspaceModal";
 import { WorkspaceConfigModal } from "@/components/modals/WorkspaceConfigModal";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
 
 interface WorkspaceEmpresasProps {
   onNavigateToUsers?: (workspaceId: string) => void;
@@ -50,12 +51,19 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
     setShowConfigModal(true);
   };
 
-  const handleEditClick = (workspace: any) => {
+  const handleEditClick = async (workspace: any) => {
+    // Fetch the connection limit for this workspace
+    const { data: limitData } = await supabase
+      .from('workspace_limits')
+      .select('connection_limit')
+      .eq('workspace_id', workspace.workspace_id)
+      .single();
+    
     setEditingWorkspace({
       workspace_id: workspace.workspace_id,
       name: workspace.name,
       cnpj: workspace.cnpj,
-      connectionLimit: workspace.connectionLimit || 1
+      connectionLimit: limitData?.connection_limit || 1
     });
     setShowCreateModal(true);
   };

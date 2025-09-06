@@ -80,10 +80,15 @@ Deno.serve(async (req) => {
       if (connectionLimit !== undefined) {
         const { error: limitError } = await supabase
           .from('workspace_limits')
-          .upsert({ 
-            workspace_id: workspaceId, 
-            connection_limit: connectionLimit 
-          });
+          .upsert(
+            { 
+              workspace_id: workspaceId, 
+              connection_limit: connectionLimit 
+            },
+            { 
+              onConflict: 'workspace_id' 
+            }
+          );
 
         if (limitError) {
           console.error('Error updating workspace limits:', limitError);
