@@ -181,12 +181,12 @@ serve(async (req) => {
       )
     }
 
-    // Call Evolution API to create instance - use minimal payload
-    // Prepare minimal payload for Evolution API (remove webhook integration that's causing "Invalid integration")
+    // Call Evolution API to create instance - use required fields
     const evolutionPayload = {
       instanceName: instanceName,
       token: token,
-      qrcode: true
+      qrcode: true,
+      integration: "WHATSAPP-BAILEYS"
     }
 
     console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))
