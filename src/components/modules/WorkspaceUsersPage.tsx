@@ -439,7 +439,6 @@ export function WorkspaceUsersPage() {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Função</TableHead>
               <TableHead>Perfil</TableHead>
               <TableHead>Adicionado em</TableHead>
               <TableHead className="w-[100px]">Ações</TableHead>
@@ -463,29 +462,6 @@ export function WorkspaceUsersPage() {
                 <TableRow key={member.id}>
                   <TableCell className="font-medium">{member.user?.name || 'N/A'}</TableCell>
                   <TableCell>{member.user?.email || 'N/A'}</TableCell>
-                  <TableCell>
-                    {editingMember?.id === member.id ? (
-                      <Select 
-                        value={member.role} 
-                        onValueChange={(value: 'colaborador' | 'gestor' | 'mentor_master') => 
-                          handleUpdateRole(member.id, value)
-                        }
-                      >
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="colaborador">Colaborador</SelectItem>
-                          <SelectItem value="gestor">Gestor</SelectItem>
-                          <SelectItem value="mentor_master">Mentor Master</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Badge variant={roleVariants[member.role]}>
-                        {roleLabels[member.role]}
-                      </Badge>
-                    )}
-                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">
                       {member.user?.profile || 'user'}
