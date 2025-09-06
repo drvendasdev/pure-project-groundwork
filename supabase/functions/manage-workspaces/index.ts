@@ -86,17 +86,31 @@ Deno.serve(async (req) => {
 
       // Update connection limit if provided
       if (connectionLimit !== undefined) {
-        const { error: limitError } = await supabase
+        // First check if the workspace limit already exists
+        const { data: existingLimit } = await supabase
           .from('workspace_limits')
-          .upsert(
-            { 
+          .select('workspace_id')
+          .eq('workspace_id', workspaceId)
+          .single();
+
+        let limitError;
+        if (existingLimit) {
+          // Update existing limit
+          const result = await supabase
+            .from('workspace_limits')
+            .update({ connection_limit: connectionLimit })
+            .eq('workspace_id', workspaceId);
+          limitError = result.error;
+        } else {
+          // Insert new limit
+          const result = await supabase
+            .from('workspace_limits')
+            .insert({ 
               workspace_id: workspaceId, 
               connection_limit: connectionLimit 
-            },
-            { 
-              onConflict: 'workspace_id' 
-            }
-          );
+            });
+          limitError = result.error;
+        }
 
         if (limitError) {
           console.error('Error updating workspace limits:', limitError);
