@@ -24,10 +24,19 @@ serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client with service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
+    console.log('Supabase URL:', supabaseUrl ? 'Present' : 'Missing')
+    console.log('Service Role Key:', supabaseServiceKey ? 'Present' : 'Missing')
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
 
     console.log('Creating instance for workspace:', workspaceId, 'instance:', instanceName)
 
