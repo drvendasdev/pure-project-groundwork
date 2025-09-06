@@ -31,7 +31,7 @@ serve(async (req) => {
       .from('workspace_limits')
       .select('connection_limit')
       .eq('workspace_id', workspaceId)
-      .single()
+      .maybeSingle()
 
     const connectionLimit = limitData?.connection_limit || 1
 
@@ -57,7 +57,7 @@ serve(async (req) => {
       .select('id')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', instanceName)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       return new Response(
