@@ -136,7 +136,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
         throw new Error(createResponse.error || 'Falha ao criar usuário');
       }
 
-      const newUserId = createResponse.user.id;
+      const newUserId = createResponse.data.id;
 
       // Add user to workspace via edge function to handle RLS
       const { data: memberResponse, error: memberError } = await supabase.functions.invoke('manage-workspace-members', {
@@ -158,11 +158,23 @@ export function useWorkspaceMembers(workspaceId?: string) {
 
       fetchMembers();
       return memberResponse.member;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating user and adding to workspace:', error);
+      
+      let errorMessage = "Falha ao criar usuário e adicionar ao workspace";
+      
+      // Check for specific error messages
+      if (error.message?.includes('duplicate key') || error.message?.includes('already exists')) {
+        errorMessage = "Este email já está sendo usado por outro usuário";
+      } else if (error.message?.includes('invalid email')) {
+        errorMessage = "Email inválido";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Erro",
-        description: "Falha ao criar usuário e adicionar ao workspace",
+        description: errorMessage,
         variant: "destructive"
       });
       throw error;
