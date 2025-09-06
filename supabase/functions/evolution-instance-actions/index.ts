@@ -208,7 +208,7 @@ serve(async (req) => {
             instanceName: instanceName,
             token: finalToken,
             qrcode: true,
-            number: '',
+            number: true,
             integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
             business: {
               description: 'WhatsApp Business',
