@@ -21,6 +21,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    console.log('🔍 Buscando conversa:', conversationId);
+    
     // Buscar conversa com contato
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -30,6 +32,8 @@ serve(async (req) => {
       `)
       .eq('id', conversationId)
       .single();
+
+    console.log('📋 Conversa encontrada:', { conversation: !!conversation, error: convError });
 
     if (convError) {
       throw new Error(`Conversa não encontrada: ${convError.message}`);
