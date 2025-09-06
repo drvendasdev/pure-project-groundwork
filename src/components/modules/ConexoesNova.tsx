@@ -173,6 +173,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         workspaceId
       });
 
+      console.log('Created connection:', connection);
+
       toast({
         title: 'Sucesso',
         description: 'Instância criada com sucesso!',
@@ -184,6 +186,14 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       // Reload connections (silently)
       loadConnections();
       refreshLimits(); // Refresh limits after creating connection
+
+      // If connection has QR code, automatically open QR modal
+      if (connection.qr_code) {
+        setSelectedConnection(connection);
+        setIsQRModalOpen(true);
+        // Start polling for connection status
+        startPolling(connection.id);
+      }
 
     } catch (error) {
       console.error('Error creating instance:', error);

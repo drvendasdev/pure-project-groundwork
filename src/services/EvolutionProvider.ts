@@ -63,11 +63,19 @@ class EvolutionProvider {
       }
     });
     
+    console.log('Create connection response:', data);
+    
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to create connection');
     }
     
-    return data.connection;
+    // If there's a QR code in the response, include it in the connection
+    const connection = data.connection;
+    if (data.qr_code && !connection.qr_code) {
+      connection.qr_code = data.qr_code;
+    }
+    
+    return connection;
   }
 
   async getConnectionStatus(connectionId: string): Promise<ConnectionResponse> {
@@ -87,8 +95,14 @@ class EvolutionProvider {
       body: { connectionId }
     });
     
+    console.log('QR Code response:', data);
+    
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to get QR code');
+    }
+    
+    if (!data.qr_code) {
+      throw new Error('QR Code não encontrado na resposta');
     }
     
     return { qr_code: data.qr_code };
