@@ -82,9 +82,9 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
 
   const handleConfirmAddCargo = async (newCargoData: { nome: string; tipo: string; funcao: string }) => {
     const result = await createCargo(newCargoData);
-    if (result.data) {
+    if (!result.error) {
       await loadCargos(); // Recarregar a lista
-      console.log("Cargo adicionado:", result.data);
+      console.log("Cargo adicionado");
     }
     setIsAddModalOpen(false);
   };
@@ -97,9 +97,9 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
       ...cargoData
     });
     
-    if (result.data) {
+    if (!result.error) {
       await loadCargos(); // Recarregar a lista
-      console.log("Cargo editado:", result.data);
+      console.log("Cargo editado");
     }
     setIsEditModalOpen(false);
     setSelectedCargo(undefined);
@@ -108,7 +108,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
   const handleConfirmDeleteCargo = async () => {
     if (selectedCargo) {
       const result = await deleteCargo(selectedCargo.id);
-      if (result.success) {
+      if (!result.error) {
         await loadCargos(); // Recarregar a lista
         console.log("Cargo excluído:", selectedCargo.id);
       }

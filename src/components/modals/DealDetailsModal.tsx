@@ -148,10 +148,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
           subject,
           scheduled_for,
           responsible_id,
-          is_completed,
-          users (
-            name
-          )
+          is_completed
         `)
         .eq('contact_id', contactId)
         .order('scheduled_for', { ascending: true });
@@ -166,7 +163,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('system_users')
         .select('id, name')
         .order('name');
 

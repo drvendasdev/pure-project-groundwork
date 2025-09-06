@@ -67,7 +67,7 @@ export function CreateActivityModal({
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('system_users')
         .select('id, name')
         .order('name');
 
