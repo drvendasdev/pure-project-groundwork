@@ -312,6 +312,31 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       setIsConnecting(true);
       setSelectedConnection(connection);
       
+      // Check if connection already has QR code
+      if (connection.qr_code) {
+        console.log('Using existing QR code:', connection.qr_code);
+        
+        // If qr_code is a JSON string, parse it and extract base64
+        let qrCodeData = connection.qr_code;
+        try {
+          const parsed = JSON.parse(connection.qr_code);
+          if (parsed.base64) {
+            qrCodeData = parsed.base64;
+          }
+        } catch (e) {
+          // If it's not JSON, use as is
+          console.log('QR code is not JSON, using as is');
+        }
+        
+        setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCodeData, status: 'qr' } : null);
+        setIsQRModalOpen(true);
+        
+        // Start polling for connection status
+        startPolling(connection.id);
+        return;
+      }
+      
+      // If no QR code, try to get one from API
       const response = await evolutionProvider.getQRCode(connection.id);
       
       if (response.qr_code) {
