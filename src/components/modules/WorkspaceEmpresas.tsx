@@ -33,7 +33,7 @@ interface WorkspaceEmpresasProps {
 }
 
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
-  const { workspaces, isLoading, deleteWorkspace } = useWorkspaces();
+  const { workspaces, isLoading, deleteWorkspace, fetchWorkspaces } = useWorkspaces();
   const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -79,6 +79,8 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
         await deleteWorkspace(workspaceToDelete.workspace_id);
         setDeleteDialogOpen(false);
         setWorkspaceToDelete(null);
+        // Refresh workspaces list after deletion
+        fetchWorkspaces();
       } catch (error) {
         // Error handled in hook
       }
@@ -89,6 +91,8 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
     setShowCreateModal(open);
     if (!open) {
       setEditingWorkspace(null);
+      // Refresh workspaces list after modal closes
+      fetchWorkspaces();
     }
   };
 
