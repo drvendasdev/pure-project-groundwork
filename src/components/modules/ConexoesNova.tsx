@@ -159,8 +159,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       // Reset form and close modal
       resetModal();
       
-      // Reload connections
-      await loadConnections();
+      // Reload connections (silently)
+      loadConnections();
 
     } catch (error) {
       console.error('Error creating instance:', error);
@@ -197,8 +197,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       // Reset form and close modal
       resetModal();
       
-      // Reload connections
-      await loadConnections();
+      // Reload connections (silently)
+      loadConnections();
 
     } catch (error) {
       console.error('Error editing connection:', error);
@@ -257,7 +257,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         });
       }
 
-      await loadConnections();
+      loadConnections(); // Silent reload
       setIsDeleteModalOpen(false);
       setConnectionToDelete(null);
 
@@ -288,8 +288,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         // Start polling for connection status
         startPolling(connection.id);
         
-        // Reload connections to get updated status
-        await loadConnections();
+        // Reload connections to get updated status (silently)
+        loadConnections();
       } else {
         throw new Error('QR Code não encontrado na resposta');
       }
@@ -326,8 +326,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           setIsQRModalOpen(false);
           setSelectedConnection(null);
           
-          // Reload connections
-          await loadConnections();
+          // Reload connections (silently)
+          loadConnections();
           
           toast({
             title: 'Sucesso',
@@ -341,7 +341,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           setIsQRModalOpen(false);
           setSelectedConnection(null);
           
-          await loadConnections();
+          loadConnections(); // Silent reload
           
           toast({
             title: 'Desconectado',
@@ -382,8 +382,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         });
       }
       
-      // Reload connections
-      await loadConnections();
+      // Reload connections (silently)
+      loadConnections();
 
     } catch (error) {
       console.error('Error disconnecting instance:', error);
