@@ -43,19 +43,22 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
 
         if (error) {
           console.error('Error fetching workspace data from Edge function:', error);
-          setUserWorkspaceRole(null);
+          // Fallback to userRole from auth if Edge function fails
+          console.log('Falling back to userRole from auth:', userRole);
+          setUserWorkspaceRole(userRole === 'master' ? 'master' : userRole === 'admin' ? 'admin' : 'user');
           setUserWorkspaces([]);
+          setLoading(false);
           return;
         }
 
-        const userRole = data?.userRole || 'user';
+        const backendUserRole = data?.userRole || 'user';
         const memberships = data?.userMemberships || [];
 
         if (memberships && memberships.length > 0) {
           setUserWorkspaces(memberships.map((m: any) => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
           
           // Check if user is master in any workspace or globally
-          const isMaster = userRole === 'master' || memberships.some((m: any) => m.role === 'master');
+          const isMaster = backendUserRole === 'master' || memberships.some((m: any) => m.role === 'master');
           if (isMaster) {
             setUserWorkspaceRole('master');
           } else {
@@ -65,12 +68,14 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
           }
         } else {
           // Check if user is globally master
-          setUserWorkspaceRole(userRole === 'master' ? 'master' : null);
+          setUserWorkspaceRole(backendUserRole === 'master' ? 'master' : null);
           setUserWorkspaces([]);
         }
       } catch (error) {
         console.error('Error in fetchUserWorkspaceRoles:', error);
-        setUserWorkspaceRole(null);
+        // Fallback to userRole from auth if there's an exception
+        console.log('Falling back to userRole from auth due to error:', userRole);
+        setUserWorkspaceRole(userRole === 'master' ? 'master' : userRole === 'admin' ? 'admin' : 'user');
         setUserWorkspaces([]);
       } finally {
         setLoading(false);
@@ -78,7 +83,7 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
     };
 
     fetchUserWorkspaceRoles();
-  }, [user?.id]);
+  }, [user?.id, userRole]);
 
   const isMaster = userRole === 'master' || userWorkspaceRole === 'master';
 
