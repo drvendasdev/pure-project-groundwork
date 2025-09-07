@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Plus, Building2, Users, Settings, Calendar, MapPin, MoreVertical, Edit, Trash2, Shield } from "lucide-react";
+import { Plus, Building2, Users, Settings, Calendar, MapPin, MoreVertical, Edit, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,16 +35,12 @@ interface WorkspaceEmpresasProps {
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
   const { workspaces, isLoading, deleteWorkspace, fetchWorkspaces } = useWorkspaces();
   const navigate = useNavigate();
-  const { userRole } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [selectedWorkspace, setSelectedWorkspace] = useState<{ id: string; name: string } | null>(null);
   const [editingWorkspace, setEditingWorkspace] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [workspaceToDelete, setWorkspaceToDelete] = useState<any>(null);
-
-  // Check if user is master
-  const isMaster = userRole === 'master';
 
   const handleUsersClick = (workspace: { workspace_id: string; name: string }) => {
     navigate(`/workspace-empresas/${workspace.workspace_id}/usuarios`);
@@ -133,20 +128,12 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
           <h1 className="text-2xl font-semibold">Empresas</h1>
           <p className="text-muted-foreground">
             Gerencie suas empresas e workspaces
-            {!isMaster && (
-              <Badge variant="outline" className="ml-2 gap-1">
-                <Shield className="w-3 h-3" />
-                Acesso somente leitura
-              </Badge>
-            )}
           </p>
         </div>
-        {isMaster && (
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Nova Empresa
-          </Button>
-        )}
+        <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+          <Plus className="w-4 h-4" />
+          Nova Empresa
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -160,30 +147,28 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
-                    {workspace.connections_count} conexões
+                    conexões: {workspace.connections_count} 
                   </Badge>
-                  {isMaster && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEditClick(workspace)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteClick(workspace)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleEditClick(workspace)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => handleDeleteClick(workspace)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </CardHeader>
@@ -241,14 +226,12 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
           <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">Nenhuma empresa encontrada</h3>
           <p className="text-muted-foreground mb-4">
-            {isMaster ? "Crie sua primeira empresa para começar" : "Você não tem acesso a nenhuma empresa ainda"}
+            Crie sua primeira empresa para começar
           </p>
-          {isMaster && (
-            <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Criar Primeira Empresa
-            </Button>
-          )}
+          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Criar Primeira Empresa
+          </Button>
         </div>
       )}
 
