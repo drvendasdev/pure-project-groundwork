@@ -27,16 +27,15 @@ export function useWorkspaces() {
 
         setWorkspaces(data || []);
       } else {
-        // For regular users, filter by their workspace memberships
+        // For admin and regular users, show their assigned workspaces
         if (!user?.id) {
           setWorkspaces([]);
           return;
         }
 
-        // Only master profile can see all workspaces
-        // Regular users (admin/user) only see their assigned workspaces
+        console.log('Fetching workspaces for user:', user.id, 'with role:', userRole);
         
-        // Admin/user profiles only see their assigned workspaces
+        // Admin and user profiles see their assigned workspaces
         const { data, error } = await supabase
           .from('workspace_members')
           .select(`
@@ -47,11 +46,16 @@ export function useWorkspaces() {
           .eq('user_id', user.id);
 
         if (error) {
+          console.error('Error fetching workspace memberships:', error);
           throw error;
         }
 
+        console.log('Workspace memberships found:', data);
+
         // Get workspaces the user is assigned to
         const filteredWorkspaces = data?.map(membership => membership.workspaces_view) || [];
+
+        console.log('Filtered workspaces:', filteredWorkspaces);
 
         // If no workspaces found, user has no access
         if (filteredWorkspaces.length === 0) {

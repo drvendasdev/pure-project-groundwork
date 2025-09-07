@@ -35,7 +35,7 @@ interface WorkspaceEmpresasProps {
 
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
   const { workspaces, isLoading, deleteWorkspace, fetchWorkspaces } = useWorkspaces();
-  const { isMaster } = useWorkspaceRole();
+  const { isMaster, isAdmin } = useWorkspaceRole();
   const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -206,26 +206,28 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-2"
-                  onClick={() => handleUsersClick(workspace)}
-                >
-                  <Users className="w-4 h-4" />
-                  Usuários
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-2"
-                  onClick={() => handleConfigClick(workspace)}
-                >
-                  <Settings className="w-4 h-4" />
-                  Config
-                </Button>
-              </div>
+              {(isMaster || isAdmin(workspace.workspace_id!)) && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => handleUsersClick(workspace)}
+                  >
+                    <Users className="w-4 h-4" />
+                    Usuários
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => handleConfigClick(workspace)}
+                  >
+                    <Settings className="w-4 h-4" />
+                    Config
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

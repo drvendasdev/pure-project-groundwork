@@ -1338,15 +1338,10 @@ export type Database = {
         Returns: boolean
       }
       is_workspace_member: {
-        Args:
-          | {
-              p_min_role?: Database["public"]["Enums"]["system_profile"]
-              p_workspace_id: string
-            }
-          | {
-              p_min_role?: Database["public"]["Enums"]["workspace_role"]
-              p_workspace_id: string
-            }
+        Args: {
+          p_min_role?: Database["public"]["Enums"]["system_profile"]
+          p_workspace_id: string
+        }
         Returns: boolean
       }
       list_connections_anon: {
