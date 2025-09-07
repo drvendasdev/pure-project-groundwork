@@ -153,7 +153,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
-                    conexões: {workspace.connections_count} 
+                    conexões: {workspace.connections_count || 0}
                   </Badge>
                   {(isMaster || userRole === 'master') && (
                     <DropdownMenu>
