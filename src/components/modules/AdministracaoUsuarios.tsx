@@ -76,6 +76,7 @@ export function AdministracaoUsuarios() {
   const handleAddUser = async (userData: {
     name: string;
     email: string;
+    empresa: string;
     profile: string;
     status: string;
     senha: string;
@@ -86,6 +87,7 @@ export function AdministracaoUsuarios() {
       name: userData.name,
       email: userData.email,
       profile: userData.profile,
+      empresa: userData.empresa,
       status: userData.status,
       senha: userData.senha,
       default_channel: userData.default_channel,
@@ -104,6 +106,7 @@ export function AdministracaoUsuarios() {
       name: updatedUser.name,
       email: updatedUser.email,
       profile: updatedUser.profile,
+      empresa: updatedUser.empresa,
       status: updatedUser.status
     });
 
@@ -172,7 +175,7 @@ export function AdministracaoUsuarios() {
                 </TableCell>
                 <TableCell>
                   <span className="text-foreground capitalize">
-                   /* {user.profile} */
+                   {user.empresa} 
                   </span>
                   <span className="text-foreground capitalize">
                     {user.profile}
