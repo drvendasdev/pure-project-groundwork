@@ -102,6 +102,21 @@ export const useAuthState = () => {
             console.log('Info: Erro no signIn Supabase:', signInError.message);
           } else {
             console.log('Sessão Supabase ativa para chamadas autenticadas');
+            
+            // Ensure user metadata is updated after login
+            try {
+              await supabase.auth.updateUser({
+                data: {
+                  system_user_id: user.id,
+                  system_email: user.email,
+                  system_name: user.name,
+                  system_profile: user.profile
+                }
+              });
+              console.log('User metadata updated successfully');
+            } catch (metadataError) {
+              console.log('Info: Erro ao atualizar metadata (ignorado):', metadataError);
+            }
           }
         }
       } catch (authError) {

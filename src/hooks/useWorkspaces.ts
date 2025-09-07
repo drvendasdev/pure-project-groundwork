@@ -85,6 +85,26 @@ export function useWorkspaces() {
       });
 
       if (error) {
+        // Handle specific error types
+        if (error.message?.includes('401') || error.message?.includes('authenticated')) {
+          toast({
+            title: "Erro de Autenticação",
+            description: "Sua sessão expirou. Faça login novamente.",
+            variant: "destructive"
+          });
+        } else if (error.message?.includes('403') || error.message?.includes('master')) {
+          toast({
+            title: "Acesso Negado",
+            description: "Somente usuários master podem criar empresas.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Erro",
+            description: "Falha ao criar empresa",
+            variant: "destructive"
+          });
+        }
         throw error;
       }
 
@@ -95,13 +115,17 @@ export function useWorkspaces() {
 
       fetchWorkspaces(); // Refresh list
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating workspace:', error);
-      toast({
-        title: "Erro",
-        description: "Falha ao criar empresa",
-        variant: "destructive"
-      });
+      
+      // If error wasn't handled above, show generic message
+      if (!error.message?.includes('401') && !error.message?.includes('403')) {
+        toast({
+          title: "Erro",
+          description: "Falha ao criar empresa",
+          variant: "destructive"
+        });
+      }
       throw error;
     }
   };
