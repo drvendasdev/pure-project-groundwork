@@ -32,6 +32,8 @@ export interface WhatsAppConversation {
   last_activity_at: string;
   created_at: string;
   evolution_instance?: string | null;
+  assigned_user_id?: string | null;
+  connection_id?: string;
   messages: WhatsAppMessage[];
 }
 
@@ -39,15 +41,25 @@ export const useWhatsAppConversations = () => {
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedWorkspace } = useWorkspace();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const fetchConversations = async () => {
     try {
       setLoading(true);
       console.log('🔄 Carregando conversas do WhatsApp...');
 
-      // Use Edge Function to bypass RLS issues
-      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations');
+      if (!user?.id) {
+        console.log('No user ID available');
+        return;
+      }
+
+      // Use Edge Function with user authentication headers
+      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
+        headers: {
+          'x-system-user-id': user.id,
+          'x-system-user-email': user.email || ''
+        }
+      });
 
       if (functionError) {
         throw functionError;
@@ -73,6 +85,56 @@ export const useWhatsAppConversations = () => {
       setLoading(false);
     }
   };
+
+  // Accept conversation function
+  const acceptConversation = useCallback(async (conversationId: string) => {
+    try {
+      if (!user?.id) {
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('conversations')
+        .update({ assigned_user_id: user.id })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('Error accepting conversation:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao aceitar conversa",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Conversa aceita",
+        description: "Você aceitou esta conversa",
+      });
+      
+      // Update local state
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === conversationId 
+            ? { ...conv, assigned_user_id: user.id }
+            : conv
+        )
+      );
+    } catch (error) {
+      console.error('Error in acceptConversation:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao aceitar conversa",
+        variant: "destructive",
+      });
+    }
+  }, [user?.id]);
 
   // Função utilitária para obter tipo de arquivo
   const getFileType = (fileName: string): string => {
@@ -317,7 +379,9 @@ export const useWhatsAppConversations = () => {
 
   // Real-time subscriptions
   useEffect(() => {
-    fetchConversations();
+    if (user?.id) {
+      fetchConversations();
+    }
 
     // Subscription para novas mensagens
     const messagesChannel = supabase
@@ -519,6 +583,7 @@ export const useWhatsAppConversations = () => {
     assumirAtendimento,
     reativarIA,
     clearAllConversations,
-    fetchConversations
+    fetchConversations,
+    acceptConversation
   };
 };

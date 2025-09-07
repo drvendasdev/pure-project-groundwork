@@ -15,6 +15,7 @@ import { parsePhoneNumber } from 'libphonenumber-js';
 import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
 import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
+import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
 import { 
   Search, 
   Send, 
@@ -52,7 +53,8 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     markAsRead, 
     assumirAtendimento, 
     reativarIA, 
-    clearAllConversations 
+    clearAllConversations,
+    acceptConversation
   } = useWhatsAppConversations();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
@@ -733,6 +735,11 @@ const stopRecording = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <AcceptConversationButton
+                    conversationId={selectedConversation.id}
+                    assignedUserId={selectedConversation.assigned_user_id}
+                    onAccept={acceptConversation}
+                  />
                   <Button 
                     variant="ghost" 
                     size="icon"

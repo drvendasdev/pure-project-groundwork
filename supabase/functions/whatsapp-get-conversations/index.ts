@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
 };
 
 serve(async (req) => {
@@ -32,10 +32,47 @@ serve(async (req) => {
       global: { headers: { "X-Client-Info": "whatsapp-get-conversations" } },
     });
 
-    console.log('🔄 Fetching WhatsApp conversations...');
+    // Get user info from headers
+    const systemUserId = req.headers.get('x-system-user-id');
+    const systemUserEmail = req.headers.get('x-system-user-email');
+    
+    console.log('🔄 Fetching WhatsApp conversations for user:', systemUserId);
+    
+    if (!systemUserId) {
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'User authentication required',
+        details: 'x-system-user-id header is missing'
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    // Fetch conversations with contacts (using service role to bypass RLS)
-    const { data: conversationsData, error: conversationsError } = await supabase
+    // Get user's profile to check permissions
+    const { data: userProfile, error: userError } = await supabase
+      .from('system_users')
+      .select('id, profile')
+      .eq('id', systemUserId)
+      .single();
+
+    if (userError || !userProfile) {
+      console.error('❌ Error fetching user profile:', userError);
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'User not found' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`👤 User profile: ${userProfile.profile}`);
+
+    // Check if user is master or admin
+    const isMasterOrAdmin = userProfile.profile === 'master' || userProfile.profile === 'admin';
+    
+    let conversationsQuery = supabase
       .from('conversations')
       .select(`
         id,
@@ -46,6 +83,8 @@ serve(async (req) => {
         created_at,
         evolution_instance,
         contact_id,
+        assigned_user_id,
+        connection_id,
         contacts (
           id,
           name,
@@ -54,7 +93,43 @@ serve(async (req) => {
           profile_image_url
         )
       `)
-      .eq('canal', 'whatsapp')
+      .eq('canal', 'whatsapp');
+
+    if (!isMasterOrAdmin) {
+      // For regular users, filter by their assigned connections
+      // Get user's assigned instance names
+      const { data: userInstances, error: instancesError } = await supabase
+        .from('instance_user_assignments')
+        .select('instance')
+        .eq('user_id', systemUserId);
+
+      if (instancesError) {
+        console.error('❌ Error fetching user instances:', instancesError);
+        throw instancesError;
+      }
+
+      const instanceNames = userInstances?.map(i => i.instance) || [];
+      
+      // Get connections for these instances
+      const { data: userConnections, error: connectionsError } = await supabase
+        .from('connections')
+        .select('id')
+        .in('instance_name', instanceNames);
+
+      if (connectionsError) {
+        console.error('❌ Error fetching user connections:', connectionsError);
+        throw connectionsError;
+      }
+
+      const connectionIds = userConnections?.map(c => c.id) || [];
+      
+      // Filter conversations by user's connections and assignment
+      conversationsQuery = conversationsQuery
+        .in('connection_id', connectionIds)
+        .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
+    }
+
+    const { data: conversationsData, error: conversationsError } = await conversationsQuery
       .order('last_activity_at', { ascending: false });
 
     if (conversationsError) {
@@ -98,6 +173,8 @@ serve(async (req) => {
           last_activity_at: conv.last_activity_at,
           created_at: conv.created_at,
           evolution_instance: conv.evolution_instance,
+          assigned_user_id: conv.assigned_user_id,
+          connection_id: conv.connection_id,
           messages: (messagesData || []).map(msg => ({
             id: msg.id,
             content: msg.content,

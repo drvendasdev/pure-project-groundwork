@@ -48,6 +48,7 @@ export function WorkspaceUsersPage() {
   const { isMaster, isAdmin } = useWorkspaceRole();
   const [showAddUser, setShowAddUser] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'user' | 'admin' | 'master'>('user');
+  const [selectedConnections, setSelectedConnections] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
   const [editingUser, setEditingUser] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,6 +112,34 @@ export function WorkspaceUsersPage() {
       }
     }
   }, [defaultInstance, connections, formData.default_channel]);
+
+  const saveUserConnections = async (userId: string, connectionNames: string[]) => {
+    try {
+      // Delete existing assignments
+      await supabase
+        .from('instance_user_assignments')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert new assignments
+      if (connectionNames.length > 0) {
+        const assignments = connectionNames.map(instanceName => ({
+          user_id: userId,
+          instance: instanceName,
+          is_default: false
+        }));
+
+        const { error } = await supabase
+          .from('instance_user_assignments')
+          .insert(assignments);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Error saving user connections:', error);
+      throw error;
+    }
+  };
 
   const handleCreateUser = async () => {
     if (!formData.name || !formData.email || !formData.profile || !formData.senha) {
@@ -235,6 +264,11 @@ export function WorkspaceUsersPage() {
       // Update workspace role if it changed
       if (selectedRole !== editingUser.role) {
         await updateMember(editingUser.id, { role: selectedRole });
+      }
+
+      // Save user connections
+      if (editingUser.user.id) {
+        await saveUserConnections(editingUser.user.id, selectedConnections);
       }
 
       handleCancel();
@@ -403,6 +437,43 @@ export function WorkspaceUsersPage() {
                     )}
                   </SelectContent>
                 </Select>
+              </div>
+              
+              <div className="space-y-2 col-span-2">
+                <Label>Conexões do Usuário</Label>
+                <div className="border rounded-lg p-3 space-y-2 max-h-32 overflow-y-auto">
+                  {connections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhuma conexão disponível</p>
+                  ) : (
+                    connections.map((connection) => (
+                      <div key={connection.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`connection-${connection.id}`}
+                          checked={selectedConnections.includes(connection.instance_name)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedConnections(prev => [...prev, connection.instance_name]);
+                            } else {
+                              setSelectedConnections(prev => prev.filter(name => name !== connection.instance_name));
+                            }
+                          }}
+                          className="rounded border border-input"
+                        />
+                        <label
+                          htmlFor={`connection-${connection.id}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {connection.instance_name} {connection.phone_number ? `— ${connection.phone_number}` : ''} 
+                          {connection.status === 'connected' && ' ✓'}
+                        </label>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Selecione as conexões que este usuário pode visualizar e gerenciar conversas.
+                </p>
               </div>
             </div>
           </div>
