@@ -38,20 +38,20 @@ interface WorkspaceUsersModalProps {
 }
 
 const roleLabels = {
-  colaborador: 'Colaborador',
-  gestor: 'Gestor',
-  mentor_master: 'Mentor Master'
+  user: 'Usuário',
+  admin: 'Administrador',
+  master: 'Master'
 };
 
 const roleVariants = {
-  colaborador: 'secondary' as const,
-  gestor: 'default' as const,
-  mentor_master: 'destructive' as const
+  user: 'secondary' as const,
+  admin: 'default' as const,
+  master: 'destructive' as const
 };
 
 export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspaceName }: WorkspaceUsersModalProps) {
   const [showAddUser, setShowAddUser] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'colaborador' | 'gestor' | 'mentor_master'>('colaborador');
+  const [selectedRole, setSelectedRole] = useState<'user' | 'admin' | 'master'>('user');
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -145,7 +145,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
         default_channel: '',
         phone: ''
       });
-      setSelectedRole('colaborador');
+      setSelectedRole('user');
       setShowAddUser(false);
       setDefaultInstance(null);
       
@@ -169,12 +169,12 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
       default_channel: '',
       phone: ''
     });
-    setSelectedRole('colaborador');
+    setSelectedRole('user');
     setShowAddUser(false);
     setDefaultInstance(null);
   };
 
-  const handleUpdateRole = async (memberId: string, newRole: 'colaborador' | 'gestor' | 'mentor_master') => {
+  const handleUpdateRole = async (memberId: string, newRole: 'user' | 'admin' | 'master') => {
     try {
       await updateMember(memberId, { role: newRole });
       setEditingMember(null);
@@ -324,14 +324,14 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                 <h5 className="font-medium text-sm text-muted-foreground">Função no Workspace</h5>
                 <div className="space-y-2">
                   <Label>Função</Label>
-                  <Select value={selectedRole} onValueChange={(value: 'colaborador' | 'gestor' | 'mentor_master') => setSelectedRole(value)}>
+                  <Select value={selectedRole} onValueChange={(value: 'user' | 'admin' | 'master') => setSelectedRole(value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="colaborador">Colaborador</SelectItem>
-                      <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="mentor_master">Mentor Master</SelectItem>
+                      <SelectItem value="user">Usuário</SelectItem>
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="master">Master</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -390,7 +390,7 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                         {editingMember?.id === member.id ? (
                           <Select 
                             value={member.role} 
-                            onValueChange={(value: 'colaborador' | 'gestor' | 'mentor_master') => 
+                            onValueChange={(value: 'user' | 'admin' | 'master') => 
                               handleUpdateRole(member.id, value)
                             }
                           >
@@ -398,9 +398,9 @@ export function WorkspaceUsersModal({ open, onOpenChange, workspaceId, workspace
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="colaborador">Colaborador</SelectItem>
-                              <SelectItem value="gestor">Gestor</SelectItem>
-                              <SelectItem value="mentor_master">Mentor Master</SelectItem>
+                              <SelectItem value="user">Usuário</SelectItem>
+                              <SelectItem value="admin">Administrador</SelectItem>
+                              <SelectItem value="master">Master</SelectItem>
                             </SelectContent>
                           </Select>
                         ) : (

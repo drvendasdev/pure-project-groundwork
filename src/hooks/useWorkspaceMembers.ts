@@ -6,7 +6,7 @@ export interface WorkspaceMember {
   id: string;
   workspace_id: string;
   user_id: string;
-  role: 'colaborador' | 'gestor' | 'mentor_master';
+  role: 'user' | 'admin' | 'master';
   is_hidden: boolean;
   created_at: string;
   user?: {
@@ -65,7 +65,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
     fetchMembers();
   }, [workspaceId]);
 
-  const addMember = async (userId: string, role: 'colaborador' | 'gestor' | 'mentor_master') => {
+  const addMember = async (userId: string, role: 'user' | 'admin' | 'master') => {
     if (!workspaceId) return;
 
     try {
@@ -113,7 +113,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
       default_channel?: string;
       phone?: string;
     },
-    role: 'colaborador' | 'gestor' | 'mentor_master'
+    role: 'user' | 'admin' | 'master'
   ) => {
     if (!workspaceId) return;
 
@@ -179,7 +179,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
     }
   };
 
-  const updateMember = async (memberId: string, updates: { role?: 'colaborador' | 'gestor' | 'mentor_master'; is_hidden?: boolean }) => {
+  const updateMember = async (memberId: string, updates: { role?: 'user' | 'admin' | 'master'; is_hidden?: boolean }) => {
     if (!workspaceId) return;
 
     try {

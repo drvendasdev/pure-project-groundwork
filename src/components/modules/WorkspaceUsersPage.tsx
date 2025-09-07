@@ -29,15 +29,15 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 const roleLabels = {
-  colaborador: 'Colaborador',
-  gestor: 'Gestor',
-  mentor_master: 'Mentor Master'
+  user: 'Usuário',
+  admin: 'Administrador',
+  master: 'Master'
 };
 
 const roleVariants = {
-  colaborador: 'secondary' as const,
-  gestor: 'default' as const,
-  mentor_master: 'destructive' as const
+  user: 'secondary' as const,
+  admin: 'default' as const,
+  master: 'destructive' as const
 };
 
 export function WorkspaceUsersPage() {
@@ -45,9 +45,9 @@ export function WorkspaceUsersPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { workspaces } = useWorkspaces();
   const { userRole } = useAuth();
-  const { isMentorMaster, isGestor } = useWorkspaceRole();
+  const { isMaster, isAdmin } = useWorkspaceRole();
   const [showAddUser, setShowAddUser] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'colaborador' | 'gestor' | 'mentor_master'>('colaborador');
+  const [selectedRole, setSelectedRole] = useState<'user' | 'admin' | 'master'>('user');
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
   const [editingUser, setEditingUser] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,7 +70,7 @@ export function WorkspaceUsersPage() {
   const { toast } = useToast();
   
   // Check if user can manage this workspace
-  const canManageWorkspace = userRole === 'master' || isMentorMaster || isGestor(workspaceId);
+  const canManageWorkspace = userRole === 'master' || isMaster || isAdmin(workspaceId);
   
   if (!workspaceId) {
     navigate('/workspace-empresas');
@@ -152,7 +152,7 @@ export function WorkspaceUsersPage() {
         default_channel: '',
         phone: ''
       });
-      setSelectedRole('colaborador');
+      setSelectedRole('user');
       setShowAddUser(false);
       setDefaultInstance(null);
       
@@ -176,13 +176,13 @@ export function WorkspaceUsersPage() {
       default_channel: '',
       phone: ''
     });
-    setSelectedRole('colaborador');
+    setSelectedRole('user');
     setShowAddUser(false);
     setEditingUser(null);
     setDefaultInstance(null);
   };
 
-  const handleUpdateRole = async (memberId: string, newRole: 'colaborador' | 'gestor' | 'mentor_master') => {
+  const handleUpdateRole = async (memberId: string, newRole: 'user' | 'admin' | 'master') => {
     try {
       await updateMember(memberId, { role: newRole });
       setEditingMember(null);
