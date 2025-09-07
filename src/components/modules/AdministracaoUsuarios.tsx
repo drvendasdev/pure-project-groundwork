@@ -175,7 +175,7 @@ export function AdministracaoUsuarios() {
                 </TableCell>
                 <TableCell>
                   <span className="text-foreground capitalize">
-                   {user.empresa} 
+                  empres-1 
                   </span>
                   <span className="text-foreground capitalize">
                     {user.profile}
