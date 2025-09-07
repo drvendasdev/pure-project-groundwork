@@ -27,18 +27,14 @@ export function useWorkspaces() {
 
         setWorkspaces(data || []);
       } else {
-        // For admin and regular users, use current_system_user_id() through edge function
-        // since auth.uid() may not exist for system users
-        const { data, error } = await supabase.rpc('current_system_user_id');
-        
-        if (error || !data) {
-          console.error('Error getting current system user ID:', error);
+        // For admin and regular users, use the system user ID directly
+        if (!user?.id) {
           setWorkspaces([]);
           return;
         }
 
-        const currentSystemUserId = data;
-        console.log('Current system user ID:', currentSystemUserId);
+        const systemUserId = user.id; // This is the system_users.id
+        console.log('Fetching workspaces for system user ID:', systemUserId, 'with role:', userRole);
         
         // Get workspaces for this system user
         const { data: memberships, error: membershipError } = await supabase
@@ -48,7 +44,7 @@ export function useWorkspaces() {
             role,
             workspaces_view!inner(*)
           `)
-          .eq('user_id', currentSystemUserId);
+          .eq('user_id', systemUserId);
 
         if (membershipError) {
           console.error('Error fetching workspace memberships:', membershipError);
