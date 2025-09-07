@@ -174,15 +174,15 @@ export function AdministracaoUsuarios() {
                   {user.email}
                 </TableCell>
                 <TableCell>
-                  <span className="text-foreground capitalize">
-                   {user.empresa} 
-                  </span>
-                  </TableCell>
-              <TableCell>
-                  <span className="text-foreground capitalize">
+                 <span className="text-foreground capitalize">
                     {user.profile}
                   </span>
                 </TableCell>
+              <TableCell>
+               <span className="text-foreground capitalize">
+                   {user.empresa} 
+                  </span>
+            </TableCell>
                 <TableCell>
                   <Badge 
                     variant={user.status === 'active' ? 'secondary' : 'outline'} 
