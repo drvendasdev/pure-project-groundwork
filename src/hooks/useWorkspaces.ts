@@ -11,6 +11,11 @@ export function useWorkspaces() {
   const { user, userRole } = useAuth();
 
   const fetchWorkspaces = async () => {
+    if (!user) {
+      setWorkspaces([]);
+      return;
+    }
+
     setIsLoading(true);
     try {
       // If user is master, show all workspaces (except reserved)
@@ -27,43 +32,28 @@ export function useWorkspaces() {
 
         setWorkspaces(data || []);
       } else {
-        // For admin and regular users, use the system user ID directly
-        if (!user?.id) {
-          setWorkspaces([]);
-          return;
-        }
-
-        const systemUserId = user.id; // This is the system_users.id
-        console.log('Fetching workspaces for system user ID:', systemUserId, 'with role:', userRole);
+        // For admin and regular users, use the Edge function
+        console.log('Fetching workspaces via Edge function for user:', user.id, 'role:', userRole);
         
-        // Get workspaces for this system user
-        const { data: memberships, error: membershipError } = await supabase
-          .from('workspace_members')
-          .select(`
-            workspace_id,
-            role,
-            workspaces_view!inner(*)
-          `)
-          .eq('user_id', systemUserId);
+        const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
+          headers: {
+            'x-system-user-id': user.id,
+            'x-system-user-email': user.email
+          }
+        });
 
-        if (membershipError) {
-          console.error('Error fetching workspace memberships:', membershipError);
-          throw membershipError;
+        if (error) {
+          console.error('Error calling list-user-workspaces function:', error);
+          throw error;
         }
 
-        console.log('Workspace memberships found:', memberships);
-
-        // Get workspaces the user is assigned to
-        const filteredWorkspaces = memberships?.map(membership => membership.workspaces_view) || [];
-
-        console.log('Filtered workspaces:', filteredWorkspaces);
-
-        // If no workspaces found, user has no access
-        if (filteredWorkspaces.length === 0) {
-          console.log('User has no workspace memberships');
+        if (data?.workspaces) {
+          console.log('Found workspaces for user:', data.workspaces);
+          setWorkspaces(data.workspaces);
+        } else {
+          console.log('No workspaces returned from function');
+          setWorkspaces([]);
         }
-
-        setWorkspaces(filteredWorkspaces);
       }
     } catch (error) {
       console.error('Error fetching workspaces:', error);

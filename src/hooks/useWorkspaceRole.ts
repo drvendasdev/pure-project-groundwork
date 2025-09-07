@@ -31,34 +31,39 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
       }
 
       try {
-        const systemUserId = user.id; // This is the system_users.id from AuthContext
-        console.log('Fetching workspace roles for system user ID:', systemUserId);
+        console.log('Fetching workspace roles via Edge function for user:', user.id);
         
-        // Fetch user's workspace memberships using system user ID
-        const { data: memberships, error } = await supabase
-          .from('workspace_members')
-          .select('workspace_id, role')
-          .eq('user_id', systemUserId);
+        // Use the same Edge function to get workspace memberships
+        const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
+          headers: {
+            'x-system-user-id': user.id,
+            'x-system-user-email': user.email
+          }
+        });
 
         if (error) {
-          console.error('Error fetching workspace roles:', error);
+          console.error('Error calling list-user-workspaces function:', error);
           setUserWorkspaceRole(null);
           setUserWorkspaces([]);
           return;
         }
 
-        if (memberships && memberships.length > 0) {
-          setUserWorkspaces(memberships.map(m => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
+        if (data?.userMemberships && data.userMemberships.length > 0) {
+          setUserWorkspaces(data.userMemberships.map((m: any) => ({ workspaceId: m.workspaceId, role: m.role as WorkspaceRole })));
           
           // Check if user is master in any workspace
-          const isMaster = memberships.some(m => m.role === 'master');
+          const isMaster = data.userMemberships.some((m: any) => m.role === 'master');
           if (isMaster) {
             setUserWorkspaceRole('master');
           } else {
             // Set the highest role
-            const hasAdmin = memberships.some(m => m.role === 'admin');
+            const hasAdmin = data.userMemberships.some((m: any) => m.role === 'admin');
             setUserWorkspaceRole(hasAdmin ? 'admin' : 'user');
           }
+        } else if (data?.userRole === 'master') {
+          // Handle master users who might not have explicit workspace memberships
+          setUserWorkspaceRole('master');
+          setUserWorkspaces([]);
         } else {
           setUserWorkspaceRole(null);
           setUserWorkspaces([]);
