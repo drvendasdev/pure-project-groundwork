@@ -95,7 +95,7 @@ serve(async (req) => {
         .eq('workspace_id', workspaceId)
         .single()
       
-      canManageWorkspace = membership?.role === 'gestor' || membership?.role === 'mentor_master'
+      canManageWorkspace = membership?.role === 'admin' || membership?.role === 'master'
     }
     
     if (!canManageWorkspace) {
