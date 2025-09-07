@@ -27,34 +27,38 @@ export function useWorkspaces() {
 
         setWorkspaces(data || []);
       } else {
-        // For admin and regular users, show their assigned workspaces
-        if (!user?.id) {
+        // For admin and regular users, use current_system_user_id() through edge function
+        // since auth.uid() may not exist for system users
+        const { data, error } = await supabase.rpc('current_system_user_id');
+        
+        if (error || !data) {
+          console.error('Error getting current system user ID:', error);
           setWorkspaces([]);
           return;
         }
 
-        console.log('Fetching workspaces for user:', user.id, 'with role:', userRole);
+        const currentSystemUserId = data;
+        console.log('Current system user ID:', currentSystemUserId);
         
-        // Admin and user profiles see their assigned workspaces
-        // Use the system user ID (user.id is the system_users.id)
-        const { data, error } = await supabase
+        // Get workspaces for this system user
+        const { data: memberships, error: membershipError } = await supabase
           .from('workspace_members')
           .select(`
             workspace_id,
             role,
             workspaces_view!inner(*)
           `)
-          .eq('user_id', user.id);
+          .eq('user_id', currentSystemUserId);
 
-        if (error) {
-          console.error('Error fetching workspace memberships:', error);
-          throw error;
+        if (membershipError) {
+          console.error('Error fetching workspace memberships:', membershipError);
+          throw membershipError;
         }
 
-        console.log('Workspace memberships found:', data);
+        console.log('Workspace memberships found:', memberships);
 
         // Get workspaces the user is assigned to
-        const filteredWorkspaces = data?.map(membership => membership.workspaces_view) || [];
+        const filteredWorkspaces = memberships?.map(membership => membership.workspaces_view) || [];
 
         console.log('Filtered workspaces:', filteredWorkspaces);
 

@@ -31,14 +31,22 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
       }
 
       try {
-        // Use the system user ID from the user object (which comes from system_users table)
-        const systemUserId = user.id;
+        // Get current system user ID via database function
+        const { data: currentUserId, error: userIdError } = await supabase.rpc('current_system_user_id');
         
-        // Fetch user's workspace memberships
+        if (userIdError || !currentUserId) {
+          console.error('Error getting current system user ID:', userIdError);
+          setUserWorkspaceRole(null);
+          setUserWorkspaces([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch user's workspace memberships using system user ID
         const { data: memberships, error } = await supabase
           .from('workspace_members')
           .select('workspace_id, role')
-          .eq('user_id', systemUserId);
+          .eq('user_id', currentUserId);
 
         if (error) {
           console.error('Error fetching workspace roles:', error);
