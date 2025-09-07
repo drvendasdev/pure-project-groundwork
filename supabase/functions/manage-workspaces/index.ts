@@ -14,10 +14,56 @@ Deno.serve(async (req) => {
   try {
     const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
     console.log('Request received:', { action, workspaceId, name, cnpj, connectionLimit });
+    
+    // Check user permissions
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Get current user profile
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: {
+            Authorization: authHeader
+          }
+        }
+      }
+    );
+    
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user || !user.user_metadata?.system_user_id) {
+      return new Response(
+        JSON.stringify({ error: 'User not authenticated' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: systemUser } = await supabase
+      .from('system_users')
+      .select('profile')
+      .eq('id', user.user_metadata.system_user_id)
+      .single();
+    
+    if (!systemUser || systemUser.profile !== 'master') {
+      return new Response(
+        JSON.stringify({ error: 'Only master users can manage workspaces' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('User authorized as master for workspace management');
 
     if (action === 'create') {
       const { data, error } = await supabase

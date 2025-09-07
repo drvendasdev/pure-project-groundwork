@@ -75,26 +75,37 @@ export const useAuthState = () => {
 
       const user = data.user;
       
-      // Para sistemas customizados, vamos criar uma sessão "fake" no Supabase
-      // usando signUp com dados que simulam o usuário logado
+      // Criar uma sessão Supabase para permitir checagens no servidor
       try {
-        const { error: authError } = await supabase.auth.signUp({
-          email: `${user.id}@system.local`, // Email único baseado no ID
-          password: user.id, // Senha baseada no ID para consistência
+        // Primeiro tenta fazer signUp (cria conta se não existir)
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: `${user.id}@system.local`,
+          password: user.id,
           options: {
             data: {
               system_user_id: user.id,
               system_email: user.email,
-              system_name: user.name
+              system_name: user.name,
+              system_profile: user.profile
             }
           }
         });
         
-        if (authError && !authError.message.includes('already registered')) {
-          console.log('Info: Usuário Supabase já existe ou outro erro:', authError.message);
+        // Se usuário já existe ou criou com sucesso, fazer signIn
+        if (!signUpError || signUpError.message.includes('already registered')) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: `${user.id}@system.local`,
+            password: user.id
+          });
+          
+          if (signInError) {
+            console.log('Info: Erro no signIn Supabase:', signInError.message);
+          } else {
+            console.log('Sessão Supabase ativa para chamadas autenticadas');
+          }
         }
       } catch (authError) {
-        console.log('Info: Erro na criação da sessão Supabase (ignorado):', authError);
+        console.log('Info: Erro na autenticação Supabase (ignorado):', authError);
       }
 
       // Definir dados do usuário no estado local

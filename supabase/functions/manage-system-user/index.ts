@@ -30,6 +30,52 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // For operations that need permission checks, get current user
+    let currentUserProfile = null;
+    let currentUserWorkspaces: string[] = [];
+    
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader && action === 'list') {
+      try {
+        const supabaseAuth = createClient(
+          supabaseUrl,
+          Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+          {
+            global: {
+              headers: {
+                Authorization: authHeader
+              }
+            }
+          }
+        );
+        
+        const { data: { user } } = await supabaseAuth.auth.getUser();
+        if (user && user.user_metadata?.system_user_id) {
+          const { data: systemUser } = await supabase
+            .from('system_users')
+            .select('profile')
+            .eq('id', user.user_metadata.system_user_id)
+            .single();
+          
+          currentUserProfile = systemUser?.profile;
+          console.log('Current user profile:', currentUserProfile);
+          
+          // Get user workspaces if not master
+          if (currentUserProfile && currentUserProfile !== 'master') {
+            const { data: memberships } = await supabase
+              .from('workspace_members')
+              .select('workspace_id')
+              .eq('user_id', user.user_metadata.system_user_id);
+            
+            currentUserWorkspaces = memberships?.map(m => m.workspace_id) || [];
+            console.log('Current user workspaces:', currentUserWorkspaces);
+          }
+        }
+      } catch (authError) {
+        console.log('Auth check error (continuing with service role):', authError);
+      }
+    }
+
     if (action === 'create') {
       const { name, email, profile, senha, cargo_ids, default_channel, status } = userData;
       
@@ -133,11 +179,26 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Enrich users with workspace information
-      if (users && users.length > 0) {
-        const userIds = users.map(user => user.id);
+      // Filter users based on current user permissions
+      let filteredUsers = users;
+      
+      if (currentUserProfile === 'admin' && currentUserWorkspaces.length > 0) {
+        // Admin users only see users from their workspaces
+        const { data: memberships } = await supabase
+          .from('workspace_members')
+          .select('user_id')
+          .in('workspace_id', currentUserWorkspaces);
         
-        // Get workspace memberships for all users
+        const allowedUserIds = new Set(memberships?.map(m => m.user_id) || []);
+        filteredUsers = users.filter(user => allowedUserIds.has(user.id));
+        console.log('Filtered users for admin:', filteredUsers.length, 'out of', users.length);
+      }
+
+      // Enrich users with workspace information
+      if (filteredUsers && filteredUsers.length > 0) {
+        const userIds = filteredUsers.map(user => user.id);
+        
+        // Get workspace memberships for filtered users
         const { data: memberships } = await supabase
           .from('workspace_members')
           .select('user_id, role, workspace_id')
@@ -157,7 +218,7 @@ Deno.serve(async (req) => {
         }
 
         // Enrich each user with workspace data
-        const enrichedUsers = users.map(user => {
+        const enrichedUsers = filteredUsers.map(user => {
           const userMemberships = memberships ? memberships.filter(m => m.user_id === user.id) : [];
           const userWorkspaces = userMemberships.map(m => ({
             id: m.workspace_id,

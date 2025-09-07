@@ -21,10 +21,71 @@ serve(async (req) => {
       )
     }
 
+    // Check user permissions
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Authorization required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Get current user profile
+    const supabaseAuth = createClient(
+      supabaseUrl,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      {
+        global: {
+          headers: {
+            Authorization: authHeader
+          }
+        }
+      }
+    )
+    
+    const { data: { user } } = await supabaseAuth.auth.getUser()
+    if (!user || !user.user_metadata?.system_user_id) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'User not authenticated' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { data: systemUser } = await supabase
+      .from('system_users')
+      .select('profile')
+      .eq('id', user.user_metadata.system_user_id)
+      .single()
+    
+    // Check if user can manage this workspace
+    const isMaster = systemUser?.profile === 'master'
+    let canManageWorkspace = isMaster
+    
+    if (!isMaster) {
+      // Check if user is gestor or mentor_master in this workspace
+      const { data: membership } = await supabase
+        .from('workspace_members')
+        .select('role')
+        .eq('user_id', user.user_metadata.system_user_id)
+        .eq('workspace_id', workspaceId)
+        .single()
+      
+      canManageWorkspace = membership?.role === 'gestor' || membership?.role === 'mentor_master'
+    }
+    
+    if (!canManageWorkspace) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Insufficient permissions to manage this workspace' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`User authorized to manage workspace ${workspaceId}`)
 
     switch (action) {
       case 'list':
