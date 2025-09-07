@@ -32,28 +32,42 @@ export function useWorkspaces() {
 
         setWorkspaces(data || []);
       } else {
-        // For admin and regular users, use the Edge function
-        console.log('Fetching workspaces via Edge function for user:', user.id, 'role:', userRole);
+        // For admin and regular users, get workspaces they're members of
+        console.log('Fetching workspaces via membership for user:', user.id, 'role:', userRole);
         
-        const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
-          headers: {
-            'x-system-user-id': user.id,
-            'x-system-user-email': user.email
-          }
-        });
+        const { data: memberships, error } = await supabase
+          .from('workspace_members')
+          .select(`
+            workspace_id,
+            workspaces!inner(
+              id,
+              name,
+              slug,
+              cnpj,
+              created_at,
+              updated_at
+            )
+          `)
+          .eq('user_id', user.id);
 
         if (error) {
-          console.error('Error calling list-user-workspaces function:', error);
+          console.error('Error fetching workspace memberships:', error);
           throw error;
         }
 
-        if (data?.workspaces) {
-          console.log('Found workspaces for user:', data.workspaces);
-          setWorkspaces(data.workspaces);
-        } else {
-          console.log('No workspaces returned from function');
-          setWorkspaces([]);
-        }
+        // Transform the data to match expected format
+        const workspaceData = memberships?.map(m => ({
+          workspace_id: m.workspaces.id,
+          name: m.workspaces.name,
+          slug: m.workspaces.slug,
+          cnpj: m.workspaces.cnpj,
+          created_at: m.workspaces.created_at,
+          updated_at: m.workspaces.updated_at,
+          connections_count: 0 // We don't need this for basic functionality
+        })) || [];
+
+        console.log('Found workspaces for user:', workspaceData);
+        setWorkspaces(workspaceData);
       }
     } catch (error) {
       console.error('Error fetching workspaces:', error);

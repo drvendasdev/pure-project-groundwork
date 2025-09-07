@@ -31,39 +31,33 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
       }
 
       try {
-        console.log('Fetching workspace roles via Edge function for user:', user.id);
+        console.log('Fetching workspace roles via direct query for user:', user.id);
         
-        // Use the same Edge function to get workspace memberships
-        const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
-          headers: {
-            'x-system-user-id': user.id,
-            'x-system-user-email': user.email
-          }
-        });
+        // Get workspace memberships directly
+        const { data: memberships, error } = await supabase
+          .from('workspace_members')
+          .select('workspace_id, role')
+          .eq('user_id', user.id);
 
         if (error) {
-          console.error('Error calling list-user-workspaces function:', error);
+          console.error('Error fetching workspace memberships:', error);
           setUserWorkspaceRole(null);
           setUserWorkspaces([]);
           return;
         }
 
-        if (data?.userMemberships && data.userMemberships.length > 0) {
-          setUserWorkspaces(data.userMemberships.map((m: any) => ({ workspaceId: m.workspaceId, role: m.role as WorkspaceRole })));
+        if (memberships && memberships.length > 0) {
+          setUserWorkspaces(memberships.map(m => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
           
           // Check if user is master in any workspace
-          const isMaster = data.userMemberships.some((m: any) => m.role === 'master');
+          const isMaster = memberships.some(m => m.role === 'master');
           if (isMaster) {
             setUserWorkspaceRole('master');
           } else {
             // Set the highest role
-            const hasAdmin = data.userMemberships.some((m: any) => m.role === 'admin');
+            const hasAdmin = memberships.some(m => m.role === 'admin');
             setUserWorkspaceRole(hasAdmin ? 'admin' : 'user');
           }
-        } else if (data?.userRole === 'master') {
-          // Handle master users who might not have explicit workspace memberships
-          setUserWorkspaceRole('master');
-          setUserWorkspaces([]);
         } else {
           setUserWorkspaceRole(null);
           setUserWorkspaces([]);
