@@ -192,7 +192,7 @@ serve(async (req) => {
         }
 
         // Transform the data to match the expected format
-        const members = membersData.map(member => {
+        let members = membersData.map(member => {
           const user = users?.find(u => u.id === member.user_id)
           return {
             id: member.id,
@@ -210,6 +210,11 @@ serve(async (req) => {
             } : null
           }
         })
+
+        // Filter out master users if current user is not master (hide master users from admins)
+        if (!isMaster) {
+          members = members.filter(member => member.user?.profile !== 'master')
+        }
 
         return new Response(
           JSON.stringify({ success: true, members }),
