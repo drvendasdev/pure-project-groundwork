@@ -203,12 +203,12 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       icon: <Users className="w-5 h-5" />,
       group: "administracao"
     },
-    {
-      id: "administracao-financeiro",
-      label: "Financeiro",
-      icon: <DollarSign className="w-5 h-5" />,
-      group: "administracao"
-    },
+    // {
+    //  id: "administracao-financeiro",
+     // label: "Financeiro",
+     // icon: <DollarSign className="w-5 h-5" />,
+//group: "administracao"
+  //  },
     {
       id: "administracao-configuracoes",
       label: "Configurações",
