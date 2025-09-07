@@ -175,10 +175,10 @@ export function AdministracaoUsuarios() {
                 </TableCell>
                 <TableCell>
                   <span className="text-foreground capitalize">
-                  empres-1 
+                   {user.profile} 
                   </span>
                   <span className="text-foreground capitalize">
-                    {user.profile}
+                    {user.empresa}
                   </span>
                 </TableCell>
                 <TableCell>
