@@ -31,35 +31,41 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
       }
 
       try {
-        console.log('Fetching workspace roles via direct query for user:', user.id);
+        console.log('Fetching workspace roles via Edge function for user:', user.id);
         
-        // Get workspace memberships directly
-        const { data: memberships, error } = await supabase
-          .from('workspace_members')
-          .select('workspace_id, role')
-          .eq('user_id', user.id);
+        // Use the Edge function to get workspace data and role information
+        const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
+          headers: {
+            'x-system-user-id': user.id,
+            'x-system-user-email': user.email || ''
+          }
+        });
 
         if (error) {
-          console.error('Error fetching workspace memberships:', error);
+          console.error('Error fetching workspace data from Edge function:', error);
           setUserWorkspaceRole(null);
           setUserWorkspaces([]);
           return;
         }
 
+        const userRole = data?.userRole || 'user';
+        const memberships = data?.userMemberships || [];
+
         if (memberships && memberships.length > 0) {
-          setUserWorkspaces(memberships.map(m => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
+          setUserWorkspaces(memberships.map((m: any) => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
           
-          // Check if user is master in any workspace
-          const isMaster = memberships.some(m => m.role === 'master');
+          // Check if user is master in any workspace or globally
+          const isMaster = userRole === 'master' || memberships.some((m: any) => m.role === 'master');
           if (isMaster) {
             setUserWorkspaceRole('master');
           } else {
             // Set the highest role
-            const hasAdmin = memberships.some(m => m.role === 'admin');
+            const hasAdmin = memberships.some((m: any) => m.role === 'admin');
             setUserWorkspaceRole(hasAdmin ? 'admin' : 'user');
           }
         } else {
-          setUserWorkspaceRole(null);
+          // Check if user is globally master
+          setUserWorkspaceRole(userRole === 'master' ? 'master' : null);
           setUserWorkspaces([]);
         }
       } catch (error) {

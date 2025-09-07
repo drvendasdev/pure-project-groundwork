@@ -18,57 +18,34 @@ export function useWorkspaces() {
 
     setIsLoading(true);
     try {
-      // If user is master, show all workspaces (except reserved)
-      if (userRole === 'master') {
-        const { data, error } = await supabase
-          .from('workspaces_view')
-          .select('*')
-          .neq('workspace_id', '00000000-0000-0000-0000-000000000000')
-          .order('name');
-
-        if (error) {
-          throw error;
+      // Always use the Edge function to bypass RLS issues
+      console.log('Fetching workspaces via Edge function for user:', user.id, 'role:', userRole);
+      
+      const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
+        headers: {
+          'x-system-user-id': user.id,
+          'x-system-user-email': user.email || ''
         }
+      });
 
-        setWorkspaces(data || []);
-      } else {
-        // For admin and regular users, get workspaces they're members of
-        console.log('Fetching workspaces via membership for user:', user.id, 'role:', userRole);
-        
-        const { data: memberships, error } = await supabase
-          .from('workspace_members')
-          .select(`
-            workspace_id,
-            workspaces!inner(
-              id,
-              name,
-              slug,
-              cnpj,
-              created_at,
-              updated_at
-            )
-          `)
-          .eq('user_id', user.id);
-
-        if (error) {
-          console.error('Error fetching workspace memberships:', error);
-          throw error;
-        }
-
-        // Transform the data to match expected format
-        const workspaceData = memberships?.map(m => ({
-          workspace_id: m.workspaces.id,
-          name: m.workspaces.name,
-          slug: m.workspaces.slug,
-          cnpj: m.workspaces.cnpj,
-          created_at: m.workspaces.created_at,
-          updated_at: m.workspaces.updated_at,
-          connections_count: 0 // We don't need this for basic functionality
-        })) || [];
-
-        console.log('Found workspaces for user:', workspaceData);
-        setWorkspaces(workspaceData);
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
       }
+
+      // Transform the data to match expected format
+      const workspaceData = data?.workspaces?.map((w: any) => ({
+        workspace_id: w.workspace_id || w.id,
+        name: w.name,
+        slug: w.slug,
+        cnpj: w.cnpj,
+        created_at: w.created_at,
+        updated_at: w.updated_at,
+        connections_count: w.connections_count || 0
+      })) || [];
+
+      console.log('Found workspaces for user:', workspaceData);
+      setWorkspaces(workspaceData);
     } catch (error) {
       console.error('Error fetching workspaces:', error);
       toast({
