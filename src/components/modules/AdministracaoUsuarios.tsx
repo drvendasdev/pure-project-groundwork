@@ -106,6 +106,7 @@ export function AdministracaoUsuarios() {
       name: updatedUser.name,
       email: updatedUser.email,
       profile: updatedUser.profile,
+      empresa: updatedUser.empresa,
       status: updatedUser.status
     });
 
@@ -177,6 +178,7 @@ export function AdministracaoUsuarios() {
                    {user.empresa} 
                   </span>
                   </TableCell>
+              <TableCell>
                   <span className="text-foreground capitalize">
                     {user.profile}
                   </span>
