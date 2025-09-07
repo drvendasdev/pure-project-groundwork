@@ -155,6 +155,7 @@ export function AdministracaoUsuarios() {
               <TableHead className="text-foreground font-medium text-center">Nome</TableHead>
               <TableHead className="text-foreground font-medium">Email</TableHead>
               <TableHead className="text-foreground font-medium">Perfil</TableHead>
+              <TableHead className="text-foreground font-medium">Empresa</TableHead>
               <TableHead className="text-foreground font-medium">Status</TableHead>
               <TableHead className="text-foreground font-medium text-center">Ações</TableHead>
             </TableRow>
@@ -170,6 +171,9 @@ export function AdministracaoUsuarios() {
                   {user.email}
                 </TableCell>
                 <TableCell>
+                  <span className="text-foreground capitalize">
+                   /* {user.profile} */
+                  </span>
                   <span className="text-foreground capitalize">
                     {user.profile}
                   </span>
