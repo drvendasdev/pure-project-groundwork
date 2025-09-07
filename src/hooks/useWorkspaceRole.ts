@@ -31,11 +31,14 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
       }
 
       try {
+        // Use the system user ID from the user object (which comes from system_users table)
+        const systemUserId = user.id;
+        
         // Fetch user's workspace memberships
         const { data: memberships, error } = await supabase
           .from('workspace_members')
           .select('workspace_id, role')
-          .eq('user_id', user.id);
+          .eq('user_id', systemUserId);
 
         if (error) {
           console.error('Error fetching workspace roles:', error);

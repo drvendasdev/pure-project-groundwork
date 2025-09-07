@@ -36,6 +36,7 @@ export function useWorkspaces() {
         console.log('Fetching workspaces for user:', user.id, 'with role:', userRole);
         
         // Admin and user profiles see their assigned workspaces
+        // Use the system user ID (user.id is the system_users.id)
         const { data, error } = await supabase
           .from('workspace_members')
           .select(`
