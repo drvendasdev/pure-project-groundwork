@@ -87,7 +87,6 @@ export function AdministracaoUsuarios() {
       name: userData.name,
       email: userData.email,
       profile: userData.profile,
-      empresa: userData.empresa,
       status: userData.status,
       senha: userData.senha,
       default_channel: userData.default_channel,
@@ -100,13 +99,11 @@ export function AdministracaoUsuarios() {
     }
   };
   const handleUpdateUser = async (updatedUser: SystemUser) => {
-
     const result = await updateUser({
       id: updatedUser.id,
       name: updatedUser.name,
       email: updatedUser.email,
       profile: updatedUser.profile,
-      empresa: updatedUser.empresa,
       status: updatedUser.status
     });
 
@@ -178,9 +175,9 @@ export function AdministracaoUsuarios() {
                     {user.profile}
                   </span>
                 </TableCell>
-              <TableCell>
-               <span className="text-foreground capitalize">
-                   {user.empresa} 
+               <TableCell>
+                <span className="text-foreground">
+                   {user.empresa || (user.workspaces?.map(w => w.name).join(", ") || "-")} 
                   </span>
             </TableCell>
                 <TableCell>

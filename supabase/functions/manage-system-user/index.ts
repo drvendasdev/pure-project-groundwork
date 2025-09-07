@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'list') {
-      const { data, error } = await supabase
+      const { data: users, error } = await supabase
         .from('system_users_view')
         .select('*')
         .order('created_at', { ascending: false });
@@ -133,8 +133,63 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Enrich users with workspace information
+      if (users && users.length > 0) {
+        const userIds = users.map(user => user.id);
+        
+        // Get workspace memberships for all users
+        const { data: memberships } = await supabase
+          .from('workspace_members')
+          .select('user_id, role, workspace_id')
+          .in('user_id', userIds);
+
+        // Get workspace details
+        const workspaceIds = memberships ? Array.from(new Set(memberships.map(m => m.workspace_id))) : [];
+        const { data: workspaces } = await supabase
+          .from('workspaces')
+          .select('id, name')
+          .in('id', workspaceIds);
+
+        // Create workspace lookup
+        const workspaceMap = new Map();
+        if (workspaces) {
+          workspaces.forEach(ws => workspaceMap.set(ws.id, ws));
+        }
+
+        // Enrich each user with workspace data
+        const enrichedUsers = users.map(user => {
+          const userMemberships = memberships ? memberships.filter(m => m.user_id === user.id) : [];
+          const userWorkspaces = userMemberships.map(m => ({
+            id: m.workspace_id,
+            name: workspaceMap.get(m.workspace_id)?.name || 'Workspace não encontrado',
+            role: m.role
+          }));
+
+          // Create empresa summary string
+          let empresa = '-';
+          if (userWorkspaces.length > 0) {
+            if (userWorkspaces.length === 1) {
+              empresa = userWorkspaces[0].name;
+            } else {
+              empresa = `${userWorkspaces[0].name} (+${userWorkspaces.length - 1})`;
+            }
+          }
+
+          return {
+            ...user,
+            workspaces: userWorkspaces,
+            empresa
+          };
+        });
+
+        return new Response(
+          JSON.stringify({ success: true, data: enrichedUsers }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ success: true, data }),
+        JSON.stringify({ success: true, data: users }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
