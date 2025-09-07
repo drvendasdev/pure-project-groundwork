@@ -81,7 +81,11 @@ export function useWorkspaces() {
   const createWorkspace = async (name: string, cnpj?: string, connectionLimit?: number) => {
     try {
       const { data, error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'create', name, cnpj, connectionLimit }
+        body: { action: 'create', name, cnpj, connectionLimit },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || ''
+        }
       });
 
       if (error) {
@@ -133,7 +137,11 @@ export function useWorkspaces() {
   const updateWorkspace = async (workspaceId: string, updates: { name?: string; cnpj?: string; connectionLimit?: number }) => {
     try {
       const { error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'update', workspaceId, ...updates }
+        body: { action: 'update', workspaceId, ...updates },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || ''
+        }
       });
 
       if (error) {
@@ -160,7 +168,11 @@ export function useWorkspaces() {
   const deleteWorkspace = async (workspaceId: string) => {
     try {
       const { error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'delete', workspaceId }
+        body: { action: 'delete', workspaceId },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || ''
+        }
       });
 
       if (error) {
