@@ -53,8 +53,8 @@ Deno.serve(async (req) => {
     // Get system_user_id from metadata or fallback to extracting from synthetic email
     let systemUserId = user.user_metadata?.system_user_id;
     if (!systemUserId && user.email) {
-      // Extract UUID from synthetic email format: ${uuid}@system.local
-      const emailMatch = user.email.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})@system\.local$/);
+      // Extract UUID from synthetic email format: ${uuid}@{domain}
+      const emailMatch = user.email.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})@/);
       if (emailMatch) {
         systemUserId = emailMatch[1];
         console.log('Extracted system_user_id from email:', systemUserId);

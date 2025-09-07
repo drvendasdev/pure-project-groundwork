@@ -49,7 +49,27 @@ serve(async (req) => {
     )
     
     const { data: { user } } = await supabaseAuth.auth.getUser()
-    if (!user || !user.user_metadata?.system_user_id) {
+    if (!user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'User not authenticated' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Get system_user_id from metadata or fallback to extracting from synthetic email
+    let systemUserId = user.user_metadata?.system_user_id;
+    if (!systemUserId && user.email) {
+      // Extract UUID from synthetic email format: ${uuid}@{domain}
+      const emailMatch = user.email.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})@/);
+      if (emailMatch) {
+        systemUserId = emailMatch[1];
+        console.log('Extracted system_user_id from email:', systemUserId);
+      }
+    } else if (systemUserId) {
+      console.log('Using system_user_id from metadata:', systemUserId);
+    }
+
+    if (!systemUserId) {
       return new Response(
         JSON.stringify({ success: false, error: 'User not authenticated' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -59,7 +79,7 @@ serve(async (req) => {
     const { data: systemUser } = await supabase
       .from('system_users')
       .select('profile')
-      .eq('id', user.user_metadata.system_user_id)
+      .eq('id', systemUserId)
       .single()
     
     // Check if user can manage this workspace
@@ -71,7 +91,7 @@ serve(async (req) => {
       const { data: membership } = await supabase
         .from('workspace_members')
         .select('role')
-        .eq('user_id', user.user_metadata.system_user_id)
+        .eq('user_id', systemUserId)
         .eq('workspace_id', workspaceId)
         .single()
       

@@ -79,7 +79,7 @@ export const useAuthState = () => {
       try {
         // Primeiro tenta fazer signUp (cria conta se não existir)
         const { error: signUpError } = await supabase.auth.signUp({
-          email: `${user.id}@system.local`,
+          email: `${user.id}@example.com`,
           password: user.id,
           options: {
             data: {
@@ -94,7 +94,7 @@ export const useAuthState = () => {
         // Se usuário já existe ou criou com sucesso, fazer signIn
         if (!signUpError || signUpError.message.includes('already registered')) {
           const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: `${user.id}@system.local`,
+            email: `${user.id}@example.com`,
             password: user.id
           });
           
