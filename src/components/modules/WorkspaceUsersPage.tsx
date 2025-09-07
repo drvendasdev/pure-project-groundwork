@@ -70,7 +70,7 @@ export function WorkspaceUsersPage() {
   const { toast } = useToast();
   
   // Check if user can manage this workspace
-  const canManageWorkspace = userRole === 'master' || isMaster || isAdmin(workspaceId);
+  const canManageWorkspace = userRole === 'master' || isMaster || isAdmin(workspaceId) || userRole === 'admin';
   
   if (!workspaceId) {
     navigate('/workspace-empresas');
