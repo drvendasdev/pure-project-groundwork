@@ -96,6 +96,8 @@ serve(async (req) => {
       .eq('canal', 'whatsapp');
 
     if (!isMasterOrAdmin) {
+      console.log('🔒 User is not admin/master, filtering by assigned connections');
+      
       // For regular users, filter by their assigned connections
       // Get user's assigned instance names
       const { data: userInstances, error: instancesError } = await supabase
@@ -108,7 +110,18 @@ serve(async (req) => {
         throw instancesError;
       }
 
+      console.log(`👤 User has ${userInstances?.length || 0} assigned instances`);
       const instanceNames = userInstances?.map(i => i.instance) || [];
+      
+      if (instanceNames.length === 0) {
+        console.log('⚠️ User has no assigned instances, returning empty result');
+        return new Response(JSON.stringify({
+          success: true,
+          data: []
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       
       // Get connections for these instances
       const { data: userConnections, error: connectionsError } = await supabase
@@ -122,11 +135,24 @@ serve(async (req) => {
       }
 
       const connectionIds = userConnections?.map(c => c.id) || [];
+      console.log(`🔗 User has access to ${connectionIds.length} connections`);
+      
+      if (connectionIds.length === 0) {
+        console.log('⚠️ User has no accessible connections, returning empty result');
+        return new Response(JSON.stringify({
+          success: true,
+          data: []
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       
       // Filter conversations by user's connections and assignment
       conversationsQuery = conversationsQuery
         .in('connection_id', connectionIds)
         .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
+    } else {
+      console.log('👑 User is admin/master, fetching all conversations');
     }
 
     const { data: conversationsData, error: conversationsError } = await conversationsQuery
@@ -205,11 +231,13 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Error in whatsapp-get-conversations:', error);
+    console.error('❌ Error details:', error.stack);
     
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message 
+        error: error.message,
+        details: error.stack 
       }),
       { 
         status: 500,

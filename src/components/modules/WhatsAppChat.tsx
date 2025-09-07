@@ -528,6 +528,22 @@ const stopRecording = () => {
 
         {/* Lista de conversas */}
         <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+              </div>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center space-y-2">
+                <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
+                <p className="text-xs text-muted-foreground">Configure conexões WhatsApp para ver conversas</p>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-0">
             {filteredConversations.map((conversation) => {
               const lastMessage = getLastMessage(conversation);
@@ -667,6 +683,7 @@ const stopRecording = () => {
               );
             })}
           </div>
+          )}
         </ScrollArea>
 
         {/* Campo para nova conversa */}

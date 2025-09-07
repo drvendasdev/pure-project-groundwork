@@ -55,6 +55,7 @@ export const useWhatsAppConversations = () => {
 
       // Use Edge Function with user authentication headers
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
+        method: 'GET',
         headers: {
           'x-system-user-id': user.id,
           'x-system-user-email': user.email || ''
@@ -73,14 +74,28 @@ export const useWhatsAppConversations = () => {
       
       setConversations(conversationsWithMessages);
       console.log(`✅ ${conversationsWithMessages.length} conversas carregadas`);
+      
+      if (conversationsWithMessages.length === 0) {
+        console.log('ℹ️ Nenhuma conversa encontrada. Verifique se há conexões configuradas e conversas ativas.');
+      }
     } catch (error) {
       console.error('❌ Erro ao buscar conversas:', error);
       console.error('Error details:', error.message, error.details);
-      toast({
-        title: "Erro",
-        description: `Erro ao carregar conversas do WhatsApp: ${error.message}`,
-        variant: "destructive",
-      });
+      
+      // If it's a fetch error, provide more specific guidance
+      if (error.name === 'FunctionsFetchError') {
+        toast({
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erro",
+          description: `Erro ao carregar conversas do WhatsApp: ${error.message}`,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
     }
