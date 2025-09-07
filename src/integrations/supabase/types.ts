@@ -1155,7 +1155,7 @@ export type Database = {
           created_at: string
           id: string
           is_hidden: boolean
-          role: Database["public"]["Enums"]["workspace_role"]
+          role: Database["public"]["Enums"]["system_profile"]
           user_id: string
           workspace_id: string
         }
@@ -1163,7 +1163,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hidden?: boolean
-          role?: Database["public"]["Enums"]["workspace_role"]
+          role?: Database["public"]["Enums"]["system_profile"]
           user_id: string
           workspace_id: string
         }
@@ -1171,7 +1171,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hidden?: boolean
-          role?: Database["public"]["Enums"]["workspace_role"]
+          role?: Database["public"]["Enums"]["system_profile"]
           user_id?: string
           workspace_id?: string
         }
@@ -1385,6 +1385,7 @@ export type Database = {
     Enums: {
       app_role: "master" | "user" | "admin"
       org_role: "OWNER" | "ADMIN" | "USER"
+      system_profile: "master" | "admin" | "user"
       workspace_role: "mentor_master" | "gestor" | "colaborador"
     }
     CompositeTypes: {
@@ -1515,6 +1516,7 @@ export const Constants = {
     Enums: {
       app_role: ["master", "user", "admin"],
       org_role: ["OWNER", "ADMIN", "USER"],
+      system_profile: ["master", "admin", "user"],
       workspace_role: ["mentor_master", "gestor", "colaborador"],
     },
   },
