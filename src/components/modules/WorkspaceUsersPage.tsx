@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, User, UserPlus, Edit, Trash, Eye, EyeOff } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import {
   Table,
   TableBody,
@@ -42,6 +44,8 @@ export function WorkspaceUsersPage() {
   const navigate = useNavigate();
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { workspaces } = useWorkspaces();
+  const { userRole } = useAuth();
+  const { isMentorMaster, isGestor } = useWorkspaceRole();
   const [showAddUser, setShowAddUser] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'colaborador' | 'gestor' | 'mentor_master'>('colaborador');
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
@@ -64,6 +68,9 @@ export function WorkspaceUsersPage() {
   const { members, isLoading, createUserAndAddToWorkspace, updateMember, updateUser, removeMember } = useWorkspaceMembers(workspaceId || '');
   const { connections, isLoading: connectionsLoading } = useWorkspaceConnections(workspaceId || '');
   const { toast } = useToast();
+  
+  // Check if user can manage this workspace
+  const canManageWorkspace = userRole === 'master' || isMentorMaster || isGestor(workspaceId);
   
   if (!workspaceId) {
     navigate('/workspace-empresas');
@@ -279,16 +286,18 @@ export function WorkspaceUsersPage() {
       {/* Add User Section */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">Membros ({members.length})</h3>
-        <Button
-          onClick={() => setShowAddUser(!showAddUser)}
-          className="gap-2"
-        >
-          <UserPlus className="w-4 h-4" />
-          Adicionar Usuário
-        </Button>
+        {canManageWorkspace && (
+          <Button
+            onClick={() => setShowAddUser(!showAddUser)}
+            className="gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            Adicionar Usuário
+          </Button>
+        )}
       </div>
 
-      {showAddUser && (
+      {showAddUser && canManageWorkspace && (
         <div className="border rounded-lg p-6 space-y-6">
           <h4 className="font-medium text-lg">
             {editingUser ? 'Editar Usuário' : 'Criar Novo Usuário'}
@@ -454,30 +463,37 @@ export function WorkspaceUsersPage() {
                   <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleEditUser(member)}
-                        title="Editar usuário"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditingMember(editingMember?.id === member.id ? null : member)}
-                        title="Editar função"
-                      >
-                        <User className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRemoveMember(member.id)}
-                        title="Remover membro"
-                      >
-                        <Trash className="w-4 h-4" />
-                      </Button>
+                      {canManageWorkspace && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditUser(member)}
+                            title="Editar usuário"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditingMember(editingMember?.id === member.id ? null : member)}
+                            title="Editar função"
+                          >
+                            <User className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveMember(member.id)}
+                            title="Remover membro"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                      {!canManageWorkspace && (
+                        <span className="text-muted-foreground text-sm">Somente leitura</span>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
