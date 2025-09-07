@@ -46,6 +46,31 @@ export function useWorkspaces() {
 
       console.log('Found workspaces for user:', workspaceData);
       setWorkspaces(workspaceData);
+
+      // Fallback: buscar connections_count diretamente se não veio da Edge function
+      if (workspaceData.some((w: any) => !w.connections_count && w.connections_count !== 0)) {
+        console.log('Fetching connections count as fallback...');
+        try {
+          const { data: connectionsData } = await supabase
+            .from('connections')
+            .select('workspace_id')
+            .in('workspace_id', workspaceData.map((w: any) => w.workspace_id));
+          
+          const connectionCounts = connectionsData?.reduce((acc: any, conn: any) => {
+            acc[conn.workspace_id] = (acc[conn.workspace_id] || 0) + 1;
+            return acc;
+          }, {}) || {};
+
+          const updatedWorkspaces = workspaceData.map((w: any) => ({
+            ...w,
+            connections_count: connectionCounts[w.workspace_id] || 0
+          }));
+          
+          setWorkspaces(updatedWorkspaces);
+        } catch (fallbackError) {
+          console.log('Fallback connections count failed, using 0:', fallbackError);
+        }
+      }
     } catch (error) {
       console.error('Error fetching workspaces:', error);
       toast({
