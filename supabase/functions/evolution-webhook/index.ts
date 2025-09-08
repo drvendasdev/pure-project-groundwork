@@ -59,7 +59,9 @@ function extractMetadata(data: any) {
     hasMedia: false,
     contactPhone: null,
     messageId: null,
-    fromMe: false
+    fromMe: false,
+    remoteJid: null,
+    phoneNumber: null
   };
 
   if (data.data) {
@@ -69,7 +71,9 @@ function extractMetadata(data: any) {
       metadata.fromMe = data.data.key.fromMe || false;
       
       if (data.data.key.remoteJid) {
-        metadata.contactPhone = data.data.key.remoteJid.replace('@s.whatsapp.net', '').substring(0, 8) + '***';
+        metadata.remoteJid = data.data.key.remoteJid;
+        metadata.phoneNumber = data.data.key.remoteJid.replace('@s.whatsapp.net', '');
+        metadata.contactPhone = metadata.phoneNumber.substring(0, 8) + '***';
       }
     }
 
@@ -200,11 +204,12 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    // Get or create contact
-    const phoneNumber = key.remoteJid.replace('@s.whatsapp.net', '');
+    // Normalize remoteJid to phone_number
+    const remoteJid = key.remoteJid;
+    const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || phoneNumber;
 
-    console.log('📞 Processing message for contact:', { phoneNumber, contactName, workspaceId });
+    console.log('📞 Processing message for contact:', { remoteJid, phoneNumber, contactName, workspaceId });
 
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
@@ -431,12 +436,14 @@ serve(async (req) => {
       
       // Extract metadata for logging
       const metadata = extractMetadata(body);
-      console.log('📥 Webhook recebido:', {
+        console.log('📥 Webhook recebido:', {
         correlationId,
         event: metadata.event,
         instance: metadata.instance,
         messageType: metadata.messageType,
         hasMedia: metadata.hasMedia,
+        remoteJid: metadata.remoteJid,
+        phoneNumber: metadata.phoneNumber,
         contactPhone: metadata.contactPhone,
         messageId: metadata.messageId,
         fromMe: metadata.fromMe

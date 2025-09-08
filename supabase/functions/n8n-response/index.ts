@@ -103,7 +103,15 @@ serve(async (req) => {
 
     // Extrair e normalizar campos do payload com mais fallbacks
     const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
-    const phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? payload.remoteJid?.replace('@s.whatsapp.net', '') ?? null;
+    
+    // Normalizar remoteJid para phone_number (aceitar várias fontes)
+    let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
+    let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
+    
+    if (!phoneNumber && remoteJid) {
+      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+      console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
+    }
     const responseMessage = payload.response_message ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? null;
     const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? payload.messageType ?? "text").toString().toLowerCase();
     const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? payload.media?.url ?? payload.imageMessage?.url ?? payload.videoMessage?.url ?? payload.audioMessage?.url ?? payload.documentMessage?.url ?? null;
@@ -173,6 +181,8 @@ serve(async (req) => {
       conversationId,
       connectionId, 
       evolutionInstance,
+      instanceId,
+      remoteJid,
       phoneNumber
     });
 
