@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, MoreVertical } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ModuleType } from "./TezeusCRM";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,6 +10,9 @@ import { NotificationTooltip } from "@/components/NotificationTooltip";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { ImpersonateWorkspaceModal } from "@/components/modals/ImpersonateWorkspaceModal";
 import { 
   LayoutDashboard, 
   MessageCircle, 
@@ -57,6 +61,7 @@ interface MenuItem {
 export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDarkMode, isCollapsed, onToggleCollapse, onNavigateToConversation }: SidebarProps) {
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [impersonateOpen, setImpersonateOpen] = useState(false);
 
   // Hooks para notificações e autenticação
   const { 
@@ -69,6 +74,15 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   
   const { markAsRead } = useWhatsAppConversations();
   const { user, userRole, hasRole, logout } = useAuth();
+  const { workspaces, isLoading } = useWorkspaces();
+  const { selectedWorkspace, setSelectedWorkspace } = useWorkspace();
+
+  // Auto-select first workspace for master users
+  useEffect(() => {
+    if (userRole === 'master' && !selectedWorkspace && workspaces.length > 0 && !isLoading) {
+      setSelectedWorkspace(workspaces[0]);
+    }
+  }, [userRole, selectedWorkspace, workspaces, isLoading, setSelectedWorkspace]);
 
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
@@ -498,25 +512,34 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
                 <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
                 <div className="text-xs text-primary font-medium capitalize">{userRole}</div>
               </div>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button 
-                      onClick={logout}
-                      className="p-1 hover:bg-accent rounded-md text-destructive hover:text-destructive"
-                    >
-                      <LogOut className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sair</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-1 hover:bg-accent rounded-md">
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="z-50 bg-background" align="end">
+                  {hasRole(['master']) && (
+                    <DropdownMenuItem onClick={() => setImpersonateOpen(true)}>
+                      <Building2 className="w-4 h-4 mr-2" />
+                      Personificar empresa
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={logout} className="text-destructive">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </div>
       </div>
+      
+      <ImpersonateWorkspaceModal 
+        open={impersonateOpen} 
+        onOpenChange={setImpersonateOpen} 
+      />
     </div>
   );
 }
