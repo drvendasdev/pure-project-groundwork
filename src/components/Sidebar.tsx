@@ -358,17 +358,17 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       </div>
       
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      {/* <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {ungroupedItems.map(renderMenuItem)}
         
         {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
         {renderGroup("crm", "CRM", crmItems)}
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}
-        {/* {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)} */}
-        {/*{hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })} */}
-        {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)} 
-      </nav>
+        {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)}
+        {hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
+        {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
+      </nav> */}
 
       {/* Action Icons */}
       <div className={cn("flex-shrink-0", isCollapsed ? "p-3" : "p-4")}>
