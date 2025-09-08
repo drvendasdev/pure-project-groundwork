@@ -31,6 +31,7 @@ import { ptBR } from "date-fns/locale";
 
 export function WebhooksEvolutionConfig() {
   const { selectedWorkspace } = useWorkspace();
+  const workspaceId = selectedWorkspace?.workspace_id;
   const {
     webhookConfig,
     instances,
@@ -42,7 +43,7 @@ export function WebhooksEvolutionConfig() {
     applyToAllInstances,
     testWebhook,
     fetchWebhookLogs
-  } = useWorkspaceWebhooks(selectedWorkspace?.workspace_id);
+  } = useWorkspaceWebhooks(workspaceId);
 
   const [webhookUrl, setWebhookUrl] = useState("");
   const [showSecret, setShowSecret] = useState(false);
@@ -113,6 +114,16 @@ export function WebhooksEvolutionConfig() {
         return <Clock className="w-4 h-4 text-gray-500" />;
     }
   };
+
+  if (!workspaceId) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Por favor, selecione uma empresa para configurar webhooks</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
+import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 
 export function AdministracaoConfiguracoes() {
   const [connectionLimit, setConnectionLimit] = useState("1");
@@ -82,8 +83,9 @@ export function AdministracaoConfiguracoes() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
+        <WorkspaceSelector />
       </div>
       
       <div className="bg-card rounded-lg shadow-sm border border-border">

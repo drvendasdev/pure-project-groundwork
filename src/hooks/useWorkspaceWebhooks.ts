@@ -39,7 +39,14 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
   // Save webhook configuration
   const saveWebhookConfig = async (url: string, secret: string) => {
-    if (!workspaceId) return false;
+    if (!workspaceId) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione uma empresa",
+        variant: "destructive",
+      });
+      return false;
+    }
     
     setIsLoading(true);
     try {
@@ -77,7 +84,14 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
   // Rotate webhook secret
   const rotateWebhookSecret = async () => {
-    if (!workspaceId) return false;
+    if (!workspaceId) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione uma empresa",
+        variant: "destructive",
+      });
+      return false;
+    }
     
     setIsLoading(true);
     try {
@@ -115,7 +129,14 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
   // Apply webhook to all instances
   const applyToAllInstances = async () => {
-    if (!workspaceId) return false;
+    if (!workspaceId) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione uma empresa",
+        variant: "destructive",
+      });
+      return false;
+    }
     
     setIsLoading(true);
     try {
@@ -149,7 +170,15 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
   // Test webhook delivery
   const testWebhook = async (): Promise<TestWebhookResponse | null> => {
-    if (!workspaceId || !webhookConfig?.webhook_url) return null;
+    if (!workspaceId) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione uma empresa",
+        variant: "destructive",
+      });
+      return null;
+    }
+    if (!webhookConfig?.webhook_url) return null;
     
     setIsTestingWebhook(true);
     const startTime = performance.now();
