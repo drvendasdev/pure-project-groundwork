@@ -572,9 +572,19 @@ serve(async (req) => {
     // 7. Forward event to N8N webhook (after CRM registration)
     const url = new URL(req.url);
     const customN8nUrl = url.searchParams.get('n8nUrl'); // Allow override for testing
-    const n8nWebhookUrl = customN8nUrl || Deno.env.get('N8N_WEBHOOK_URL');
+    let n8nWebhookUrls = customN8nUrl || Deno.env.get('N8N_WEBHOOK_URL');
     
-    if (n8nWebhookUrl) {
+    const forwardingResults = [];
+    
+    if (n8nWebhookUrls) {
+      // Support multiple URLs separated by comma
+      const urlList = n8nWebhookUrls.split(',').map(url => url.trim()).filter(url => url);
+      
+      // Get configuration
+      const n8nMethod = Deno.env.get('N8N_WEBHOOK_METHOD') || 'POST';
+      const n8nAuthHeader = Deno.env.get('N8N_WEBHOOK_AUTH_HEADER');
+      const n8nExtraHeaders = Deno.env.get('N8N_WEBHOOK_EXTRA_HEADERS');
+      
       const n8nPayload = {
         event: 'message_received',
         conversation_id: conversation.id,
@@ -597,29 +607,84 @@ serve(async (req) => {
         }
       };
 
-      try {
-        console.log(`📤 Forwarding to N8N: ${n8nWebhookUrl}`);
-        
-        const n8nResponse = await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(n8nPayload)
-        });
+      console.log(`📤 Forwarding to ${urlList.length} N8N endpoint(s) using ${n8nMethod}`);
 
-        const n8nStatus = n8nResponse.status;
-        const n8nResponseText = await n8nResponse.text();
-        
-        console.log(`✅ N8N Response: ${n8nStatus} - ${n8nResponseText?.substring(0, 200)}`);
-        
-        if (!n8nResponse.ok) {
-          console.error(`❌ N8N webhook failed: ${n8nStatus} - ${n8nResponseText}`);
+      for (const targetUrl of urlList) {
+        const startTime = Date.now();
+        let result = {
+          url: targetUrl,
+          method: n8nMethod,
+          status: null,
+          response: null,
+          error: null,
+          duration_ms: 0
+        };
+
+        try {
+          // Prepare headers
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          
+          // Add auth header if configured
+          if (n8nAuthHeader) {
+            const [key, value] = n8nAuthHeader.split(':', 2);
+            if (key && value) {
+              headers[key.trim()] = value.trim();
+            }
+          }
+          
+          // Add extra headers if configured (JSON format)
+          if (n8nExtraHeaders) {
+            try {
+              const extraHeaders = JSON.parse(n8nExtraHeaders);
+              Object.assign(headers, extraHeaders);
+            } catch (e) {
+              console.warn('⚠️ Invalid N8N_WEBHOOK_EXTRA_HEADERS format, skipping');
+            }
+          }
+
+          let fetchOptions: RequestInit;
+          let finalUrl = targetUrl;
+
+          if (n8nMethod.toUpperCase() === 'GET') {
+            // For GET, send data as query parameters
+            const urlObj = new URL(targetUrl);
+            Object.entries(n8nPayload).forEach(([key, value]) => {
+              urlObj.searchParams.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+            });
+            finalUrl = urlObj.toString();
+            fetchOptions = { method: 'GET', headers };
+          } else {
+            // For POST/PUT/etc, send as JSON body
+            fetchOptions = {
+              method: n8nMethod,
+              headers,
+              body: JSON.stringify(n8nPayload)
+            };
+          }
+
+          console.log(`🌐 Calling ${n8nMethod} ${targetUrl}`);
+          
+          const n8nResponse = await fetch(finalUrl, fetchOptions);
+          result.duration_ms = Date.now() - startTime;
+          result.status = n8nResponse.status;
+          result.response = await n8nResponse.text();
+          
+          console.log(`✅ N8N ${targetUrl} Response: ${result.status} (${result.duration_ms}ms) - ${result.response?.substring(0, 200)}`);
+          
+          if (!n8nResponse.ok) {
+            result.error = `HTTP ${result.status}`;
+            console.error(`❌ N8N webhook failed: ${result.status} - ${result.response}`);
+          }
+          
+        } catch (n8nError) {
+          result.duration_ms = Date.now() - startTime;
+          result.error = n8nError.message;
+          console.error(`❌ Error forwarding to N8N ${targetUrl}:`, n8nError.message);
         }
         
-      } catch (n8nError) {
-        console.error('❌ Error forwarding to N8N:', n8nError.message);
-        // Don't break the flow - log error but continue
+        forwardingResults.push(result);
       }
     } else {
       console.log('⚠️ N8N_WEBHOOK_URL not configured - skipping N8N forwarding');
@@ -645,7 +710,10 @@ serve(async (req) => {
         },
         debug_mode: debugRawAsMessage,
         payload_size: JSON.stringify(webhookData).length,
-        n8n_webhook_url: n8nWebhookUrl ? 'configured' : 'not_configured'
+        n8n_forwarding: {
+          configured: !!n8nWebhookUrls,
+          results: forwardingResults
+        }
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
