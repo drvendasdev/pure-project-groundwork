@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from './useAuth';
 
 export interface DashboardCard {
   id: string;
@@ -22,19 +22,43 @@ export function useDashboardCards() {
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const callEdgeFunction = async (action: string, data?: any) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+
+    // Add system user headers for authentication
+    if (user?.email) {
+      headers['x-system-user-email'] = user.email;
+    }
+    if (user?.id) {
+      headers['x-system-user-id'] = user.id;
+    }
+
+    const { data: result, error } = await supabase.functions.invoke('manage-dashboard-cards', {
+      body: { action, ...data },
+      headers
+    });
+
+    if (error) {
+      console.error('Edge function error:', error);
+      throw error;
+    }
+
+    if (result?.error) {
+      throw new Error(result.error);
+    }
+
+    return result;
+  };
 
   const fetchCards = async () => {
     try {
       setLoading(true);
-
-      const { data, error } = await supabase
-        .from('dashboard_cards')
-        .select('*')
-        .is('workspace_id', null)
-        .order('order_position', { ascending: true });
-
-      if (error) throw error;
-      setCards((data || []) as DashboardCard[]);
+      const result = await callEdgeFunction('list');
+      setCards(result.cards || []);
     } catch (error) {
       console.error('Error fetching dashboard cards:', error);
       toast({
@@ -49,28 +73,13 @@ export function useDashboardCards() {
 
   const createCard = async (cardData: Omit<DashboardCard, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const cardWithWorkspace = {
-        ...cardData,
-        workspace_id: null
-      };
-
-      const { data, error } = await supabase
-        .from('dashboard_cards')
-        .insert([cardWithWorkspace])
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-      
-      setCards(prev => [...prev, data as DashboardCard].sort((a, b) => a.order_position - b.order_position));
+      const result = await callEdgeFunction('create', { cardData });
+      setCards(prev => [...prev, result.card].sort((a, b) => a.order_position - b.order_position));
       toast({
         title: "Card criado",
         description: "O card foi criado com sucesso.",
       });
-      
-      return data;
+      return result.card;
     } catch (error) {
       console.error('Error creating card:', error);
       const errorMessage = error instanceof Error ? error.message : "Não foi possível criar o card.";
@@ -85,24 +94,13 @@ export function useDashboardCards() {
 
   const updateCard = async (id: string, updates: Partial<DashboardCard>) => {
     try {
-      const { data, error } = await supabase
-        .from('dashboard_cards')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-      
-      setCards(prev => prev.map(card => card.id === id ? data as DashboardCard : card));
+      const result = await callEdgeFunction('update', { cardId: id, cardData: updates });
+      setCards(prev => prev.map(card => card.id === id ? result.card : card));
       toast({
         title: "Card atualizado",
         description: "O card foi atualizado com sucesso.",
       });
-      
-      return data;
+      return result.card;
     } catch (error) {
       console.error('Error updating card:', error);
       const errorMessage = error instanceof Error ? error.message : "Não foi possível atualizar o card.";
@@ -117,15 +115,7 @@ export function useDashboardCards() {
 
   const deleteCard = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('dashboard_cards')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        throw error;
-      }
-      
+      await callEdgeFunction('delete', { cardId: id });
       setCards(prev => prev.filter(card => card.id !== id));
       toast({
         title: "Card excluído",
@@ -145,18 +135,7 @@ export function useDashboardCards() {
 
   const reorderCards = async (reorderedCards: DashboardCard[]) => {
     try {
-      const updates = reorderedCards.map((card, index) => ({
-        id: card.id,
-        order_position: index + 1
-      }));
-
-      for (const update of updates) {
-        await supabase
-          .from('dashboard_cards')
-          .update({ order_position: update.order_position })
-          .eq('id', update.id);
-      }
-
+      await callEdgeFunction('reorder', { cardData: { cards: reorderedCards } });
       setCards(reorderedCards);
       toast({
         title: "Ordem atualizada",
@@ -176,28 +155,10 @@ export function useDashboardCards() {
   const getActiveCards = () => cards.filter(card => card.is_active);
 
   useEffect(() => {
-    fetchCards();
-
-    // Configurar realtime updates
-    const channel = supabase
-      .channel('dashboard_cards_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'dashboard_cards'
-        },
-        () => {
-          fetchCards();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    if (user) {
+      fetchCards();
+    }
+  }, [user]);
 
   return {
     cards,
