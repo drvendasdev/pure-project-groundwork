@@ -26,11 +26,16 @@ serve(async (req) => {
         requestBody = JSON.parse(text);
       }
     } catch (parseError) {
-      console.log('JSON parse error:', parseError);
-      requestBody = {};
+      console.error('JSON parse error:', parseError);
+      return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     const { action, cardData, cardId } = requestBody;
+    
+    console.log('Request body parsed:', { action, hasCardData: !!cardData, cardId });
     
     // Get system user info from headers
     const systemUserEmail = req.headers.get('x-system-user-email');

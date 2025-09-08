@@ -37,8 +37,11 @@ export function useDashboardCards() {
       headers['x-system-user-id'] = user.id;
     }
 
+    const requestBody = { action, ...data };
+    console.log('Calling edge function with:', requestBody);
+
     const { data: result, error } = await supabase.functions.invoke('manage-dashboard-cards', {
-      body: { action, ...data },
+      body: requestBody,
       headers
     });
 
