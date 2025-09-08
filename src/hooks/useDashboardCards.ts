@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from './useAuth';
 
 export interface DashboardCard {
   id: string;
@@ -22,70 +21,22 @@ export function useDashboardCards() {
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { user } = useAuth();
-
-  const callEdgeFunction = async (action: string, data?: any) => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    // Add system user headers for authentication
-    if (user?.email) {
-      headers['x-system-user-email'] = user.email;
-    }
-    if (user?.id) {
-      headers['x-system-user-id'] = user.id;
-    }
-
-    const requestBody = { action, ...data };
-    console.log('Calling edge function with:', requestBody);
-
-    const { data: result, error } = await supabase.functions.invoke('manage-dashboard-cards', {
-      body: requestBody,
-      headers
-    });
-
-    if (error) {
-      console.error('Edge function error:', error);
-      throw error;
-    }
-
-    if (result?.error) {
-      throw new Error(result.error);
-    }
-
-    return result;
-  };
 
   const fetchCards = async () => {
     try {
       setLoading(true);
       
-      const headers: Record<string, string> = {};
-      
-      // Add system user headers for authentication
-      if (user?.email) {
-        headers['x-system-user-email'] = user.email;
-      }
-      if (user?.id) {
-        headers['x-system-user-id'] = user.id;
-      }
-
-      const { data: result, error } = await supabase.functions.invoke('manage-dashboard-cards', {
-        body: { action: 'list' },
-        headers
-      });
+      const { data, error } = await supabase
+        .from('dashboard_cards')
+        .select('*')
+        .order('order_position', { ascending: true });
 
       if (error) {
-        console.error('Edge function error:', error);
+        console.error('Error fetching dashboard cards:', error);
         throw error;
       }
 
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
-      setCards(result.cards || []);
+      setCards((data || []) as DashboardCard[]);
     } catch (error) {
       console.error('Error fetching dashboard cards:', error);
       toast({
@@ -100,13 +51,23 @@ export function useDashboardCards() {
 
   const createCard = async (cardData: Omit<DashboardCard, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const result = await callEdgeFunction('create', { cardData });
-      setCards(prev => [...prev, result.card].sort((a, b) => a.order_position - b.order_position));
+      const { data, error } = await supabase
+        .from('dashboard_cards')
+        .insert([cardData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating card:', error);
+        throw error;
+      }
+
+      setCards(prev => [...prev, data as DashboardCard].sort((a, b) => a.order_position - b.order_position));
       toast({
         title: "Card criado",
         description: "O card foi criado com sucesso.",
       });
-      return result.card;
+      return data as DashboardCard;
     } catch (error) {
       console.error('Error creating card:', error);
       const errorMessage = error instanceof Error ? error.message : "Não foi possível criar o card.";
@@ -121,13 +82,24 @@ export function useDashboardCards() {
 
   const updateCard = async (id: string, updates: Partial<DashboardCard>) => {
     try {
-      const result = await callEdgeFunction('update', { cardId: id, cardData: updates });
-      setCards(prev => prev.map(card => card.id === id ? result.card : card));
+      const { data, error } = await supabase
+        .from('dashboard_cards')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating card:', error);
+        throw error;
+      }
+
+      setCards(prev => prev.map(card => card.id === id ? data as DashboardCard : card));
       toast({
         title: "Card atualizado",
         description: "O card foi atualizado com sucesso.",
       });
-      return result.card;
+      return data as DashboardCard;
     } catch (error) {
       console.error('Error updating card:', error);
       const errorMessage = error instanceof Error ? error.message : "Não foi possível atualizar o card.";
@@ -142,7 +114,16 @@ export function useDashboardCards() {
 
   const deleteCard = async (id: string) => {
     try {
-      await callEdgeFunction('delete', { cardId: id });
+      const { error } = await supabase
+        .from('dashboard_cards')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting card:', error);
+        throw error;
+      }
+
       setCards(prev => prev.filter(card => card.id !== id));
       toast({
         title: "Card excluído",
@@ -162,7 +143,24 @@ export function useDashboardCards() {
 
   const reorderCards = async (reorderedCards: DashboardCard[]) => {
     try {
-      await callEdgeFunction('reorder', { cardData: { cards: reorderedCards } });
+      // Update order_position for each card
+      const updates = reorderedCards.map((card, index) => ({
+        id: card.id,
+        order_position: index
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('dashboard_cards')
+          .update({ order_position: update.order_position })
+          .eq('id', update.id);
+
+        if (error) {
+          console.error('Error updating card order:', error);
+          throw error;
+        }
+      }
+
       setCards(reorderedCards);
       toast({
         title: "Ordem atualizada",
@@ -182,10 +180,8 @@ export function useDashboardCards() {
   const getActiveCards = () => cards.filter(card => card.is_active);
 
   useEffect(() => {
-    if (user) {
-      fetchCards();
-    }
-  }, [user]);
+    fetchCards();
+  }, []);
 
   return {
     cards,
