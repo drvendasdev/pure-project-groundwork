@@ -373,7 +373,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         {renderGroup("automacoes", "Automações", automacoesItems)}
         {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)}
         {hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
-        {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
+        {hasRole(['master']) && renderGroup("administracao", "Administração", administracaoItems)}
       </nav>
 
       {/* Action Icons */}

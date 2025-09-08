@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 export interface DashboardCard {
   id: string;
@@ -21,13 +22,21 @@ export function useDashboardCards() {
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { selectedWorkspace } = useWorkspace();
 
   const fetchCards = async () => {
     try {
       setLoading(true);
+      
+      if (!selectedWorkspace?.workspace_id) {
+        setCards([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('dashboard_cards')
         .select('*')
+        .eq('workspace_id', selectedWorkspace.workspace_id)
         .order('order_position', { ascending: true });
 
       if (error) throw error;
@@ -46,13 +55,28 @@ export function useDashboardCards() {
 
   const createCard = async (cardData: Omit<DashboardCard, 'id' | 'created_at' | 'updated_at'>) => {
     try {
+      if (!selectedWorkspace?.workspace_id) {
+        throw new Error('Nenhum workspace selecionado');
+      }
+
+      const cardWithWorkspace = {
+        ...cardData,
+        workspace_id: selectedWorkspace.workspace_id
+      };
+
       const { data, error } = await supabase
         .from('dashboard_cards')
-        .insert([cardData])
+        .insert([cardWithWorkspace])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a permission error
+        if (error.message?.includes('row-level security') || error.code === 'PGRST301') {
+          throw new Error('Apenas usuários master podem criar cards do dashboard');
+        }
+        throw error;
+      }
       
       setCards(prev => [...prev, data as DashboardCard].sort((a, b) => a.order_position - b.order_position));
       toast({
@@ -63,9 +87,10 @@ export function useDashboardCards() {
       return data;
     } catch (error) {
       console.error('Error creating card:', error);
+      const errorMessage = error instanceof Error ? error.message : "Não foi possível criar o card.";
       toast({
         title: "Erro ao criar card",
-        description: "Não foi possível criar o card.",
+        description: errorMessage,
         variant: "destructive",
       });
       throw error;
@@ -81,7 +106,13 @@ export function useDashboardCards() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a permission error
+        if (error.message?.includes('row-level security') || error.code === 'PGRST301') {
+          throw new Error('Apenas usuários master podem editar cards do dashboard');
+        }
+        throw error;
+      }
       
       setCards(prev => prev.map(card => card.id === id ? data as DashboardCard : card));
       toast({
@@ -92,9 +123,10 @@ export function useDashboardCards() {
       return data;
     } catch (error) {
       console.error('Error updating card:', error);
+      const errorMessage = error instanceof Error ? error.message : "Não foi possível atualizar o card.";
       toast({
         title: "Erro ao atualizar card",
-        description: "Não foi possível atualizar o card.",
+        description: errorMessage,
         variant: "destructive",
       });
       throw error;
@@ -108,7 +140,13 @@ export function useDashboardCards() {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a permission error
+        if (error.message?.includes('row-level security') || error.code === 'PGRST301') {
+          throw new Error('Apenas usuários master podem excluir cards do dashboard');
+        }
+        throw error;
+      }
       
       setCards(prev => prev.filter(card => card.id !== id));
       toast({
@@ -117,9 +155,10 @@ export function useDashboardCards() {
       });
     } catch (error) {
       console.error('Error deleting card:', error);
+      const errorMessage = error instanceof Error ? error.message : "Não foi possível excluir o card.";
       toast({
         title: "Erro ao excluir card",
-        description: "Não foi possível excluir o card.",
+        description: errorMessage,
         variant: "destructive",
       });
       throw error;
@@ -180,7 +219,7 @@ export function useDashboardCards() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedWorkspace?.workspace_id]);
 
   return {
     cards,

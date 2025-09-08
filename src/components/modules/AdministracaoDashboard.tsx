@@ -23,6 +23,7 @@ import { Plus, MoreHorizontal, Edit, Trash2, MessageSquare, Zap, TrendingUp, Cal
 import { useDashboardCards, DashboardCard } from '@/hooks/useDashboardCards';
 import { DashboardCardModal } from '@/components/modals/DashboardCardModal';
 import { useToast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,7 @@ import {
 
 export function AdministracaoDashboard() {
   const { cards, loading, createCard, updateCard, deleteCard } = useDashboardCards();
+  const { selectedWorkspace } = useWorkspace();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<DashboardCard | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; card: DashboardCard | null }>({
@@ -46,9 +48,6 @@ export function AdministracaoDashboard() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const { toast } = useToast();
-
-  // Default workspace ID (você pode pegar isso de um contexto ou hook)
-  const workspaceId = '00000000-0000-0000-0000-000000000000';
 
   const filteredCards = cards.filter(card => {
     const matchesSearch = card.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -385,7 +384,7 @@ export function AdministracaoDashboard() {
         onClose={() => setModalOpen(false)}
         onSave={handleSaveCard}
         card={editingCard}
-        workspaceId={workspaceId}
+        workspaceId={selectedWorkspace?.workspace_id || ''}
       />
 
       {/* Dialog de confirmação de exclusão */}
