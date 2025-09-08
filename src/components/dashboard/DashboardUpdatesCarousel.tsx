@@ -90,6 +90,21 @@ export function DashboardUpdatesCarousel({
         return 'Atualização';
     }
   };
+
+  const getThemeImage = (type: string) => {
+    switch (type) {
+      case 'message':
+        return 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=400&h=200&fit=crop&crop=center';
+      case 'system':
+        return 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=200&fit=crop&crop=center';
+      case 'achievement':
+        return 'https://images.unsplash.com/photo-1492112007959-c35ae067c37b?w=400&h=200&fit=crop&crop=center';
+      case 'task':
+        return 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&h=200&fit=crop&crop=center';
+      default:
+        return 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=200&fit=crop&crop=center';
+    }
+  };
   return (
     <div className="w-full">
       <Carousel 
@@ -110,7 +125,7 @@ export function DashboardUpdatesCarousel({
                 <CardContent className="p-0">
                   <div className="relative h-48 overflow-hidden">
                     <img 
-                      src={`https://picsum.photos/400/200?random=${update.id}`}
+                      src={getThemeImage(update.type)}
                       alt={update.title}
                       className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                     />
