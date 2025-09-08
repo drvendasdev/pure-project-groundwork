@@ -72,7 +72,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
 
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
-    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes" || activeModule === "administracao-dashboard") {
+    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes") {
       setExpandedGroups(prev => 
         prev.includes("administracao") ? prev : [...prev, "administracao"]
       );
@@ -209,12 +209,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
      // icon: <DollarSign className="w-5 h-5" />,
 //group: "administracao"
   //  },
-    {
-      id: "administracao-dashboard",
-      label: "Dashboard",
-      icon: <Settings className="w-5 h-5" />,
-      group: "administracao"
-    },
     {
       id: "administracao-configuracoes",
       label: "Configurações",
@@ -371,9 +365,9 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         {renderGroup("crm", "CRM", crmItems)}
         {renderGroup("recursos", "Recursos", recursosItems)}
         {renderGroup("automacoes", "Automações", automacoesItems)}
-        {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)}
-        {hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
-        {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
+        {/* {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)} */}
+        {/*{hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })} */}
+        {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)} 
       </nav>
 
       {/* Action Icons */}
