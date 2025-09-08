@@ -57,7 +57,31 @@ export function useDashboardCards() {
   const fetchCards = async () => {
     try {
       setLoading(true);
-      const result = await callEdgeFunction('list');
+      
+      const headers: Record<string, string> = {};
+      
+      // Add system user headers for authentication
+      if (user?.email) {
+        headers['x-system-user-email'] = user.email;
+      }
+      if (user?.id) {
+        headers['x-system-user-id'] = user.id;
+      }
+
+      const { data: result, error } = await supabase.functions.invoke('manage-dashboard-cards', {
+        body: { action: 'list' },
+        headers
+      });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+
       setCards(result.cards || []);
     } catch (error) {
       console.error('Error fetching dashboard cards:', error);
