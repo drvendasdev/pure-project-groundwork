@@ -181,21 +181,35 @@ serve(async (req) => {
       )
     }
 
-    // Get webhook token for authentication
-    const webhookToken = Deno.env.get('N8N_WEBHOOK_TOKEN') || Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || 'default-token'
-    
-    // Call Evolution API to create instance - use required fields with webhook
-    const evolutionPayload = {
+    // Fetch workspace webhook configuration
+    console.log('Fetching workspace webhook configuration...')
+    const { data: webhookConfig, error: webhookError } = await supabase
+      .from('workspace_webhook_settings')
+      .select('webhook_url, webhook_secret')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle()
+
+    if (webhookError) {
+      console.error('Error fetching webhook config:', webhookError)
+    }
+
+    // Build Evolution payload
+    const evolutionPayload: any = {
       instanceName: instanceName,
       token: token,
       qrcode: true,
-      integration: "WHATSAPP-BAILEYS",
-      webhook: {
-        url: "https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response",
+      integration: "WHATSAPP-BAILEYS"
+    }
+
+    // Add webhook configuration if available
+    if (webhookConfig?.webhook_url) {
+      console.log('Using workspace webhook configuration:', webhookConfig.webhook_url)
+      evolutionPayload.webhook = {
+        url: webhookConfig.webhook_url,
         byEvents: false,
         base64: true,
         headers: {
-          "autorization": `Bearer ${webhookToken}`,
+          "X-Secret": webhookConfig.webhook_secret,
           "Content-Type": "application/json"
         },
         events: [
@@ -225,6 +239,26 @@ serve(async (req) => {
           "TYPEBOT_CHANGE_STATUS"
         ]
       }
+
+      // Set use_workspace_default to true for new connections with webhook
+      await supabase
+        .from('connections')
+        .update({ use_workspace_default: true })
+        .eq('id', connection.id)
+    } else {
+      console.log('No webhook configuration found for workspace, creating instance without webhook')
+      
+      // Log this event for tracking
+      await supabase
+        .from('provider_logs')
+        .insert({
+          correlation_id: crypto.randomUUID(),
+          connection_id: connection.id,
+          event_type: 'INSTANCE_CREATED_NO_WEBHOOK',
+          level: 'warn',
+          message: `Instance ${instanceName} created without webhook - no workspace webhook configuration found`,
+          metadata: { workspaceId, instanceName }
+        })
     }
 
     console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))

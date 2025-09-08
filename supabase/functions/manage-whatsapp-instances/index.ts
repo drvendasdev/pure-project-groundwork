@@ -54,6 +54,67 @@ async function handleCreate(supabase: any, evolutionUrl: string, evolutionApiKey
   console.log(`Creating instance: ${instanceName} for org: ${orgId}, history: ${historyRecovery}`);
 
   try {
+    // Fetch workspace webhook configuration
+    console.log('Fetching workspace webhook configuration for org:', orgId)
+    const { data: webhookConfig, error: webhookError } = await supabase
+      .from('workspace_webhook_settings')
+      .select('webhook_url, webhook_secret')
+      .eq('workspace_id', orgId)
+      .maybeSingle()
+
+    if (webhookError) {
+      console.error('Error fetching webhook config:', webhookError)
+    }
+
+    // Build Evolution payload
+    const evolutionPayload: any = {
+      instanceName: instanceName,
+      qrcode: true,
+      integration: 'WHATSAPP-BAILEYS'
+    }
+
+    // Add webhook configuration if available
+    if (webhookConfig?.webhook_url) {
+      console.log('Using workspace webhook configuration:', webhookConfig.webhook_url)
+      evolutionPayload.webhook = {
+        url: webhookConfig.webhook_url,
+        byEvents: false,
+        base64: true,
+        headers: {
+          "X-Secret": webhookConfig.webhook_secret,
+          'Content-Type': 'application/json'
+        },
+        events: [
+          "APPLICATION_STARTUP",
+          "QRCODE_UPDATED",
+          "MESSAGES_SET",
+          "MESSAGES_UPSERT",
+          "MESSAGES_UPDATE",
+          "MESSAGES_DELETE",
+          "SEND_MESSAGE",
+          "CONTACTS_SET",
+          "CONTACTS_UPSERT",
+          "CONTACTS_UPDATE",
+          "PRESENCE_UPDATE",
+          "CHATS_SET",
+          "CHATS_UPSERT",
+          "CHATS_UPDATE",
+          "CHATS_DELETE",
+          "GROUPS_UPSERT",
+          "GROUP_UPDATE",
+          "GROUP_PARTICIPANTS_UPDATE",
+          "CONNECTION_UPDATE",
+          "LABELS_EDIT",
+          "LABELS_ASSOCIATION",
+          "CALL",
+          "TYPEBOT_START",
+          "TYPEBOT_CHANGE_STATUS"
+        ]
+      }
+    } else {
+      console.log('No webhook configuration found for workspace, creating instance without webhook')
+    }
+
     // Create instance in Evolution API
     const response = await fetch(`${evolutionUrl}/instance/create`, {
       method: 'POST',
@@ -61,21 +122,7 @@ async function handleCreate(supabase: any, evolutionUrl: string, evolutionApiKey
         'Content-Type': 'application/json',
         'apikey': evolutionApiKey,
       },
-      body: JSON.stringify({
-        instanceName: instanceName,
-        qrcode: true,
-        integration: 'WHATSAPP-BAILEYS',
-        webhook: {
-          url: 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/n8n-response',
-          byEvents: false,
-          base64: true,
-          headers: {
-            autorization: 'Bearer TOKEN',
-            'Content-Type': 'application/json'
-          },
-          events: ['MESSAGES_UPSERT']
-        }
-      }),
+      body: JSON.stringify(evolutionPayload),
     });
 
     if (!response.ok) {
@@ -112,6 +159,7 @@ async function handleCreate(supabase: any, evolutionUrl: string, evolutionApiKey
         status: result.qrcode ? 'qr' : 'creating',
         qr_code: result.qrcode ? `data:image/png;base64,${result.qrcode.base64}` : null,
         history_recovery: historyRecovery,
+        use_workspace_default: webhookConfig?.webhook_url ? true : false,
       });
 
     if (connectionError) {
