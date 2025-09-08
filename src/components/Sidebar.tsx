@@ -72,7 +72,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
 
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
-    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes" || activeModule === "administracao-dashboard") {
+    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes") {
       setExpandedGroups(prev => 
         prev.includes("administracao") ? prev : [...prev, "administracao"]
       );
@@ -209,12 +209,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
      // icon: <DollarSign className="w-5 h-5" />,
 //group: "administracao"
   //  },
-    {
-      id: "administracao-dashboard",
-      label: "Dashboard",
-      icon: <Settings className="w-5 h-5" />,
-      group: "administracao"
-    },
     {
       id: "administracao-configuracoes",
       label: "Configurações",
@@ -364,7 +358,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       </div>
       
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      {/* <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {ungroupedItems.map(renderMenuItem)}
         
         {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
@@ -374,7 +368,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         {hasRole(['master']) && renderGroup("parceiros", "Parceiros", parceirosItems)}
         {hasRole(['master', 'admin']) && renderMenuItem({ id: "conexoes", label: "Conexões", icon: <Link className="w-5 h-5" /> })}
         {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
-      </nav>
+      </nav> */}
 
       {/* Action Icons */}
       <div className={cn("flex-shrink-0", isCollapsed ? "p-3" : "p-4")}>
