@@ -109,9 +109,9 @@ serve(async (req) => {
         });
       }
 
-      if (!user || user.profile !== 'master') {
+      if (!user || (!['master', 'admin'].includes(user.profile))) {
         console.log('Access denied - user profile:', user?.profile, 'email:', systemUserEmail, 'id:', systemUserId);
-        return new Response(JSON.stringify({ error: 'Only master users can manage dashboard cards' }), {
+        return new Response(JSON.stringify({ error: 'Only master and admin users can manage dashboard cards' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });

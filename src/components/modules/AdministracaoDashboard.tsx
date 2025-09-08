@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -159,6 +160,10 @@ export function AdministracaoDashboard() {
     );
   }
 
+  const allCards = filteredCards;
+  const updateCards = filteredCards.filter(card => card.type === 'update');
+  const eventCards = filteredCards.filter(card => card.type === 'event');
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -282,114 +287,324 @@ export function AdministracaoDashboard() {
         </CardContent>
       </Card>
 
-      {/* Tabela de Cards */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Cards do Dashboard</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Card</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Ação</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Posição</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCards.map((card) => (
-                <TableRow key={card.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      {card.image_url && (
-                        <img 
-                          src={card.image_url} 
-                          alt={card.title}
-                          className="w-10 h-10 rounded object-cover"
-                        />
-                      )}
-                      <div>
-                        <p className="font-medium">{card.title}</p>
-                        <p className="text-sm text-muted-foreground line-clamp-1">
-                          {card.description}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={getTypeColor(card.type)}>
-                      <span className="flex items-center gap-1">
-                        {getIcon(card.type)}
-                        {getTypeLabel(card.type)}
-                      </span>
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {card.action_url ? (
-                      <code className="text-xs bg-muted px-2 py-1 rounded">
-                        {card.action_url}
-                      </code>
-                    ) : (
-                      <span className="text-muted-foreground">Sem ação</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        checked={card.is_active}
-                        onCheckedChange={() => handleToggleActive(card)}
-                      />
-                      <Badge variant={card.is_active ? "default" : "secondary"}>
-                        {card.is_active ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {card.order_position}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEditCard(card)}>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteCard(card)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      {/* Tabelas com Abas */}
+      <Tabs defaultValue="all" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="all">Todos os Cards ({allCards.length})</TabsTrigger>
+          <TabsTrigger value="updates">Atualizações ({updateCards.length})</TabsTrigger>
+          <TabsTrigger value="events">Eventos ({eventCards.length})</TabsTrigger>
+        </TabsList>
 
-          {filteredCards.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">
-                {searchTerm || typeFilter !== 'all' || statusFilter !== 'all' 
-                  ? 'Nenhum card encontrado com os filtros aplicados.' 
-                  : 'Nenhum card criado ainda.'}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="all" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Todos os Cards do Dashboard</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Card</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Ação</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Posição</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allCards.map((card) => (
+                    <TableRow key={card.id}>
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          {card.image_url && (
+                            <img 
+                              src={card.image_url} 
+                              alt={card.title}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                          )}
+                          <div>
+                            <p className="font-medium">{card.title}</p>
+                            <p className="text-sm text-muted-foreground line-clamp-1">
+                              {card.description}
+                            </p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className={getTypeColor(card.type)}>
+                          <span className="flex items-center gap-1">
+                            {getIcon(card.type)}
+                            {getTypeLabel(card.type)}
+                          </span>
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {card.action_url ? (
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {card.action_url}
+                          </code>
+                        ) : (
+                          <span className="text-muted-foreground">Sem ação</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={card.is_active}
+                            onCheckedChange={() => handleToggleActive(card)}
+                          />
+                          <Badge variant={card.is_active ? "default" : "secondary"}>
+                            {card.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {card.order_position}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEditCard(card)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteCard(card)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {allCards.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">
+                    {searchTerm || typeFilter !== 'all' || statusFilter !== 'all' 
+                      ? 'Nenhum card encontrado com os filtros aplicados.' 
+                      : 'Nenhum card criado ainda.'}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="updates" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Newspaper className="w-5 h-5" />
+                Atualizações do Sistema
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Atualização</TableHead>
+                    <TableHead>Ação</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Posição</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {updateCards.map((card) => (
+                    <TableRow key={card.id}>
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          {card.image_url && (
+                            <img 
+                              src={card.image_url} 
+                              alt={card.title}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                          )}
+                          <div>
+                            <p className="font-medium">{card.title}</p>
+                            <p className="text-sm text-muted-foreground line-clamp-1">
+                              {card.description}
+                            </p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {card.action_url ? (
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {card.action_url}
+                          </code>
+                        ) : (
+                          <span className="text-muted-foreground">Sem ação</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={card.is_active}
+                            onCheckedChange={() => handleToggleActive(card)}
+                          />
+                          <Badge variant={card.is_active ? "default" : "secondary"}>
+                            {card.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {card.order_position}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEditCard(card)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteCard(card)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {updateCards.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Nenhuma atualização criada ainda.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="events" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5" />
+                Eventos Programados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Evento</TableHead>
+                    <TableHead>Ação</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Posição</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {eventCards.map((card) => (
+                    <TableRow key={card.id}>
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          {card.image_url && (
+                            <img 
+                              src={card.image_url} 
+                              alt={card.title}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                          )}
+                          <div>
+                            <p className="font-medium">{card.title}</p>
+                            <p className="text-sm text-muted-foreground line-clamp-1">
+                              {card.description}
+                            </p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {card.action_url ? (
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {card.action_url}
+                          </code>
+                        ) : (
+                          <span className="text-muted-foreground">Sem ação</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={card.is_active}
+                            onCheckedChange={() => handleToggleActive(card)}
+                          />
+                          <Badge variant={card.is_active ? "default" : "secondary"}>
+                            {card.is_active ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {card.order_position}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEditCard(card)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteCard(card)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {eventCards.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Nenhum evento criado ainda.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Modal de criação/edição */}
       <DashboardCardModal
