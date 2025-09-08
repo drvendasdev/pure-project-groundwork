@@ -1,4 +1,5 @@
 import { DashboardTabs } from "./dashboard/DashboardTabs";
+import { DashboardUpdatesCarousel } from "./dashboard/DashboardUpdatesCarousel";
 import { useNavigate } from "react-router-dom";
 
 export function Dashboard({ isDarkMode }: { isDarkMode?: boolean }) {
@@ -18,6 +19,8 @@ export function Dashboard({ isDarkMode }: { isDarkMode?: boolean }) {
           </p>
         </div>
       </div>
+
+      <DashboardUpdatesCarousel onNavigate={handleNavigate} />
 
       <DashboardTabs onNavigate={handleNavigate} />
     </div>
