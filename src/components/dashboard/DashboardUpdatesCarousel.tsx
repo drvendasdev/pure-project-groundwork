@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import { Bell, MessageSquare, Zap, TrendingUp, Calendar, ArrowRight } from "lucide-react";
+import { Bell, MessageSquare, Zap, TrendingUp, Calendar, ArrowRight, Newspaper, CalendarDays } from "lucide-react";
 import { useDashboardCards } from "@/hooks/useDashboardCards";
 
 interface DashboardUpdatesCarouselProps {
@@ -64,6 +64,10 @@ export function DashboardUpdatesCarousel({
         return <TrendingUp className="w-4 h-4" />;
       case 'task':
         return <Calendar className="w-4 h-4" />;
+      case 'update':
+        return <Newspaper className="w-4 h-4" />;
+      case 'event':
+        return <CalendarDays className="w-4 h-4" />;
       default:
         return <Bell className="w-4 h-4" />;
     }
@@ -78,6 +82,10 @@ export function DashboardUpdatesCarousel({
         return 'text-success bg-success/10';
       case 'task':
         return 'text-accent bg-accent/10';
+      case 'update':
+        return 'text-info bg-info/10';
+      case 'event':
+        return 'text-purple bg-purple/10';
       default:
         return 'text-muted-foreground bg-muted';
     }
@@ -92,8 +100,12 @@ export function DashboardUpdatesCarousel({
         return 'Conquista';
       case 'task':
         return 'Tarefa';
-      default:
+      case 'update':
         return 'Atualização';
+      case 'event':
+        return 'Evento';
+      default:
+        return 'Geral';
     }
   };
 
@@ -107,6 +119,10 @@ export function DashboardUpdatesCarousel({
         return 'https://images.unsplash.com/photo-1492112007959-c35ae067c37b?w=400&h=200&fit=crop&crop=center';
       case 'task':
         return 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&h=200&fit=crop&crop=center';
+      case 'update':
+        return 'https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?w=400&h=200&fit=crop&crop=center';
+      case 'event':
+        return 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=400&h=200&fit=crop&crop=center';
       default:
         return 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=200&fit=crop&crop=center';
     }

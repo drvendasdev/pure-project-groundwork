@@ -7,7 +7,7 @@ export interface DashboardCard {
   id: string;
   title: string;
   description: string;
-  type: 'message' | 'system' | 'achievement' | 'task';
+  type: 'message' | 'system' | 'achievement' | 'task' | 'update' | 'event';
   action_url?: string;
   image_url?: string;
   is_active: boolean;

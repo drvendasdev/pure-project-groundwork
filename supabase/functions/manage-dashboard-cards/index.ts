@@ -82,6 +82,18 @@ serve(async (req) => {
       // Handle write operations
       switch (action) {
         case 'create':
+          // Ensure proper order_position if not provided
+          if (!cardData.order_position) {
+            const { data: maxPosition } = await supabase
+              .from('dashboard_cards')
+              .select('order_position')
+              .is('workspace_id', null)
+              .order('order_position', { ascending: false })
+              .limit(1);
+            
+            cardData.order_position = (maxPosition?.[0]?.order_position || 0) + 1;
+          }
+
           const { data: newCard, error: createError } = await supabase
             .from('dashboard_cards')
             .insert({

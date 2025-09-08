@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Zap, TrendingUp, Calendar, Bell } from 'lucide-react';
+import { MessageSquare, Zap, TrendingUp, Calendar, Bell, Newspaper, CalendarDays } from 'lucide-react';
 import { DashboardCard } from '@/hooks/useDashboardCards';
 
 interface DashboardCardModalProps {
@@ -27,7 +27,7 @@ export function DashboardCardModal({
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    type: 'message' as 'message' | 'system' | 'achievement' | 'task',
+    type: 'message' as 'message' | 'system' | 'achievement' | 'task' | 'update' | 'event',
     action_url: '',
     image_url: '',
     is_active: true,
@@ -69,6 +69,10 @@ export function DashboardCardModal({
         return <TrendingUp className="w-4 h-4" />;
       case 'task':
         return <Calendar className="w-4 h-4" />;
+      case 'update':
+        return <Newspaper className="w-4 h-4" />;
+      case 'event':
+        return <CalendarDays className="w-4 h-4" />;
       default:
         return <Bell className="w-4 h-4" />;
     }
@@ -84,6 +88,10 @@ export function DashboardCardModal({
         return 'text-success bg-success/10';
       case 'task':
         return 'text-accent bg-accent/10';
+      case 'update':
+        return 'text-info bg-info/10';
+      case 'event':
+        return 'text-purple bg-purple/10';
       default:
         return 'text-muted-foreground bg-muted';
     }
@@ -99,8 +107,12 @@ export function DashboardCardModal({
         return 'Conquista';
       case 'task':
         return 'Tarefa';
-      default:
+      case 'update':
         return 'Atualização';
+      case 'event':
+        return 'Evento';
+      default:
+        return 'Geral';
     }
   };
 
@@ -160,7 +172,7 @@ export function DashboardCardModal({
               <Label htmlFor="type">Tipo</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value: 'message' | 'system' | 'achievement' | 'task') =>
+                onValueChange={(value: 'message' | 'system' | 'achievement' | 'task' | 'update' | 'event') =>
                   setFormData(prev => ({ ...prev, type: value }))
                 }
               >
@@ -172,6 +184,8 @@ export function DashboardCardModal({
                   <SelectItem value="system">Sistema</SelectItem>
                   <SelectItem value="achievement">Conquista</SelectItem>
                   <SelectItem value="task">Tarefa</SelectItem>
+                  <SelectItem value="update">Atualização</SelectItem>
+                  <SelectItem value="event">Evento</SelectItem>
                 </SelectContent>
               </Select>
             </div>

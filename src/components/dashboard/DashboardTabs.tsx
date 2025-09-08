@@ -3,13 +3,21 @@ import { DashboardPromotionalCards } from "./DashboardPromotionalCards";
 import { DashboardUpdatesCarousel } from "./DashboardUpdatesCarousel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Home, Newspaper, Calendar, FileText, ArrowRight, MessageCircle, Users, BarChart3 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Home, Newspaper, Calendar, FileText, ArrowRight, MessageCircle, Users, BarChart3, Clock, MapPin, User } from "lucide-react";
+import { useDashboardCards } from "@/hooks/useDashboardCards";
 
 interface DashboardTabsProps {
   onNavigate: (path: string) => void;
 }
 
 export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
+  const { getActiveCards, loading } = useDashboardCards();
+  const activeCards = getActiveCards();
+  
+  const updateCards = activeCards.filter(card => card.type === 'update');
+  const eventCards = activeCards.filter(card => card.type === 'event');
+
   return (
     <Tabs defaultValue="visao-geral" className="w-full">
       <TabsList className="grid w-full grid-cols-4 mb-6">
@@ -45,32 +53,45 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2"></div>
-                  <div>
-                    <h4 className="font-medium">Nova funcionalidade de Bot IA</h4>
-                    <p className="text-sm text-muted-foreground">Agora você pode criar bots mais inteligentes com IA integrada</p>
-                    <span className="text-xs text-muted-foreground">2 dias atrás</span>
-                  </div>
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 animate-pulse">
+                      <div className="w-2 h-2 rounded-full bg-muted mt-2"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-muted rounded w-3/4"></div>
+                        <div className="h-3 bg-muted rounded w-full"></div>
+                        <div className="h-3 bg-muted rounded w-1/2"></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2"></div>
-                  <div>
-                    <h4 className="font-medium">Melhorias no Pipeline</h4>
-                    <p className="text-sm text-muted-foreground">Interface mais intuitiva para gerenciar negócios</p>
-                    <span className="text-xs text-muted-foreground">1 semana atrás</span>
-                  </div>
+              ) : updateCards.length > 0 ? (
+                <div className="space-y-3">
+                  {updateCards.slice(0, 5).map((card) => (
+                    <div key={card.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer" onClick={() => card.action_url && onNavigate(card.action_url)}>
+                      <div className="w-2 h-2 rounded-full bg-primary mt-2"></div>
+                      <div>
+                        <h4 className="font-medium">{card.title}</h4>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{card.description}</p>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(card.created_at).toLocaleDateString('pt-BR', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="w-2 h-2 rounded-full bg-primary mt-2"></div>
-                  <div>
-                    <h4 className="font-medium">Integrações N8N</h4>
-                    <p className="text-sm text-muted-foreground">Conecte facilmente com mais de 200 serviços</p>
-                    <span className="text-xs text-muted-foreground">2 semanas atrás</span>
-                  </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Newspaper className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhuma atualização configurada</p>
+                  <p className="text-sm">Configure atualizações em Administração → Dashboard</p>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -104,49 +125,86 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
       </TabsContent>
 
       <TabsContent value="eventos" className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Webinar: IA no Atendimento</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">15 de Janeiro, 19h</p>
-              <p className="text-xs text-muted-foreground mb-3">Aprenda a usar IA para melhorar seu atendimento</p>
-              <Button variant="outline" size="sm" className="w-full">
-                Inscrever-se
-                <ArrowRight className="w-3 h-3 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Workshop: Pipeline de Vendas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">22 de Janeiro, 14h</p>
-              <p className="text-xs text-muted-foreground mb-3">Otimize seu processo de vendas</p>
-              <Button variant="outline" size="sm" className="w-full">
-                Inscrever-se
-                <ArrowRight className="w-3 h-3 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Mesa Redonda: Futuro do CRM</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">30 de Janeiro, 16h</p>
-              <p className="text-xs text-muted-foreground mb-3">Discussão sobre tendências do mercado</p>
-              <Button variant="outline" size="sm" className="w-full">
-                Inscrever-se
-                <ArrowRight className="w-3 h-3 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="h-3 bg-muted rounded w-1/2"></div>
+                    <div className="h-3 bg-muted rounded w-full"></div>
+                    <div className="h-8 bg-muted rounded"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : eventCards.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {eventCards.map((card) => (
+              <Card key={card.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium flex items-start justify-between">
+                    <span className="line-clamp-2">{card.title}</span>
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      Evento
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {card.metadata?.date && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        {new Date(card.metadata.date).toLocaleDateString('pt-BR', {
+                          day: 'numeric',
+                          month: 'long',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    )}
+                    {card.metadata?.location && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4" />
+                        {card.metadata.location}
+                      </div>
+                    )}
+                    {card.metadata?.instructor && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <User className="w-4 h-4" />
+                        {card.metadata.instructor}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground line-clamp-3">{card.description}</p>
+                    {card.action_url && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full"
+                        onClick={() => onNavigate(card.action_url!)}
+                      >
+                        {card.metadata?.actionText || 'Participar'}
+                        <ArrowRight className="w-3 h-3 ml-1" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Calendar className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold mb-2">Nenhum evento configurado</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure eventos em Administração → Dashboard para exibir aqui
+            </p>
+          </div>
+        )}
       </TabsContent>
 
       <TabsContent value="relatorios" className="space-y-6">

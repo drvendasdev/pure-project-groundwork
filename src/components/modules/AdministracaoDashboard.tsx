@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, MoreHorizontal, Edit, Trash2, MessageSquare, Zap, TrendingUp, Calendar, Bell, Search, Filter } from 'lucide-react';
+import { Plus, MoreHorizontal, Edit, Trash2, MessageSquare, Zap, TrendingUp, Calendar, Bell, Search, Filter, Newspaper, CalendarDays } from 'lucide-react';
 import { useDashboardCards, DashboardCard } from '@/hooks/useDashboardCards';
 import { DashboardCardModal } from '@/components/modals/DashboardCardModal';
 import { useToast } from '@/hooks/use-toast';
@@ -68,6 +68,10 @@ export function AdministracaoDashboard() {
         return <TrendingUp className="w-4 h-4" />;
       case 'task':
         return <Calendar className="w-4 h-4" />;
+      case 'update':
+        return <Newspaper className="w-4 h-4" />;
+      case 'event':
+        return <CalendarDays className="w-4 h-4" />;
       default:
         return <Bell className="w-4 h-4" />;
     }
@@ -83,8 +87,12 @@ export function AdministracaoDashboard() {
         return 'Conquista';
       case 'task':
         return 'Tarefa';
-      default:
+      case 'update':
         return 'Atualização';
+      case 'event':
+        return 'Evento';
+      default:
+        return 'Geral';
     }
   };
 
@@ -98,6 +106,10 @@ export function AdministracaoDashboard() {
         return 'bg-success/10 text-success';
       case 'task':
         return 'bg-accent/10 text-accent';
+      case 'update':
+        return 'bg-info/10 text-info';
+      case 'event':
+        return 'bg-purple/10 text-purple';
       default:
         return 'bg-muted/10 text-muted-foreground';
     }
@@ -251,6 +263,8 @@ export function AdministracaoDashboard() {
                 <SelectItem value="system">Sistema</SelectItem>
                 <SelectItem value="achievement">Conquista</SelectItem>
                 <SelectItem value="task">Tarefa</SelectItem>
+                <SelectItem value="update">Atualização</SelectItem>
+                <SelectItem value="event">Evento</SelectItem>
               </SelectContent>
             </Select>
             
