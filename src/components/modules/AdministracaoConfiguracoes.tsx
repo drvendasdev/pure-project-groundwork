@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
 
 export function AdministracaoConfiguracoes() {
   const [connectionLimit, setConnectionLimit] = useState("1");
@@ -87,12 +88,18 @@ export function AdministracaoConfiguracoes() {
       
       <div className="bg-card rounded-lg shadow-sm border border-border">
         <Tabs defaultValue="opcoes" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
+          <TabsList className="grid w-full grid-cols-3 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
             <TabsTrigger 
               value="opcoes" 
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
             >
               Opções
+            </TabsTrigger>
+            <TabsTrigger 
+              value="webhooks" 
+              className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
+            >
+              Webhooks (Evolution)
             </TabsTrigger>
             <TabsTrigger 
               value="whitelabel" 
@@ -226,6 +233,10 @@ export function AdministracaoConfiguracoes() {
                 </Select>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="webhooks" className="p-0 mt-0">
+            <WebhooksEvolutionConfig />
           </TabsContent>
 
           <TabsContent value="whitelabel" className="p-6 mt-0">
