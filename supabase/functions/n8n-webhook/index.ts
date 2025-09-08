@@ -570,9 +570,43 @@ serve(async (req) => {
     console.log('Mensagem registrada no CRM. N8N deve processar a resposta.');
 
     // 7. Forward event to N8N webhook (after CRM registration)
-    const url = new URL(req.url);
-    const customN8nUrl = url.searchParams.get('n8nUrl'); // Allow override for testing
-    let n8nWebhookUrls = customN8nUrl || Deno.env.get('N8N_WEBHOOK_URL');
+    const requestUrl = new URL(req.url);
+    const customN8nUrl = requestUrl.searchParams.get('n8nUrl'); // Allow override for testing
+    
+    // Determinar destino do webhook com prioridade: ?n8nUrl > workspace config > N8N_WEBHOOK_URL
+    let n8nWebhookUrls = null;
+    let webhookSecret = null;
+    let webhookSource = '';
+    
+    if (customN8nUrl) {
+      n8nWebhookUrls = customN8nUrl;
+      webhookSource = 'url_override';
+      console.log('🔧 Using custom N8N URL from ?n8nUrl parameter');
+    } else {
+      // Buscar configuração do workspace
+      const { data: workspaceWebhook } = await supabase
+        .from('workspace_webhook_settings')
+        .select('webhook_url, webhook_secret')
+        .eq('workspace_id', workspace_id)
+        .single();
+      
+      if (workspaceWebhook?.webhook_url) {
+        n8nWebhookUrls = workspaceWebhook.webhook_url;
+        webhookSecret = workspaceWebhook.webhook_secret;
+        webhookSource = 'workspace_settings';
+        console.log('🏢 Using workspace webhook settings:', { 
+          workspace_id, 
+          hasSecret: !!webhookSecret 
+        });
+      } else {
+        // Fallback para variável de ambiente
+        n8nWebhookUrls = Deno.env.get('N8N_WEBHOOK_URL');
+        webhookSource = 'environment_variable';
+        if (n8nWebhookUrls) {
+          console.log('🌍 Using N8N_WEBHOOK_URL environment variable');
+        }
+      }
+    }
     
     const forwardingResults = [];
     
@@ -584,6 +618,8 @@ serve(async (req) => {
       const n8nMethod = Deno.env.get('N8N_WEBHOOK_METHOD') || 'POST';
       const n8nAuthHeader = Deno.env.get('N8N_WEBHOOK_AUTH_HEADER');
       const n8nExtraHeaders = Deno.env.get('N8N_WEBHOOK_EXTRA_HEADERS');
+      
+      console.log(`📤 Forwarding to ${urlList.length} N8N endpoint(s) using ${n8nMethod} (source: ${webhookSource})`);
       
       const n8nPayload = {
         event: 'message_received',
@@ -607,8 +643,6 @@ serve(async (req) => {
         }
       };
 
-      console.log(`📤 Forwarding to ${urlList.length} N8N endpoint(s) using ${n8nMethod}`);
-
       for (const targetUrl of urlList) {
         const startTime = Date.now();
         let result = {
@@ -617,7 +651,8 @@ serve(async (req) => {
           status: null,
           response: null,
           error: null,
-          duration_ms: 0
+          duration_ms: 0,
+          source: webhookSource
         };
 
         try {
@@ -626,7 +661,13 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           };
           
-          // Add auth header if configured
+          // Add workspace secret if available
+          if (webhookSecret) {
+            headers['X-Secret'] = webhookSecret;
+            console.log(`🔐 Adding workspace webhook secret to headers`);
+          }
+          
+          // Add auth header if configured via environment
           if (n8nAuthHeader) {
             const [key, value] = n8nAuthHeader.split(':', 2);
             if (key && value) {
@@ -687,7 +728,8 @@ serve(async (req) => {
         forwardingResults.push(result);
       }
     } else {
-      console.log('⚠️ N8N_WEBHOOK_URL not configured - skipping N8N forwarding');
+      console.log('⚠️ No N8N webhook URL configured - skipping N8N forwarding');
+      console.log('💡 Configure webhook in Administration → Settings → Evolution Webhooks or set N8N_WEBHOOK_URL environment variable');
     }
 
     return new Response(JSON.stringify({
@@ -712,6 +754,8 @@ serve(async (req) => {
         payload_size: JSON.stringify(webhookData).length,
         n8n_forwarding: {
           configured: !!n8nWebhookUrls,
+          source: webhookSource,
+          workspace_id: workspace_id,
           results: forwardingResults
         }
       }
