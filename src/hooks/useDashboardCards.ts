@@ -61,13 +61,7 @@ export function useDashboardCards() {
         .single();
 
       if (error) {
-        // Check if it's a permission error - for now, allow creation for testing
-        if (error.message?.includes('row-level security') || error.code === 'PGRST301') {
-          console.warn('RLS policy blocking creation, but user should be master. Error:', error);
-          // Try to continue anyway for testing
-        } else {
-          throw error;
-        }
+        throw error;
       }
       
       setCards(prev => [...prev, data as DashboardCard].sort((a, b) => a.order_position - b.order_position));
@@ -99,10 +93,6 @@ export function useDashboardCards() {
         .single();
 
       if (error) {
-        // Check if it's a permission error
-        if (error.message?.includes('row-level security') || error.code === 'PGRST301') {
-          throw new Error('Apenas usuários master podem editar cards do dashboard');
-        }
         throw error;
       }
       
@@ -133,10 +123,6 @@ export function useDashboardCards() {
         .eq('id', id);
 
       if (error) {
-        // Check if it's a permission error
-        if (error.message?.includes('row-level security') || error.code === 'PGRST301') {
-          throw new Error('Apenas usuários master podem excluir cards do dashboard');
-        }
         throw error;
       }
       
