@@ -33,7 +33,6 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
 
       <TabsContent value="visao-geral" className="space-y-6">
         <DashboardPromotionalCards onNavigate={onNavigate} />
-        <DashboardUpdatesCarousel onNavigate={onNavigate} />
       </TabsContent>
 
       <TabsContent value="novidades" className="space-y-6">
