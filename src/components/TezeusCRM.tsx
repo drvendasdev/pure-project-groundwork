@@ -25,6 +25,7 @@ import { Conexoes } from "./modules/Conexoes";
 import { AdministracaoUsuarios } from "./modules/AdministracaoUsuarios";
 import { AdministracaoFinanceiro } from "./modules/AdministracaoFinanceiro";
 import { AdministracaoConfiguracoes } from "./modules/AdministracaoConfiguracoes";
+import { AdministracaoDashboard } from "./modules/AdministracaoDashboard";
 import { ParceirosClientes } from "./modules/ParceirosClientes";
 import { WorkspaceEmpresas } from "./modules/WorkspaceEmpresas";
 import { WorkspaceUsersPage } from "./modules/WorkspaceUsersPage";
@@ -57,6 +58,7 @@ export type ModuleType =
   | "administracao-usuarios"
   | "administracao-financeiro"
   | "administracao-configuracoes"
+  | "administracao-dashboard"
   | "editar-agente";
 
 export function TezeusCRM() {
@@ -165,6 +167,8 @@ export function TezeusCRM() {
         return <AdministracaoFinanceiro />;
       case "administracao-configuracoes":
         return <AdministracaoConfiguracoes />;
+      case "administracao-dashboard":
+        return <AdministracaoDashboard />;
       case "editar-agente":
         return editingAgentId ? <EditarAgente agentId={editingAgentId} /> : <Dashboard {...moduleProps} />;
       default:

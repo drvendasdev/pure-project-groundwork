@@ -210,6 +210,12 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
 //group: "administracao"
   //  },
     {
+      id: "administracao-dashboard",
+      label: "Dashboard",
+      icon: <Settings className="w-5 h-5" />,
+      group: "administracao"
+    },
+    {
       id: "administracao-configuracoes",
       label: "Configurações",
       icon: <Settings className="w-5 h-5" />,
