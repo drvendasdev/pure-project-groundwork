@@ -569,6 +569,62 @@ serve(async (req) => {
 
     console.log('Mensagem registrada no CRM. N8N deve processar a resposta.');
 
+    // 7. Forward event to N8N webhook (after CRM registration)
+    const url = new URL(req.url);
+    const customN8nUrl = url.searchParams.get('n8nUrl'); // Allow override for testing
+    const n8nWebhookUrl = customN8nUrl || Deno.env.get('N8N_WEBHOOK_URL');
+    
+    if (n8nWebhookUrl) {
+      const n8nPayload = {
+        event: 'message_received',
+        conversation_id: conversation.id,
+        contact_id: contact.id,
+        message_id: newMessage.id,
+        phone_number: phoneNumber,
+        contact_name: contactName,
+        content: finalContent,
+        message_type: messageType,
+        evolution_instance: evolutionInstance,
+        workspace_id: workspace_id,
+        connection_id: connection_id,
+        external_id: externalId,
+        timestamp: timestamp,
+        agent_config: agentConfig,
+        metadata: {
+          extraction_path: extractionPath,
+          debug_mode: debugRawAsMessage,
+          raw_payload_size: JSON.stringify(webhookData).length
+        }
+      };
+
+      try {
+        console.log(`📤 Forwarding to N8N: ${n8nWebhookUrl}`);
+        
+        const n8nResponse = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        const n8nStatus = n8nResponse.status;
+        const n8nResponseText = await n8nResponse.text();
+        
+        console.log(`✅ N8N Response: ${n8nStatus} - ${n8nResponseText?.substring(0, 200)}`);
+        
+        if (!n8nResponse.ok) {
+          console.error(`❌ N8N webhook failed: ${n8nStatus} - ${n8nResponseText}`);
+        }
+        
+      } catch (n8nError) {
+        console.error('❌ Error forwarding to N8N:', n8nError.message);
+        // Don't break the flow - log error but continue
+      }
+    } else {
+      console.log('⚠️ N8N_WEBHOOK_URL not configured - skipping N8N forwarding');
+    }
+
     return new Response(JSON.stringify({
       success: true,
       data: {
@@ -588,7 +644,8 @@ serve(async (req) => {
           external_id: externalId
         },
         debug_mode: debugRawAsMessage,
-        payload_size: JSON.stringify(webhookData).length
+        payload_size: JSON.stringify(webhookData).length,
+        n8n_webhook_url: n8nWebhookUrl ? 'configured' : 'not_configured'
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
