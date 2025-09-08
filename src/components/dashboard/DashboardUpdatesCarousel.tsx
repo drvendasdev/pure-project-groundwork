@@ -90,5 +90,65 @@ export function DashboardUpdatesCarousel({
         return 'Atualização';
     }
   };
-  return;
+  return (
+    <div className="w-full">
+      <Carousel 
+        className="w-full"
+        opts={{
+          align: "start",
+          loop: true,
+          dragFree: true,
+        }}
+      >
+        <CarouselContent className="-ml-2 md:-ml-4">
+          {updates.map((update) => (
+            <CarouselItem key={update.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3">
+              <Card 
+                className="relative overflow-hidden cursor-grab active:cursor-grabbing hover:shadow-lg transition-all duration-300 border-0 bg-gradient-to-br from-primary/10 to-accent/10"
+                onClick={() => update.action && onNavigate(update.action)}
+              >
+                <CardContent className="p-0">
+                  <div className="relative h-48 overflow-hidden">
+                    <img 
+                      src={`https://picsum.photos/400/200?random=${update.id}`}
+                      alt={update.title}
+                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    
+                    {update.isNew && (
+                      <Badge className="absolute top-3 left-3 bg-primary text-primary-foreground">
+                        Novo
+                      </Badge>
+                    )}
+                    
+                    <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`p-1.5 rounded-full ${getTypeColor(update.type)}`}>
+                          {getIcon(update.type)}
+                        </div>
+                        <Badge variant="secondary" className="text-xs">
+                          {getTypeLabel(update.type)}
+                        </Badge>
+                      </div>
+                      
+                      <h3 className="font-semibold text-sm mb-1 line-clamp-1">
+                        {update.title}
+                      </h3>
+                      <p className="text-xs opacity-90 line-clamp-2 mb-2">
+                        {update.description}
+                      </p>
+                      <span className="text-xs opacity-75">
+                        {update.timestamp}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+      </Carousel>
+    </div>
+  );
 }
