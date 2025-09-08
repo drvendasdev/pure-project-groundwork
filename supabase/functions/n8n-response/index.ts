@@ -47,10 +47,10 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
+  if (!['POST', 'GET'].includes(req.method)) {
     return new Response(JSON.stringify({
       code: 'METHOD_NOT_ALLOWED',
-      message: 'Only POST method is allowed',
+      message: 'Only POST and GET methods are allowed',
       requestId
     }), {
       status: 405,
@@ -59,48 +59,63 @@ serve(async (req) => {
   }
 
   try {
-    console.log(`🎣 [${requestId}] N8N Response webhook received`);
+    const url = new URL(req.url);
+    const isGet = req.method === 'GET';
+    const dataSource = isGet ? 'query' : 'body';
     
-    // Parse robusto do body
+    console.log(`🎣 [${requestId}] N8N Response webhook received (${req.method}) from ${dataSource}`);
+    
+    // Parse robusto do payload (body ou query string)
     let payload: any = {};
-    const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+    
+    if (isGet) {
+      // Para GET requests, usar query parameters
+      payload = Object.fromEntries(url.searchParams.entries());
+      console.log(`🔍 [${requestId}] Query parameters parsed, keys: ${Object.keys(payload).join(', ')}`);
+    } else {
+      // Para POST requests, manter lógica de body parsing
+      const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
 
-    try {
-      if (contentType.includes("application/json")) {
-        payload = await req.json();
-      } else if (
-        contentType.includes("application/x-www-form-urlencoded") ||
-        contentType.includes("multipart/form-data")
-      ) {
-        const form = await req.formData();
-        payload = Object.fromEntries(form.entries());
-        // Tentar fazer parse de valores JSON em strings
-        for (const k of Object.keys(payload)) {
-          const v = payload[k];
-          if (typeof v === "string" && v.trim().startsWith("{") && v.trim().endsWith("}")) {
-            try { payload[k] = JSON.parse(v); } catch { /* ignore */ }
+      try {
+        if (contentType.includes("application/json")) {
+          payload = await req.json();
+        } else if (
+          contentType.includes("application/x-www-form-urlencoded") ||
+          contentType.includes("multipart/form-data")
+        ) {
+          const form = await req.formData();
+          payload = Object.fromEntries(form.entries());
+          // Tentar fazer parse de valores JSON em strings
+          for (const k of Object.keys(payload)) {
+            const v = payload[k];
+            if (typeof v === "string" && v.trim().startsWith("{") && v.trim().endsWith("}")) {
+              try { payload[k] = JSON.parse(v); } catch { /* ignore */ }
+            }
+          }
+        } else {
+          const text = await req.text();
+          if (text?.trim()) {
+            try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
           }
         }
-      } else {
-        const text = await req.text();
-        if (text?.trim()) {
-          try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
-        }
+      } catch (e) {
+        console.error(`❌ [${requestId}] Failed to parse request body:`, e);
+        return new Response(JSON.stringify({
+          code: 'INVALID_PAYLOAD',
+          message: 'Invalid request body format',
+          requestId
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
-    } catch (e) {
-      console.error(`❌ [${requestId}] Failed to parse request body:`, e);
-      return new Response(JSON.stringify({
-        code: 'INVALID_PAYLOAD',
-        message: 'Invalid request body format',
-        requestId
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+
+      console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
     }
 
-    console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
-
+    // Permitir override direto de workspace_id
+    const directWorkspaceId = payload.workspace_id ?? payload.workspaceId ?? null;
+    
     // Extrair e normalizar campos do payload com mais fallbacks
     const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
     
@@ -173,20 +188,23 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Resolver workspace_id com estratégia robusta
-    let workspaceId: string | null = null;
+    let workspaceId: string | null = directWorkspaceId; // Permitir override direto
     let finalConversationId: string | null = conversationId;
     let resolvedConnectionId: string | null = connectionId;
+    let resolutionMethod = directWorkspaceId ? 'direct_override' : 'auto_resolve';
 
-    console.log(`🔍 [${requestId}] Starting workspace resolution with data:`, {
+    console.log(`🔍 [${requestId}] Starting workspace resolution (${dataSource}) with data:`, {
+      directWorkspaceId,
       conversationId,
       connectionId, 
       evolutionInstance,
       instanceId,
       remoteJid,
-      phoneNumber
+      phoneNumber,
+      resolutionMethod
     });
 
-    if (conversationId) {
+    if (!workspaceId && conversationId) {
       // Caso 1: Temos conversation_id - buscar workspace_id da conversa
       console.log(`🔍 [${requestId}] Resolving workspace from conversation_id: ${conversationId}`);
       
@@ -223,9 +241,10 @@ serve(async (req) => {
 
       workspaceId = conversation.workspace_id;
       resolvedConnectionId = conversation.connection_id || connectionId;
+      resolutionMethod = 'conversation_id';
       console.log(`✅ [${requestId}] Workspace resolved from conversation: ${workspaceId}`);
 
-    } else if (connectionId) {
+    } else if (!workspaceId && connectionId) {
       // Caso 2: Temos connection_id - buscar workspace_id da conexão
       console.log(`🔍 [${requestId}] Resolving workspace from connection_id: ${connectionId}`);
       
@@ -261,9 +280,10 @@ serve(async (req) => {
       }
 
       workspaceId = connection.workspace_id;
+      resolutionMethod = 'connection_id';
       console.log(`✅ [${requestId}] Workspace resolved from connection: ${workspaceId}`);
 
-    } else if (evolutionInstance || instanceId) {
+    } else if (!workspaceId && (evolutionInstance || instanceId)) {
       // Caso 3: Temos evolution_instance ou instanceId - buscar workspace_id
       const searchValue = evolutionInstance || instanceId;
       const searchField = evolutionInstance ? 'instance_name' : 'metadata->remote_id';
@@ -335,21 +355,53 @@ serve(async (req) => {
 
       workspaceId = connection.workspace_id;
       resolvedConnectionId = connection.id;
+      resolutionMethod = evolutionInstance ? 'evolution_instance' : 'instanceId';
       console.log(`✅ [${requestId}] Workspace resolved by ${evolutionInstance ? 'instance_name' : 'instanceId'}: ${workspaceId}, connection: ${resolvedConnectionId}`);
+    
+    } else if (!workspaceId && phoneNumber) {
+      // Caso 4: Fallback - tentar inferir workspace pelo phoneNumber (buscar contato/conversa existente)
+      console.log(`🔍 [${requestId}] Fallback: trying to infer workspace from phoneNumber: ${phoneNumber}`);
+      
+      const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
+      const { data: existingContact, error: contactError } = await supabase
+        .from('contacts')
+        .select('workspace_id')
+        .eq('phone', sanitizedPhone)
+        .limit(1)
+        .maybeSingle();
+        
+      if (!contactError && existingContact) {
+        workspaceId = existingContact.workspace_id;
+        resolutionMethod = 'phone_number_fallback';
+        console.log(`✅ [${requestId}] Workspace inferred from existing contact: ${workspaceId}`);
+      } else {
+        console.log(`⚠️ [${requestId}] No existing contact found for phone: ${sanitizedPhone}`);
+      }
     }
 
     if (!workspaceId) {
-      console.error(`❌ [${requestId}] Cannot resolve workspace_id from payload`);
+      console.error(`❌ [${requestId}] Cannot resolve workspace_id from payload (method attempted: ${resolutionMethod})`);
       return new Response(JSON.stringify({
         code: 'MISSING_WORKSPACE',
         detail: 'Cannot resolve workspace_id from payload',
         message: 'Unable to determine workspace from provided identifiers',
+        resolution_method: resolutionMethod,
+        available_data: {
+          directWorkspaceId: !!directWorkspaceId,
+          conversationId: !!conversationId,
+          connectionId: !!connectionId,
+          evolutionInstance: !!evolutionInstance,
+          instanceId: !!instanceId,
+          phoneNumber: !!phoneNumber
+        },
         requestId
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);`
 
     // Se ainda não temos conversation_id, precisar resolver via phoneNumber
     if (!finalConversationId && phoneNumber && workspaceId) {
