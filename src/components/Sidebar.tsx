@@ -72,7 +72,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
 
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
-    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes") {
+    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes" || activeModule === "administracao-dashboard") {
       setExpandedGroups(prev => 
         prev.includes("administracao") ? prev : [...prev, "administracao"]
       );
