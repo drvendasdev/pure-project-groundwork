@@ -209,9 +209,9 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
       .upsert({
         phone: phoneNumber,
         name: contactName,
-        org_id: '00000000-0000-0000-0000-000000000000' // Default workspace
+        workspace_id: '00000000-0000-0000-0000-000000000000' // Default workspace
       }, {
-        onConflict: 'phone,org_id',
+        onConflict: 'phone,workspace_id',
         ignoreDuplicates: false
       })
       .select()
@@ -229,7 +229,7 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
       .upsert({
         contact_id: contact?.id,
         evolution_instance: connectionId,
-        org_id: '00000000-0000-0000-0000-000000000000',
+        workspace_id: '00000000-0000-0000-0000-000000000000',
         status: 'open',
         canal: 'whatsapp'
       }, {
@@ -298,6 +298,7 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
       .from('messages')
       .insert({
         conversation_id: conversation.id,
+        workspace_id: '00000000-0000-0000-0000-000000000000',
         content,
         message_type: messageType,
         sender_type: 'contact',

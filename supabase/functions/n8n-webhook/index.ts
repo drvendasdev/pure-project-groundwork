@@ -279,12 +279,51 @@ serve(async (req) => {
       }
     }
 
-    // 1. Criar ou encontrar contato
+    // 1. Resolver workspace_id e connection_id a partir da evolutionInstance
+    let workspace_id = null;
+    let connection_id = null;
+    
+    if (evolutionInstance) {
+      // Primeiro, tentar encontrar pela tabela connections
+      const { data: connectionData } = await supabase
+        .from('connections')
+        .select('id, workspace_id')
+        .eq('instance_name', evolutionInstance)
+        .single();
+      
+      if (connectionData) {
+        workspace_id = connectionData.workspace_id;
+        connection_id = connectionData.id;
+        console.log('Connection encontrada:', { evolutionInstance, workspace_id, connection_id });
+      } else {
+        // Fallback: buscar na tabela evolution_instance_tokens
+        const { data: tokenData } = await supabase
+          .from('evolution_instance_tokens')
+          .select('workspace_id')
+          .eq('instance_name', evolutionInstance)
+          .single();
+        
+        if (tokenData) {
+          workspace_id = tokenData.workspace_id;
+          console.log('Workspace encontrado via tokens:', { evolutionInstance, workspace_id });
+        } else {
+          console.warn('Nenhum workspace encontrado para a instância:', evolutionInstance);
+          throw new Error(`Instância ${evolutionInstance} não encontrada em nenhum workspace`);
+        }
+      }
+    }
+
+    if (!workspace_id) {
+      throw new Error('workspace_id é obrigatório para processar mensagens');
+    }
+
+    // 2. Criar ou encontrar contato (agora com workspace_id)
     let contact;
     const { data: existingContact } = await supabase
       .from('contacts')
       .select('*')
       .eq('phone', phoneNumber)
+      .eq('workspace_id', workspace_id)
       .single();
 
     if (existingContact) {
@@ -300,12 +339,13 @@ serve(async (req) => {
         contact = existingContact;
       }
     } else {
-      // Criar novo contato
+      // Criar novo contato (agora com workspace_id)
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
           name: contactName || phoneNumber,
-          phone: phoneNumber
+          phone: phoneNumber,
+          workspace_id: workspace_id
         })
         .select()
         .single();
@@ -316,12 +356,13 @@ serve(async (req) => {
       contact = newContact;
     }
 
-    // 2. Encontrar ou criar conversa ativa
+    // 3. Encontrar ou criar conversa ativa (agora com workspace_id e connection_id)
     let conversation;
     const { data: existingConversation } = await supabase
       .from('conversations')
       .select('*')
       .eq('contact_id', contact.id)
+      .eq('workspace_id', workspace_id)
       .eq('canal', 'whatsapp')
       .eq('status', 'open')
       .order('created_at', { ascending: false })
@@ -380,11 +421,13 @@ serve(async (req) => {
         }
       }
 
-      // Criar nova conversa - N8N gerencia a IA, não o sistema local
+      // Criar nova conversa - N8N gerencia a IA, não o sistema local (agora com workspace_id e connection_id)
       const { data: newConversation, error: convError } = await supabase
         .from('conversations')
         .insert({
           contact_id: contact.id,
+          workspace_id: workspace_id,
+          connection_id: connection_id,
           canal: 'whatsapp',
           agente_ativo: false, // N8N gerencia as respostas
           status: 'open',
@@ -449,11 +492,12 @@ serve(async (req) => {
     // Determinar content - usar payload completo em modo debug ou message extraído
     const finalContent = debugRawAsMessage ? JSON.stringify(webhookData, null, 2) : message;
 
-    // 3. Inserir mensagem
+    // 4. Inserir mensagem (agora com workspace_id)
     const { data: newMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversation.id,
+        workspace_id: workspace_id,
         content: finalContent,
         sender_type: 'contact',
         message_type: messageType,
@@ -470,7 +514,7 @@ serve(async (req) => {
       throw new Error(`Erro ao inserir mensagem: ${messageError.message}`);
     }
 
-    // 4. Atualizar última atividade da conversa
+    // 5. Atualizar última atividade da conversa
     await supabase
       .from('conversations')
       .update({ 
@@ -479,7 +523,7 @@ serve(async (req) => {
       })
       .eq('id', conversation.id);
 
-    // 5. Buscar configurações do agente para enviar ao N8N
+    // 6. Buscar configurações do agente para enviar ao N8N
     let agentConfig = null;
     const { data: activeAgent } = await supabase
       .from('ai_agents')
