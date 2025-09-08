@@ -56,10 +56,11 @@ serve(async (req) => {
       }
 
       if (action === 'list') {
+        // Return global cards (workspace_id IS NULL) and compatibility cards (workspace_id = '00000000-0000-0000-0000-000000000000')
         const { data: cards, error } = await supabase
           .from('dashboard_cards')
           .select('*')
-          .is('workspace_id', null)
+          .or('workspace_id.is.null,workspace_id.eq.00000000-0000-0000-0000-000000000000')
           .order('order_position', { ascending: true });
 
         if (error) {
@@ -70,6 +71,7 @@ serve(async (req) => {
           });
         }
 
+        console.log('Successfully fetched cards:', cards?.length || 0);
         return new Response(JSON.stringify({ cards }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -85,15 +87,30 @@ serve(async (req) => {
         });
       }
 
-      // Check if user is master
+      // Check if user is master (more secure filtering)
+      let whereClause = '';
+      if (systemUserEmail) {
+        whereClause = `email.eq.${systemUserEmail}`;
+      } else if (systemUserId) {
+        whereClause = `id.eq.${systemUserId}`;
+      }
+
       const { data: user, error: userError } = await supabase
         .from('system_users')
         .select('profile')
-        .or(`email.eq.${systemUserEmail},id.eq.${systemUserId}`)
-        .single();
+        .or(whereClause)
+        .maybeSingle();
 
-      if (userError || !user || user.profile !== 'master') {
-        console.log('Access denied - user profile:', user?.profile);
+      if (userError) {
+        console.error('Error checking user profile:', userError);
+        return new Response(JSON.stringify({ error: 'Failed to verify user permissions' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!user || user.profile !== 'master') {
+        console.log('Access denied - user profile:', user?.profile, 'email:', systemUserEmail, 'id:', systemUserId);
         return new Response(JSON.stringify({ error: 'Only master users can manage dashboard cards' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

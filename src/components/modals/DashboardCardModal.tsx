@@ -31,7 +31,10 @@ export function DashboardCardModal({
     action_url: '',
     image_url: '',
     is_active: true,
-    order_position: 1
+    order_position: 1,
+    event_date: '',
+    event_location: '',
+    event_instructor: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -44,7 +47,10 @@ export function DashboardCardModal({
         action_url: card.action_url || '',
         image_url: card.image_url || '',
         is_active: card.is_active,
-        order_position: card.order_position
+        order_position: card.order_position,
+        event_date: card.metadata?.date || '',
+        event_location: card.metadata?.location || '',
+        event_instructor: card.metadata?.instructor || ''
       });
     } else {
       setFormData({
@@ -54,7 +60,10 @@ export function DashboardCardModal({
         action_url: '',
         image_url: '',
         is_active: true,
-        order_position: 1
+        order_position: 1,
+        event_date: '',
+        event_location: '',
+        event_instructor: ''
       });
     }
   }, [card, isOpen]);
@@ -121,10 +130,19 @@ export function DashboardCardModal({
     setSaving(true);
 
     try {
+      const metadata: any = {};
+      if (formData.type === 'event') {
+        if (formData.event_date) metadata.date = formData.event_date;
+        if (formData.event_location) metadata.location = formData.event_location;
+        if (formData.event_instructor) metadata.instructor = formData.event_instructor;
+      }
+
+      const { event_date, event_location, event_instructor, ...cardData } = formData;
+      
       await onSave({
-        ...formData,
+        ...cardData,
         workspace_id: null,
-        metadata: {}
+        metadata
       });
       onClose();
     } catch (error) {
@@ -220,6 +238,42 @@ export function DashboardCardModal({
                 onChange={(e) => setFormData(prev => ({ ...prev, order_position: parseInt(e.target.value) || 1 }))}
               />
             </div>
+
+            {formData.type === 'event' && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <Label className="text-sm font-medium">Detalhes do Evento</Label>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="event_date">Data e Hora</Label>
+                  <Input
+                    id="event_date"
+                    type="datetime-local"
+                    value={formData.event_date}
+                    onChange={(e) => setFormData(prev => ({ ...prev, event_date: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="event_location">Local</Label>
+                  <Input
+                    id="event_location"
+                    value={formData.event_location}
+                    onChange={(e) => setFormData(prev => ({ ...prev, event_location: e.target.value }))}
+                    placeholder="Ex: Auditório Principal"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="event_instructor">Instrutor/Responsável</Label>
+                  <Input
+                    id="event_instructor"
+                    value={formData.event_instructor}
+                    onChange={(e) => setFormData(prev => ({ ...prev, event_instructor: e.target.value }))}
+                    placeholder="Nome do instrutor"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center space-x-2">
               <Switch

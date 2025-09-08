@@ -13,7 +13,10 @@ export function DashboardUpdatesCarousel({
   onNavigate
 }: DashboardUpdatesCarouselProps) {
   const { getActiveCards, loading } = useDashboardCards();
-  const activeCards = getActiveCards();
+  // Filter out 'update' and 'event' types - they show in their respective tabs
+  const activeCards = getActiveCards().filter(card => 
+    card.type !== 'update' && card.type !== 'event'
+  );
 
   if (loading) {
     return (
