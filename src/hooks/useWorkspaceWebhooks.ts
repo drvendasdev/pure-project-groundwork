@@ -330,6 +330,19 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     }
   };
 
+  // Get applied instances count
+  const getAppliedCount = () => {
+    return instances.filter(instance => instance.use_workspace_default).length;
+  };
+
+  // Filter instances based on applied status
+  const getFilteredInstances = (showOnlyApplied: boolean) => {
+    if (showOnlyApplied) {
+      return instances.filter(instance => instance.use_workspace_default);
+    }
+    return instances;
+  };
+
   useEffect(() => {
     if (workspaceId) {
       fetchWebhookConfig();
@@ -350,6 +363,8 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     testWebhook,
     fetchInstances,
     fetchWebhookLogs,
+    getAppliedCount,
+    getFilteredInstances,
     refetch: fetchWebhookConfig
   };
 };

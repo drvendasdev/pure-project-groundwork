@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useWorkspaceWebhooks } from "@/hooks/useWorkspaceWebhooks";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { WebhookLog } from "@/types/webhook";
@@ -42,13 +43,16 @@ export function WebhooksEvolutionConfig() {
     rotateWebhookSecret,
     applyToAllInstances,
     testWebhook,
-    fetchWebhookLogs
+    fetchWebhookLogs,
+    getAppliedCount,
+    getFilteredInstances
   } = useWorkspaceWebhooks(workspaceId);
 
   const [webhookUrl, setWebhookUrl] = useState("");
   const [showSecret, setShowSecret] = useState(false);
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showOnlyApplied, setShowOnlyApplied] = useState(false);
   const [filters, setFilters] = useState({
     eventType: "",
     status: "",
@@ -234,12 +238,32 @@ export function WebhooksEvolutionConfig() {
         <TabsContent value="instances" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Instâncias do Workspace</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Instâncias do Workspace</span>
+                <Badge variant="outline">
+                  Aplicadas: {getAppliedCount()} de {instances.length}
+                </Badge>
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="show-applied"
+                  checked={showOnlyApplied}
+                  onCheckedChange={setShowOnlyApplied}
+                />
+                <Label htmlFor="show-applied">
+                  Mostrar apenas instâncias com configuração aplicada
+                </Label>
+              </div>
+              
               {instances.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   Nenhuma instância encontrada
+                </div>
+              ) : getFilteredInstances(showOnlyApplied).length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nenhuma instância com configuração aplicada
                 </div>
               ) : (
                 <Table>
@@ -252,7 +276,7 @@ export function WebhooksEvolutionConfig() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {instances.map((instance) => (
+                    {getFilteredInstances(showOnlyApplied).map((instance) => (
                       <TableRow key={instance.id}>
                         <TableCell className="font-medium">
                           {instance.instance_name}
