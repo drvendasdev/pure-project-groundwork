@@ -401,7 +401,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);`
+    console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);
 
     // Se ainda não temos conversation_id, precisar resolver via phoneNumber
     if (!finalConversationId && phoneNumber && workspaceId) {
