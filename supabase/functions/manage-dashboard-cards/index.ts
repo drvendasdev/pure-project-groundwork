@@ -5,6 +5,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
 serve(async (req) => {
@@ -17,13 +18,33 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { action, cardData, cardId } = await req.json();
+    // Safely parse JSON with fallback for empty bodies
+    let requestBody = {};
+    try {
+      const text = await req.text();
+      if (text.trim()) {
+        requestBody = JSON.parse(text);
+      }
+    } catch (parseError) {
+      console.log('JSON parse error:', parseError);
+      requestBody = {};
+    }
+
+    const { action, cardData, cardId } = requestBody;
     
     // Get system user info from headers
     const systemUserEmail = req.headers.get('x-system-user-email');
     const systemUserId = req.headers.get('x-system-user-id');
 
-    console.log('Dashboard cards request:', { action, systemUserEmail, systemUserId });
+    console.log('Dashboard cards request:', { action, systemUserEmail, systemUserId, method: req.method, url: req.url });
+
+    if (!action) {
+      console.log('No action provided in request body');
+      return new Response(JSON.stringify({ error: 'Action is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     // For read operations, allow all authenticated users
     if (action === 'list' || action === 'get') {
