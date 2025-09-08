@@ -101,18 +101,22 @@ serve(async (req) => {
 
     console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
 
-    // Extrair e normalizar campos do payload
+    // Extrair e normalizar campos do payload com mais fallbacks
     const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
-    const phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
-    const responseMessage = payload.response_message ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? null;
-    const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? "text").toString().toLowerCase();
-    const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? null;
-    const fileName = payload.file_name ?? payload.fileName ?? payload.filename ?? null;
+    const phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? payload.remoteJid?.replace('@s.whatsapp.net', '') ?? null;
+    const responseMessage = payload.response_message ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? null;
+    const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? payload.messageType ?? "text").toString().toLowerCase();
+    const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? payload.media?.url ?? payload.imageMessage?.url ?? payload.videoMessage?.url ?? payload.audioMessage?.url ?? payload.documentMessage?.url ?? null;
+    const fileName = payload.file_name ?? payload.fileName ?? payload.filename ?? payload.media?.filename ?? payload.imageMessage?.fileName ?? payload.videoMessage?.fileName ?? payload.audioMessage?.fileName ?? payload.documentMessage?.fileName ?? null;
     const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
+    const instanceId = payload.instance_id ?? payload.instanceId ?? payload.instanceID ?? null;
     const connectionId = payload.connection_id ?? payload.connectionId ?? null;
-    const externalId = payload.external_id ?? payload.externalId ?? payload.message_id ?? payload.messageId ?? null;
+    const externalId = payload.external_id ?? payload.externalId ?? payload.message_id ?? payload.messageId ?? payload.key?.id ?? null;
     const metadata = payload.metadata ?? payload.meta ?? null;
-    const senderType = (payload.sender_type ?? "agent").toString().toLowerCase();
+    
+    // Inferir sender_type como 'contact' para mensagens recebidas se não especificado
+    const senderType = payload.sender_type ?? (payload.messageTimestamp ? "contact" : "agent");
+    const messageStatus = payload.status ?? (senderType === "contact" ? "received" : "sent");
 
     const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
     const hasValidContent = !!(responseMessage || (fileUrl && finalMessageType !== "text"));
@@ -249,15 +253,50 @@ serve(async (req) => {
       workspaceId = connection.workspace_id;
       console.log(`✅ [${requestId}] Workspace resolved from connection: ${workspaceId}`);
 
-    } else if (evolutionInstance) {
-      // Caso 3: Temos evolution_instance - buscar workspace_id via instance_name
-      console.log(`🔍 [${requestId}] Resolving workspace from evolution_instance: ${evolutionInstance}`);
+    } else if (evolutionInstance || instanceId) {
+      // Caso 3: Temos evolution_instance ou instanceId - buscar workspace_id
+      const searchValue = evolutionInstance || instanceId;
+      const searchField = evolutionInstance ? 'instance_name' : 'metadata->remote_id';
+      console.log(`🔍 [${requestId}] Resolving workspace from ${evolutionInstance ? 'evolution_instance' : 'instanceId'}: ${searchValue}`);
       
-      const { data: connection, error: connError } = await supabase
-        .from('connections')
-        .select('id, workspace_id, instance_name')
-        .eq('instance_name', evolutionInstance)
-        .maybeSingle();
+      let connection = null;
+      let connError = null;
+      
+      if (evolutionInstance) {
+        // Buscar por instance_name primeiro
+        const result = await supabase
+          .from('connections')
+          .select('id, workspace_id, instance_name')
+          .eq('instance_name', evolutionInstance)
+          .maybeSingle();
+        connection = result.data;
+        connError = result.error;
+      }
+      
+      if (!connection && instanceId) {
+        // Fallback: buscar por metadata.remote_id
+        console.log(`🔍 [${requestId}] Fallback: searching by instanceId in metadata: ${instanceId}`);
+        const result = await supabase
+          .from('connections')
+          .select('id, workspace_id, instance_name, metadata')
+          .filter('metadata->remote_id', 'eq', instanceId)
+          .maybeSingle();
+        connection = result.data;
+        connError = result.error;
+      }
+
+      if (connError) {
+        console.error(`❌ [${requestId}] Error querying instance:`, connError);
+        return new Response(JSON.stringify({
+          code: 'DATABASE_ERROR',
+          message: 'Error querying evolution instance',
+          details: connError.message,
+          requestId
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
 
       if (connError) {
         console.error(`❌ [${requestId}] Error querying instance:`, connError);
@@ -273,10 +312,10 @@ serve(async (req) => {
       }
 
       if (!connection) {
-        console.error(`❌ [${requestId}] Instance not found: ${evolutionInstance}`);
+        console.error(`❌ [${requestId}] Instance not found: ${searchValue} (searched by ${evolutionInstance ? 'instance_name' : 'instanceId'})`);
         return new Response(JSON.stringify({
           code: 'INSTANCE_NOT_FOUND',
-          message: 'Specified evolution_instance not found',
+          message: `Specified ${evolutionInstance ? 'evolution_instance' : 'instanceId'} not found`,
           requestId
         }), {
           status: 404,
@@ -286,7 +325,7 @@ serve(async (req) => {
 
       workspaceId = connection.workspace_id;
       resolvedConnectionId = connection.id;
-      console.log(`✅ [${requestId}] Workspace resolved from instance: ${workspaceId}, connection: ${resolvedConnectionId}`);
+      console.log(`✅ [${requestId}] Workspace resolved by ${evolutionInstance ? 'instance_name' : 'instanceId'}: ${workspaceId}, connection: ${resolvedConnectionId}`);
     }
 
     if (!workspaceId) {
@@ -461,7 +500,7 @@ serve(async (req) => {
       message_type: finalMessageType,
       file_url: fileUrl,
       file_name: fileName,
-      status: "sent",
+      status: messageStatus,
       origem_resposta: "automatica",
       metadata: metadata ? { n8n_data: metadata, source: "n8n", requestId } : { source: "n8n", requestId },
     };
@@ -522,7 +561,7 @@ serve(async (req) => {
       })
       .eq("id", finalConversationId);
 
-    console.log(`✅ [${requestId}] Message processed successfully: ${newMessage.id}`);
+    console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
 
     return new Response(JSON.stringify({
       ok: true,
@@ -531,6 +570,8 @@ serve(async (req) => {
         conversation_id: finalConversationId,
         workspace_id: workspaceId,
         registered_at: newMessage.created_at,
+        sender_type: senderType,
+        message_type: finalMessageType,
       },
       requestId
     }), {
