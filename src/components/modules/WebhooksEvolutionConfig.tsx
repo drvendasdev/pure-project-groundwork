@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export function WebhooksEvolutionConfig() {
     fetchWebhookLogs
   } = useWorkspaceWebhooks(selectedWorkspace?.workspace_id);
 
-  const [webhookUrl, setWebhookUrl] = useState(webhookConfig?.webhook_url || "");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [showSecret, setShowSecret] = useState(false);
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,6 +54,13 @@ export function WebhooksEvolutionConfig() {
     dateFrom: "",
     dateTo: ""
   });
+
+  // Sync webhookUrl with config when it loads
+  useEffect(() => {
+    if (webhookConfig?.webhook_url) {
+      setWebhookUrl(webhookConfig.webhook_url);
+    }
+  }, [webhookConfig]);
 
   const handleSaveConfig = async () => {
     if (!webhookUrl.trim()) return;
@@ -252,7 +259,7 @@ export function WebhooksEvolutionConfig() {
                         <TableCell className="text-sm text-muted-foreground">
                           {instance.use_workspace_default 
                             ? webhookConfig?.webhook_url || "Não configurado"
-                            : instance.custom_webhook_url || "Não configurado"
+                            : "Configuração personalizada"
                           }
                         </TableCell>
                       </TableRow>

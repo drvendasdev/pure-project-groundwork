@@ -1,5 +1,4 @@
 export interface WorkspaceWebhook {
-  id: string;
   workspace_id: string;
   webhook_url: string;
   webhook_secret: string;
@@ -10,8 +9,9 @@ export interface WorkspaceWebhook {
 export interface WebhookLog {
   id: string;
   workspace_id: string;
+  instance_id?: string;
   event_type: string;
-  status: 'success' | 'error' | 'pending';
+  status: string;
   payload_json: any;
   response_status?: number;
   response_body?: string;
@@ -23,8 +23,6 @@ export interface WorkspaceInstance {
   instance_name: string;
   status: string;
   use_workspace_default: boolean;
-  custom_webhook_url?: string;
-  custom_webhook_secret?: string;
 }
 
 export interface TestWebhookResponse {

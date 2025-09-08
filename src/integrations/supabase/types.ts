@@ -332,6 +332,7 @@ export type Database = {
           qr_code: string | null
           status: string
           updated_at: string | null
+          use_workspace_default: boolean | null
           workspace_id: string
         }
         Insert: {
@@ -346,6 +347,7 @@ export type Database = {
           qr_code?: string | null
           status?: string
           updated_at?: string | null
+          use_workspace_default?: boolean | null
           workspace_id: string
         }
         Update: {
@@ -360,6 +362,7 @@ export type Database = {
           qr_code?: string | null
           status?: string
           updated_at?: string | null
+          use_workspace_default?: boolean | null
           workspace_id?: string
         }
         Relationships: [
@@ -1171,6 +1174,57 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_logs: {
+        Row: {
+          created_at: string | null
+          event_type: string | null
+          id: string
+          instance_id: string | null
+          payload_json: Json | null
+          response_body: string | null
+          response_status: number | null
+          status: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_json?: Json | null
+          response_body?: string | null
+          response_status?: number | null
+          status?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_json?: Json | null
+          response_body?: string | null
+          response_status?: number | null
+          status?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
       workspace_limits: {
         Row: {
           connection_limit: number
@@ -1246,6 +1300,45 @@ export type Database = {
             foreignKeyName: "workspace_members_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
+      workspace_webhook_settings: {
+        Row: {
+          created_at: string | null
+          updated_at: string | null
+          webhook_secret: string
+          webhook_url: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          updated_at?: string | null
+          webhook_secret: string
+          webhook_url: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          updated_at?: string | null
+          webhook_secret?: string
+          webhook_url?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_webhook_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_webhook_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
             referencedRelation: "workspaces_view"
             referencedColumns: ["workspace_id"]
           },

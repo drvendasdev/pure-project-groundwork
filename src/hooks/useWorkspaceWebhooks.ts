@@ -16,13 +16,15 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('get-workspace-webhook', {
-        body: { workspace_id: workspaceId }
-      });
+      const { data, error } = await supabase
+        .from('workspace_webhook_settings')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
 
       if (error) throw error;
       
-      setWebhookConfig(data?.webhook || null);
+      setWebhookConfig(data);
     } catch (error) {
       console.error('Error fetching webhook config:', error);
       toast({
@@ -41,17 +43,20 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('save-workspace-webhook', {
-        body: { 
+      const { data, error } = await supabase
+        .from('workspace_webhook_settings')
+        .upsert({
           workspace_id: workspaceId,
           webhook_url: url,
-          webhook_secret: secret
-        }
-      });
+          webhook_secret: secret,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
 
       if (error) throw error;
       
-      setWebhookConfig(data.webhook);
+      setWebhookConfig(data);
       toast({
         title: "Sucesso",
         description: "Configuração do webhook salva com sucesso",
@@ -76,13 +81,20 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('rotate-webhook-secret', {
-        body: { workspace_id: workspaceId }
-      });
+      const newSecret = crypto.randomUUID();
+      const { data, error } = await supabase
+        .from('workspace_webhook_settings')
+        .update({ 
+          webhook_secret: newSecret, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('workspace_id', workspaceId)
+        .select()
+        .single();
 
       if (error) throw error;
       
-      setWebhookConfig(data.webhook);
+      setWebhookConfig(data);
       toast({
         title: "Sucesso",
         description: "Secret do webhook rotacionado com sucesso",
@@ -107,15 +119,16 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('apply-webhook-to-all', {
-        body: { workspace_id: workspaceId }
-      });
+      const { error, count } = await supabase
+        .from('connections')
+        .update({ use_workspace_default: true }, { count: 'exact' })
+        .eq('workspace_id', workspaceId);
 
       if (error) throw error;
       
       toast({
         title: "Sucesso",
-        description: `Webhook aplicado a ${data.updated_count} instâncias`,
+        description: `Webhook aplicado a ${count || 0} instâncias`,
       });
       
       // Refresh instances list
@@ -139,18 +152,44 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     if (!workspaceId || !webhookConfig?.webhook_url) return null;
     
     setIsTestingWebhook(true);
+    const startTime = performance.now();
+    
     try {
-      const { data, error } = await supabase.functions.invoke('test-webhook', {
-        body: { 
-          workspace_id: workspaceId,
-          webhook_url: webhookConfig.webhook_url,
-          webhook_secret: webhookConfig.webhook_secret
-        }
+      const testPayload = {
+        type: 'test',
+        timestamp: new Date().toISOString(),
+        workspace_id: workspaceId
+      };
+
+      const response = await fetch(webhookConfig.webhook_url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Secret': webhookConfig.webhook_secret
+        },
+        body: JSON.stringify(testPayload)
       });
 
-      if (error) throw error;
-      
-      const result = data as TestWebhookResponse;
+      const endTime = performance.now();
+      const latency = Math.round(endTime - startTime);
+      const responseText = await response.text().catch(() => '');
+
+      // Log the test result
+      await supabase.from('webhook_logs').insert({
+        workspace_id: workspaceId,
+        event_type: 'test',
+        status: response.ok ? 'success' : 'error',
+        payload_json: testPayload,
+        response_status: response.status,
+        response_body: responseText
+      });
+
+      const result: TestWebhookResponse = {
+        success: response.ok,
+        status: response.status,
+        latency,
+        error: response.ok ? undefined : `HTTP ${response.status}: ${responseText}`
+      };
       
       if (result.success) {
         toast({
@@ -167,6 +206,18 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
       
       return result;
     } catch (error) {
+      const endTime = performance.now();
+      const latency = Math.round(endTime - startTime);
+      
+      // Log the error
+      await supabase.from('webhook_logs').insert({
+        workspace_id: workspaceId,
+        event_type: 'test',
+        status: 'error',
+        payload_json: { type: 'test', timestamp: new Date().toISOString() },
+        response_body: (error as Error).message
+      });
+
       console.error('Error testing webhook:', error);
       toast({
         title: "Erro",
@@ -184,13 +235,15 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     if (!workspaceId) return;
     
     try {
-      const { data, error } = await supabase.functions.invoke('get-workspace-instances', {
-        body: { workspace_id: workspaceId }
-      });
+      const { data, error } = await supabase
+        .from('connections')
+        .select('id, instance_name, status, use_workspace_default')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       
-      setInstances(data?.instances || []);
+      setInstances(data || []);
     } catch (error) {
       console.error('Error fetching instances:', error);
     }
@@ -201,22 +254,42 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     if (!workspaceId) return;
     
     try {
-      const { data, error } = await supabase.functions.invoke('get-webhook-logs', {
-        body: { 
-          workspace_id: workspaceId,
-          page,
-          limit,
-          filters
-        }
-      });
+      const offset = (page - 1) * limit;
+      let query = supabase
+        .from('webhook_logs')
+        .select('*', { count: 'exact' })
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      // Apply filters
+      if (filters?.eventType) {
+        query = query.eq('event_type', filters.eventType);
+      }
+      if (filters?.status) {
+        query = query.eq('status', filters.status);
+      }
+      if (filters?.dateFrom) {
+        query = query.gte('created_at', filters.dateFrom);
+      }
+      if (filters?.dateTo) {
+        query = query.lte('created_at', filters.dateTo);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
       
-      setLogs(data?.logs || []);
+      const typedLogs = (data || []).map(log => ({
+        ...log,
+        status: log.status as 'success' | 'error' | 'pending'
+      })) as WebhookLog[];
+      
+      setLogs(typedLogs);
       return {
-        logs: data?.logs || [],
-        total: data?.total || 0,
-        totalPages: Math.ceil((data?.total || 0) / limit)
+        logs: typedLogs,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
       };
     } catch (error) {
       console.error('Error fetching webhook logs:', error);
