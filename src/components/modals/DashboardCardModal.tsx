@@ -16,15 +16,13 @@ interface DashboardCardModalProps {
   onClose: () => void;
   onSave: (cardData: Omit<DashboardCard, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   card?: DashboardCard | null;
-  workspaceId: string;
 }
 
 export function DashboardCardModal({ 
   isOpen, 
   onClose, 
   onSave, 
-  card,
-  workspaceId 
+  card
 }: DashboardCardModalProps) {
   const [formData, setFormData] = useState({
     title: '',
@@ -113,7 +111,7 @@ export function DashboardCardModal({
     try {
       await onSave({
         ...formData,
-        workspace_id: workspaceId,
+        workspace_id: null,
         metadata: {}
       });
       onClose();

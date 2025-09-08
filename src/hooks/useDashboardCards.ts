@@ -12,7 +12,7 @@ export interface DashboardCard {
   image_url?: string;
   is_active: boolean;
   order_position: number;
-  workspace_id: string;
+  workspace_id: string | null;
   metadata?: any;
   created_at: string;
   updated_at: string;
@@ -22,21 +22,15 @@ export function useDashboardCards() {
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { selectedWorkspace } = useWorkspace();
 
   const fetchCards = async () => {
     try {
       setLoading(true);
-      
-      if (!selectedWorkspace?.workspace_id) {
-        setCards([]);
-        return;
-      }
 
       const { data, error } = await supabase
         .from('dashboard_cards')
         .select('*')
-        .eq('workspace_id', selectedWorkspace.workspace_id)
+        .is('workspace_id', null)
         .order('order_position', { ascending: true });
 
       if (error) throw error;
@@ -55,13 +49,9 @@ export function useDashboardCards() {
 
   const createCard = async (cardData: Omit<DashboardCard, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      if (!selectedWorkspace?.workspace_id) {
-        throw new Error('Nenhum workspace selecionado');
-      }
-
       const cardWithWorkspace = {
         ...cardData,
-        workspace_id: selectedWorkspace.workspace_id
+        workspace_id: null
       };
 
       const { data, error } = await supabase
@@ -219,7 +209,7 @@ export function useDashboardCards() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedWorkspace?.workspace_id]);
+  }, []);
 
   return {
     cards,

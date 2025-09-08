@@ -660,7 +660,7 @@ export type Database = {
           title: string
           type: string
           updated_at: string
-          workspace_id: string
+          workspace_id: string | null
         }
         Insert: {
           action_url?: string | null
@@ -674,7 +674,7 @@ export type Database = {
           title: string
           type: string
           updated_at?: string
-          workspace_id: string
+          workspace_id?: string | null
         }
         Update: {
           action_url?: string | null
@@ -688,7 +688,7 @@ export type Database = {
           title?: string
           type?: string
           updated_at?: string
-          workspace_id?: string
+          workspace_id?: string | null
         }
         Relationships: []
       }
