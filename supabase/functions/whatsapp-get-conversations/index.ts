@@ -35,8 +35,9 @@ serve(async (req) => {
     // Get user info from headers
     const systemUserId = req.headers.get('x-system-user-id');
     const systemUserEmail = req.headers.get('x-system-user-email');
+    const workspaceId = req.headers.get('x-workspace-id');
     
-    console.log('🔄 Fetching WhatsApp conversations for user:', systemUserId);
+    console.log('🔄 Fetching WhatsApp conversations for user:', systemUserId, 'workspace:', workspaceId);
     
     if (!systemUserId) {
       return new Response(JSON.stringify({ 
@@ -85,6 +86,7 @@ serve(async (req) => {
         contact_id,
         assigned_user_id,
         connection_id,
+        workspace_id,
         contacts (
           id,
           name,
@@ -94,6 +96,12 @@ serve(async (req) => {
         )
       `)
       .eq('canal', 'whatsapp');
+
+    // Apply workspace filtering for Masters and Admins
+    if (workspaceId && (userProfile.profile === 'master' || userProfile.profile === 'admin')) {
+      console.log(`🏢 Filtering conversations by workspace: ${workspaceId}`);
+      conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+    }
 
     if (!isMasterOrAdmin) {
       console.log('🔒 User is not admin/master, filtering by assigned connections');
@@ -158,6 +166,12 @@ serve(async (req) => {
       conversationsQuery = conversationsQuery
         .in('connection_id', connectionIds)
         .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
+        
+      // Apply workspace filtering for regular users if workspace is provided
+      if (workspaceId) {
+        console.log(`🏢 Filtering user conversations by workspace: ${workspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      }
     } else {
       console.log('👑 User is admin/master, fetching all conversations');
     }

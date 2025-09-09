@@ -62,13 +62,20 @@ export const useWhatsAppConversations = () => {
         return;
       }
 
-      // Use Edge Function with user authentication headers
+      // Use Edge Function with user authentication headers and workspace context
+      const headers: Record<string, string> = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || ''
+      };
+
+      // Add workspace context if available
+      if (selectedWorkspace?.workspace_id) {
+        headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+      }
+
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
         method: 'GET',
-        headers: {
-          'x-system-user-id': currentUserData.id,
-          'x-system-user-email': currentUserData.email || ''
-        }
+        headers
       });
 
       if (functionError) {
@@ -229,12 +236,19 @@ export const useWhatsAppConversations = () => {
         file_name: fileName
       };
 
+      const headers: Record<string, string> = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || ''
+      };
+
+      // Add workspace context if available (send-message derives workspace from conversation)
+      if (selectedWorkspace?.workspace_id) {
+        headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+      }
+
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
         body: payload,
-        headers: {
-          'x-system-user-id': currentUserData.id,
-          'x-system-user-email': currentUserData.email || ''
-        }
+        headers
       });
 
       if (apiError) {

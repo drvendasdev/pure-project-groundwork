@@ -52,10 +52,17 @@ export function CRMContatos() {
     try {
       setIsLoading(true);
       
-      // First, get distinct contact_ids from conversations
+      if (!selectedWorkspace) {
+        console.warn('No workspace selected in CRM Contatos');
+        setContacts([]);
+        return;
+      }
+
+      // First, get distinct contact_ids from conversations filtered by workspace
       const { data: conversationContacts, error: conversationsError } = await supabase
         .from('conversations')
         .select('contact_id')
+        .eq('workspace_id', selectedWorkspace.workspace_id)
         .order('created_at', { ascending: false });
 
       if (conversationsError) throw conversationsError;
@@ -67,10 +74,11 @@ export function CRMContatos() {
         return;
       }
 
-      // Get contact details
+      // Get contact details filtered by workspace
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('*')
+        .eq('workspace_id', selectedWorkspace.workspace_id)
         .in('id', uniqueContactIds);
 
       if (contactsError) throw contactsError;

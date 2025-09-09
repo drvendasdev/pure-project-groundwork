@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
 };
 
 serve(async (req) => {
@@ -15,6 +15,23 @@ serve(async (req) => {
     const url = new URL(req.url);
     const conversationId = url.searchParams.get('conversation_id');
     
+    // Get user and workspace info from headers
+    const systemUserId = req.headers.get('x-system-user-id');
+    const workspaceId = req.headers.get('x-workspace-id');
+    
+    console.log('📋 Get chat data request - User:', systemUserId, 'Workspace:', workspaceId, 'Conversation:', conversationId);
+    
+    if (!systemUserId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'User authentication required',
+        details: 'x-system-user-id header is missing'
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -24,11 +41,18 @@ serve(async (req) => {
       // Buscar mensagens de uma conversa específica
       console.log(`📋 Buscando mensagens da conversa: ${conversationId}`);
       
-      const { data: messages, error: messagesError } = await supabase
+      let messagesQuery = supabase
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
+      
+      // Apply workspace filtering if provided
+      if (workspaceId) {
+        messagesQuery = messagesQuery.eq('workspace_id', workspaceId);
+      }
+      
+      const { data: messages, error: messagesError } = await messagesQuery;
 
       if (messagesError) throw messagesError;
 
@@ -42,7 +66,7 @@ serve(async (req) => {
       // Buscar todas as conversas com a última mensagem
       console.log('📞 Buscando todas as conversas');
       
-      const { data: conversations, error: conversationsError } = await supabase
+      let conversationsQuery = supabase
         .from('conversations')
         .select(`
           *,
@@ -55,6 +79,13 @@ serve(async (req) => {
           )
         `)
         .order('updated_at', { ascending: false });
+      
+      // Apply workspace filtering if provided
+      if (workspaceId) {
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      }
+      
+      const { data: conversations, error: conversationsError } = await conversationsQuery;
 
       if (conversationsError) throw conversationsError;
 

@@ -24,9 +24,23 @@ export function WorkspaceRelatorios() {
   const fetchStats = async () => {
     setIsLoading(true);
     try {
-      const { data: workspacesData, error: workspacesError } = await supabase
-        .from('workspaces')
-        .select('id, name');
+      // Filter workspaces based on user access (Masters see all, Admins see only their workspace)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        console.error('No user data available');
+        return;
+      }
+
+      let workspacesQuery = supabase.from('workspaces').select('id, name');
+      
+      // If user is not master and selectedWorkspace is available, filter by workspace
+      if (currentUserData.profile !== 'master' && selectedWorkspace) {
+        workspacesQuery = workspacesQuery.eq('id', selectedWorkspace.workspace_id);
+      }
+
+      const { data: workspacesData, error: workspacesError } = await workspacesQuery;
 
       if (workspacesError) throw workspacesError;
 

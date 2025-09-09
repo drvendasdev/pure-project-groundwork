@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
 }
 
 // Get Evolution API configuration from secrets
@@ -25,13 +25,36 @@ serve(async (req) => {
   }
 
   try {
-    const { workspaceId } = await req.json()
-
+    // Get workspace ID from header or body
+    const workspaceIdHeader = req.headers.get('x-workspace-id');
+    const systemUserId = req.headers.get('x-system-user-id');
+    
+    let workspaceId = workspaceIdHeader;
     if (!workspaceId) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Workspace ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      const body = await req.json();
+      workspaceId = body.workspaceId;
+    }
+    
+    console.log('🔗 Evolution list connections - User:', systemUserId, 'Workspace:', workspaceId);
+    
+    if (!workspaceId) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Workspace ID is required (x-workspace-id header or workspaceId in body)' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (!systemUserId) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'User authentication required (x-system-user-id header missing)' 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Initialize Supabase client

@@ -33,26 +33,26 @@ export const useDashboardStats = (workspaceId?: string) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // Fetch connections
+      // Fetch connections filtered by workspace
       const { data: connections } = await supabase
         .from('connections')
         .select('status')
         .eq('workspace_id', workspaceId);
 
-      // Fetch conversations
+      // Fetch conversations filtered by workspace
       const { data: conversations } = await supabase
         .from('conversations')
         .select('status, created_at')
         .eq('workspace_id', workspaceId);
 
-      // Fetch today's messages
+      // Fetch today's messages filtered by workspace
       const { data: messages } = await supabase
         .from('messages')
         .select('id')
         .eq('workspace_id', workspaceId)
         .gte('created_at', today.toISOString());
 
-      // Fetch activities (tasks)
+      // Fetch activities (tasks) filtered by workspace
       const { data: activities } = await supabase
         .from('activities')
         .select('is_completed')
