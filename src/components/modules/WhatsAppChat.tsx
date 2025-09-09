@@ -17,6 +17,7 @@ import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
 import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
 import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
+import { AddTagButton } from "@/components/chat/AddTagButton";
 import { 
   Search, 
   Send, 
@@ -840,6 +841,14 @@ const stopRecording = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <AddTagButton
+                    contactId={selectedConversation.contact.id}
+                    isDarkMode={isDarkMode}
+                    onTagAdded={() => {
+                      // Refresh conversations after adding tag
+                      fetchConversations();
+                    }}
+                  />
                   <AcceptConversationButton
                     conversation={selectedConversation}
                     onAccept={async (conversationId: string) => {
@@ -847,7 +856,7 @@ const stopRecording = () => {
                       await fetchConversations();
                     }}
                   />
-                  <Button 
+                  <Button
                     variant="ghost" 
                     size="icon"
                     onClick={handleToggleAgent}
