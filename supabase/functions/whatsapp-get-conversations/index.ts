@@ -39,8 +39,14 @@ serve(async (req) => {
     const workspaceId = req.headers.get('x-workspace-id');
     
     console.log('🔄 Fetching WhatsApp conversations for user:', systemUserId, 'workspace:', workspaceId);
+    console.log('📋 Request headers received:');
+    console.log('  x-system-user-id:', systemUserId);
+    console.log('  x-system-user-email:', systemUserEmail);
+    console.log('  x-workspace-id:', workspaceId);
+    console.log('📝 Request method:', req.method);
     
     if (!systemUserId) {
+      console.log('❌ Missing system user ID');
       return new Response(JSON.stringify({ 
         success: false,
         error: 'User authentication required',
