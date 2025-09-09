@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
 };
 
 // Gerar ID único para cada request
@@ -108,21 +108,11 @@ serve(async (req) => {
     const { conversation_id, content, message_type, sender_id, sender_type, file_url, file_name } = body;
     let { workspace_id } = body;
 
-    // Validar Authorization header
     const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.error(`❌ [${requestId}] No Authorization header`);
-      return new Response(JSON.stringify({
-        code: 'NO_AUTH_HEADER',
-        message: 'Authorization header with Bearer token required',
-        requestId
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Inicializar Supabase com Service Role e propagar JWT
+    const systemUserIdHeader = req.headers.get('x-system-user-id');
+    const systemUserEmailHeader = req.headers.get('x-system-user-email');
+    
+    // Inicializar Supabase com Service Role
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
@@ -138,18 +128,35 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Extrair informações do usuário do JWT para validação no sistema customizado
-    const { email: currentUserEmail, systemUserId, systemEmail } = extractUserDataFromJWT(authHeader);
+    // Determinar informações do usuário (headers customizados > JWT > body)
+    let currentUserEmail: string | null = null;
+    let systemUserId: string | null = null;
     
-    if (!currentUserEmail) {
-      console.error(`❌ [${requestId}] Invalid JWT token - no email found`);
+    if (systemUserIdHeader || systemUserEmailHeader) {
+      // Use custom headers if provided
+      systemUserId = systemUserIdHeader;
+      currentUserEmail = systemUserEmailHeader;
+      console.log(`🔍 [${requestId}] Using custom headers - user_id: ${systemUserId}, email: ${currentUserEmail}`);
+    } else if (authHeader) {
+      // Fall back to JWT if available
+      const { email, systemUserId: jwtSystemUserId } = extractUserDataFromJWT(authHeader);
+      currentUserEmail = email;
+      systemUserId = jwtSystemUserId;
+      console.log(`🔍 [${requestId}] Using JWT data - user_id: ${systemUserId}, email: ${currentUserEmail}`);
+    } else {
+      // Last resort: use sender_id from body
+      systemUserId = body.sender_id;
+      console.log(`🔍 [${requestId}] Using sender_id from body: ${systemUserId}`);
+    }
+    
+    if (!systemUserId && !currentUserEmail) {
+      console.error(`❌ [${requestId}] No user identification found`);
       return new Response(JSON.stringify({
-        code: 'INVALID_JWT',
-        message: 'Valid JWT token with email required',
+        code: 'NO_USER_IDENTIFICATION',
+        message: 'No user identification found',
+        details: 'Please provide x-system-user-id header or valid authentication',
         requestId
       }), {
         status: 401,
@@ -157,15 +164,14 @@ serve(async (req) => {
       });
     }
 
-    console.log(`🔍 [${requestId}] Validating system user: ${currentUserEmail} (system_id: ${systemUserId})`);
+    console.log(`🔍 [${requestId}] Validating system user: ${currentUserEmail || 'N/A'} (system_id: ${systemUserId})`);
 
     // Validar que o usuário existe no sistema customizado
-    // Use system_user_id if available, otherwise fall back to email
     let userQuery = supabase.from('system_users').select('id, profile, status');
     
     if (systemUserId) {
       userQuery = userQuery.eq('id', systemUserId);
-    } else {
+    } else if (currentUserEmail) {
       userQuery = userQuery.eq('email', currentUserEmail);
     }
     

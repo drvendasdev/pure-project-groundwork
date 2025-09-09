@@ -190,9 +190,9 @@ export const useWhatsAppConversations = () => {
 
       // Obter dados do usuário logado
       const userData = localStorage.getItem('currentUser');
-      const currentUser = userData ? JSON.parse(userData) : null;
+      const currentUserData = userData ? JSON.parse(userData) : null;
       
-      if (!currentUser?.id) {
+      if (!currentUserData?.id) {
         throw new Error('Usuário não autenticado');
       }
 
@@ -210,17 +210,18 @@ export const useWhatsAppConversations = () => {
         conversation_id: conversationId,
         content: content,
         message_type: messageType,
-        sender_id: currentUser.id,
+        sender_id: currentUserData.id,
         sender_type: "agent",
         file_url: fileUrl,
         file_name: fileName
       };
 
-      // A verificação de sessão é feita globalmente pelo useSessionManager
-      // Agora apenas enviamos via edge function com o supabase client autenticado
-
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
-        body: payload
+        body: payload,
+        headers: {
+          'x-system-user-id': currentUserData.id || user?.id,
+          'x-system-user-email': currentUserData.email || user?.email
+        }
       });
 
       if (apiError) {
