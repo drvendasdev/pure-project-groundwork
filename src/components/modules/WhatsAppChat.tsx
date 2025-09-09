@@ -384,10 +384,8 @@ const stopRecording = () => {
 
   return (
     <div className="flex h-full bg-white overflow-hidden">
-      {/* Workspace Selector - Hidden but needed for workspace selection */}
-      <div className="hidden">
-        <WorkspaceSelector />
-      </div>
+      {/* Workspace Selector - Always render to ensure workspace selection */}
+      <WorkspaceSelector />
       
       {/* Sidebar com lista de conversas */}
       <div className="w-80 min-w-80 border-r border-border flex flex-col">
