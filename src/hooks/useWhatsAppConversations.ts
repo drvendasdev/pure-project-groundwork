@@ -36,6 +36,11 @@ export interface WhatsAppConversation {
   assigned_at?: string | null;
   connection_id?: string;
   workspace_id?: string;
+  tags?: Array<{
+    id: string;
+    name: string;
+    color: string;
+  }>;
   messages: WhatsAppMessage[];
 }
 
