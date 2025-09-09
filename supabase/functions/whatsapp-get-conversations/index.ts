@@ -61,7 +61,7 @@ serve(async (req) => {
 
     console.log(`👤 User profile: ${userProfile.profile}`);
 
-    // Build query
+    // Build base query
     let conversationsQuery = supabase
       .from('conversations')
       .select(`
@@ -74,6 +74,7 @@ serve(async (req) => {
         evolution_instance,
         contact_id,
         assigned_user_id,
+        assigned_at,
         connection_id,
         workspace_id,
         contacts (
@@ -86,38 +87,64 @@ serve(async (req) => {
       `)
       .eq('canal', 'whatsapp');
 
-    // Apply filters based on user type
-    if (userProfile.profile === 'master' || userProfile.profile === 'admin') {
+    // Apply filters based on user role and workspace - REGRAS ESPECÍFICAS
+    if (userProfile.profile === 'master') {
+      // MentorMaster: vê tudo do workspace selecionado
       if (workspaceId) {
-        console.log(`🏢 Filtering by workspace: ${workspaceId}`);
+        console.log(`🏢 MentorMaster filtering by workspace: ${workspaceId}`);
         conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      } else {
+        console.log('⚠️ MentorMaster sem workspace, acesso limitado');
+        // Sem workspace selecionado, não vê nada
+        conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
       }
-    } else {
-      // For regular users, get their assigned instances
-      const { data: userInstances } = await supabase
-        .from('instance_user_assignments')
-        .select('instance')
-        .eq('user_id', systemUserId);
-
-      const instanceNames = userInstances?.map(i => i.instance) || [];
-      
-      if (instanceNames.length > 0) {
-        const { data: userConnections } = await supabase
-          .from('connections')
-          .select('id')
-          .in('instance_name', instanceNames);
-
-        const connectionIds = userConnections?.map(c => c.id) || [];
+    } else if (userProfile.profile === 'admin') {
+      // Admin: vê tudo do seu workspace
+      if (workspaceId) {
+        console.log(`🏢 Admin filtering by workspace: ${workspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      } else {
+        console.log('⚠️ Admin sem workspace, buscando workspace do usuário');
+        // Buscar workspace do admin
+        const { data: userWorkspace } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', systemUserId)
+          .single();
         
-        if (connectionIds.length > 0) {
-          conversationsQuery = conversationsQuery
-            .in('connection_id', connectionIds)
-            .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
+        if (userWorkspace?.workspace_id) {
+          conversationsQuery = conversationsQuery.eq('workspace_id', userWorkspace.workspace_id);
+        } else {
+          // Se não encontrar workspace, não vê nada
+          conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
         }
       }
+    } else {
+      // User: vê apenas atribuídas a ele OU não atribuídas do workspace
+      console.log('👤 User filtering by assignments and workspace');
       
+      // Filtro crítico: só conversas atribuídas a ele OU não atribuídas
+      conversationsQuery = conversationsQuery.or(
+        `assigned_user_id.eq.${systemUserId},assigned_user_id.is.null`
+      );
+      
+      // Sempre filtrar por workspace
       if (workspaceId) {
         conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      } else {
+        // Buscar workspace do usuário
+        const { data: userWorkspace } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', systemUserId)
+          .single();
+        
+        if (userWorkspace?.workspace_id) {
+          conversationsQuery = conversationsQuery.eq('workspace_id', userWorkspace.workspace_id);
+        } else {
+          // Se não encontrar workspace, não vê nada
+          conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        }
       }
     }
 
@@ -162,7 +189,9 @@ serve(async (req) => {
           created_at: conv.created_at,
           evolution_instance: conv.evolution_instance,
           assigned_user_id: conv.assigned_user_id,
+          assigned_at: conv.assigned_at,
           connection_id: conv.connection_id,
+          workspace_id: conv.workspace_id,
           messages: (messagesData || []).map(msg => ({
             id: msg.id,
             content: msg.content,

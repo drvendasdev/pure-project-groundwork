@@ -1,45 +1,53 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { CheckCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { useConversationAccept } from '@/hooks/useConversationAccept';
+import { WhatsAppConversation } from '@/hooks/useWhatsAppConversations';
 
 interface AcceptConversationButtonProps {
-  conversationId: string;
-  assignedUserId?: string | null;
-  onAccept: (conversationId: string) => void;
+  conversation: WhatsAppConversation;
+  onAccept?: (conversationId: string) => void;
   className?: string;
 }
 
-export function AcceptConversationButton({ 
-  conversationId, 
-  assignedUserId, 
-  onAccept, 
-  className 
-}: AcceptConversationButtonProps) {
-  const { user } = useAuth();
+export function AcceptConversationButton({ conversation, onAccept, className }: AcceptConversationButtonProps) {
+  const { acceptConversation, isAccepting } = useConversationAccept();
 
-  // Don't show button if conversation is already assigned to someone
-  if (assignedUserId) {
+  // Só mostra o botão se assigned_user_id for null
+  if (conversation.assigned_user_id !== null) {
     return null;
   }
 
-  // Don't show button if user is not authenticated
-  if (!user?.id) {
-    return null;
-  }
-
-  const handleAccept = () => {
-    onAccept(conversationId);
+  const handleAccept = async () => {
+    const result = await acceptConversation(conversation.id);
+    
+    if (result.success) {
+      // Notificar o componente pai sobre o sucesso
+      onAccept?.(conversation.id);
+    }
+    
+    // Se já foi atribuída, também notifica para atualizar a UI
+    if (result.alreadyAssigned) {
+      onAccept?.(conversation.id);
+    }
   };
+
+  const isCurrentlyAccepting = isAccepting === conversation.id;
 
   return (
     <Button
       onClick={handleAccept}
+      disabled={isCurrentlyAccepting}
       size="sm"
-      variant="outline"
-      className={`h-8 w-8 rounded-full bg-primary/10 hover:bg-primary/20 border-primary/20 ${className}`}
+      className={`gap-2 ${className}`}
+      variant="default"
     >
-      <Check className="h-4 w-4 text-primary" />
+      {isCurrentlyAccepting ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : (
+        <CheckCircle className="w-4 h-4" />
+      )}
+      {isCurrentlyAccepting ? 'Aceitando...' : 'Aceitar'}
     </Button>
   );
 }

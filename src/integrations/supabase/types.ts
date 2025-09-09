@@ -472,6 +472,44 @@ export type Database = {
           },
         ]
       }
+      conversation_assignments: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string
+          conversation_id: string
+          from_assigned_user_id: string | null
+          id: string
+          to_assigned_user_id: string | null
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by: string
+          conversation_id: string
+          from_assigned_user_id?: string | null
+          id?: string
+          to_assigned_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string
+          conversation_id?: string
+          from_assigned_user_id?: string | null
+          id?: string
+          to_assigned_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_assignments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_participants: {
         Row: {
           conversation_id: string
@@ -546,6 +584,7 @@ export type Database = {
       conversations: {
         Row: {
           agente_ativo: boolean | null
+          assigned_at: string | null
           assigned_user_id: string | null
           canal: string | null
           connection_id: string | null
@@ -564,6 +603,7 @@ export type Database = {
         }
         Insert: {
           agente_ativo?: boolean | null
+          assigned_at?: string | null
           assigned_user_id?: string | null
           canal?: string | null
           connection_id?: string | null
@@ -582,6 +622,7 @@ export type Database = {
         }
         Update: {
           agente_ativo?: boolean | null
+          assigned_at?: string | null
           assigned_user_id?: string | null
           canal?: string | null
           connection_id?: string | null

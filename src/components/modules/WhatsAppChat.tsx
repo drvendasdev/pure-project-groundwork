@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageStatusIndicator } from "@/components/ui/message-status-indicator";
 import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
+import { useAuth } from "@/hooks/useAuth";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
@@ -54,8 +55,10 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     assumirAtendimento, 
     reativarIA, 
     clearAllConversations,
-    acceptConversation
+    acceptConversation,
+    fetchConversations
   } = useWhatsAppConversations();
+  const { user } = useAuth();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
   const { assignments } = useInstanceAssignments();
@@ -72,6 +75,61 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("");
   const [isUpdatingProfileImages, setIsUpdatingProfileImages] = useState(false);
+  
+  // Estados para as abas baseadas no papel
+  const [activeTab, setActiveTab] = useState<string>('all');
+  
+  // Definir abas baseado no papel do usuário
+  const getUserTabs = () => {
+    const userProfile = user?.profile;
+    
+    if (userProfile === 'master') {
+      // MentorMaster: mesmas vistas do Admin
+      return [
+        { id: 'all', label: 'Todas', count: conversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
+        { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
+      ];
+    } else if (userProfile === 'admin') {
+      // Admin: todas as abas do workspace
+      return [
+        { id: 'all', label: 'Todas', count: conversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
+        { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
+      ];
+    } else {
+      // User: apenas suas conversas e não designadas
+      const myConversations = conversations.filter(c => c.assigned_user_id === user?.id);
+      const unassignedConversations = conversations.filter(c => !c.assigned_user_id);
+      
+      return [
+        { id: 'mine', label: 'Minhas', count: myConversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: unassignedConversations.length }
+      ];
+    }
+  };
+  
+  const tabs = getUserTabs();
+
+  // Filtrar conversas baseado na aba ativa
+  const getFilteredConversations = () => {
+    switch (activeTab) {
+      case 'all':
+        return conversations;
+      case 'mine':
+        return conversations.filter(c => c.assigned_user_id === user?.id);
+      case 'unassigned':
+        return conversations.filter(c => !c.assigned_user_id);
+      case 'in_progress':
+        return conversations.filter(c => c.status === 'em_atendimento');
+      case 'closed':
+        return conversations.filter(c => c.status === 'closed');
+      default:
+        return conversations;
+    }
+  };
   const [peekModalOpen, setPeekModalOpen] = useState(false);
   const [peekConversation, setPeekConversation] = useState<WhatsAppConversation | null>(null);
 const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -476,7 +534,37 @@ const stopRecording = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+          
+          {/* Abas baseadas no papel do usuário */}
+          <div className="border-b border-border">
+            <div className="flex">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                    activeTab === tab.id
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={cn(
+                      "ml-2 px-2 py-1 text-xs rounded-full",
+                      activeTab === tab.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+          
                   <div>
                     <label className="text-sm font-medium mb-2 block">Filtre pela tag</label>
                     <Select value={selectedTag} onValueChange={setSelectedTag}>
@@ -545,7 +633,7 @@ const stopRecording = () => {
             </div>
           ) : (
           <div className="space-y-0">
-            {filteredConversations.map((conversation) => {
+            {getFilteredConversations().map((conversation) => {
               const lastMessage = getLastMessage(conversation);
               const lastActivity = getActivityTime(conversation);
               const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
@@ -753,9 +841,11 @@ const stopRecording = () => {
 
                 <div className="flex items-center gap-2">
                   <AcceptConversationButton
-                    conversationId={selectedConversation.id}
-                    assignedUserId={selectedConversation.assigned_user_id}
-                    onAccept={acceptConversation}
+                    conversation={selectedConversation}
+                    onAccept={async (conversationId: string) => {
+                      // Refresh conversations after accepting
+                      await fetchConversations();
+                    }}
                   />
                   <Button 
                     variant="ghost" 

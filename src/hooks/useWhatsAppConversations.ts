@@ -27,13 +27,15 @@ export interface WhatsAppConversation {
     profile_image_url?: string;
   };
   agente_ativo: boolean;
-  status: 'open' | 'closed' | 'pending';
+  status: 'open' | 'closed' | 'pending' | 'em_atendimento';
   unread_count: number;
   last_activity_at: string;
   created_at: string;
   evolution_instance?: string | null;
   assigned_user_id?: string | null;
+  assigned_at?: string | null;
   connection_id?: string;
+  workspace_id?: string;
   messages: WhatsAppMessage[];
 }
 
