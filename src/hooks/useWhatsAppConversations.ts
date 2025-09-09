@@ -47,13 +47,10 @@ export const useWhatsAppConversations = () => {
     try {
       setLoading(true);
       console.log('🔄 Carregando conversas do WhatsApp...');
-      console.log('👤 Current user:', user);
-      console.log('🏢 Selected workspace:', selectedWorkspace);
 
       // Get current user from localStorage (custom auth system)
       const userData = localStorage.getItem('currentUser');
       const currentUserData = userData ? JSON.parse(userData) : null;
-      console.log('💾 User data from localStorage:', currentUserData);
       
       if (!currentUserData?.id) {
         console.log('No user data in localStorage');
@@ -74,21 +71,14 @@ export const useWhatsAppConversations = () => {
       // Add workspace context if available
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
-        console.log('🏢 Using selected workspace:', selectedWorkspace.workspace_id);
-      } else {
-        console.log('⚠️ No selected workspace, fetchConversations will try without workspace filter');
       }
 
-      console.log('📡 Calling edge function with headers:', headers);
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
+        method: 'GET',
         headers
       });
 
-      console.log('📡 Edge function response:', response);
-      console.log('📡 Edge function error:', functionError);
-
       if (functionError) {
-        console.error('❌ Edge function error:', functionError);
         throw functionError;
       }
 
@@ -437,23 +427,8 @@ export const useWhatsAppConversations = () => {
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    console.log('🔄 useEffect triggered:', { 
-      hasUser: !!currentUserData?.id, 
-      hasWorkspace: !!selectedWorkspace?.workspace_id,
-      userId: currentUserData?.id,
-      workspaceId: selectedWorkspace?.workspace_id
-    });
-    
     if (currentUserData?.id) {
-      if (selectedWorkspace?.workspace_id) {
-        console.log('✅ Calling fetchConversations with selected workspace...');
-        fetchConversations();
-      } else {
-        console.log('⚠️ No selected workspace, will fetch conversations anyway for this user');
-        fetchConversations();
-      }
-    } else {
-      console.log('⚠️ Missing user, not fetching conversations');
+      fetchConversations();
     }
 
     // Subscription para novas mensagens
@@ -646,7 +621,7 @@ export const useWhatsAppConversations = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, [selectedWorkspace?.workspace_id]);
+  }, []);
 
   return {
     conversations,

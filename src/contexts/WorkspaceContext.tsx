@@ -30,66 +30,26 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
 
-  // Get storage key for current user
-  const getStorageKey = () => {
-    const userData = localStorage.getItem('currentUser');
-    if (userData) {
-      try {
-        const user = JSON.parse(userData);
-        return `selectedWorkspace_${user.id}`;
-      } catch (error) {
-        console.error('Error parsing current user:', error);
-      }
-    }
-    return 'selectedWorkspace'; // fallback
-  };
-
-  // Persist selected workspace in localStorage per user
+  // Persist selected workspace in localStorage
   useEffect(() => {
-    const currentKey = getStorageKey();
-    const stored = localStorage.getItem(currentKey);
-    
+    const stored = localStorage.getItem('selectedWorkspace');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
         setSelectedWorkspaceState(parsed);
       } catch (error) {
         console.error('Error parsing stored workspace:', error);
-        localStorage.removeItem(currentKey);
-      }
-    } else {
-      // Try to migrate from old global key
-      const oldStored = localStorage.getItem('selectedWorkspace');
-      if (oldStored && currentKey !== 'selectedWorkspace') {
-        try {
-          const parsed = JSON.parse(oldStored);
-          setSelectedWorkspaceState(parsed);
-          localStorage.setItem(currentKey, oldStored);
-          localStorage.removeItem('selectedWorkspace');
-        } catch (error) {
-          console.error('Error migrating workspace:', error);
-          localStorage.removeItem('selectedWorkspace');
-        }
+        localStorage.removeItem('selectedWorkspace');
       }
     }
   }, []);
 
   const setSelectedWorkspace = (workspace: Workspace | null) => {
-    console.log('🏢 setSelectedWorkspace called:', { 
-      oldWorkspace: selectedWorkspace?.workspace_id, 
-      newWorkspace: workspace?.workspace_id,
-      workspaceName: workspace?.name
-    });
-    
     setSelectedWorkspaceState(workspace);
-    const currentKey = getStorageKey();
-    
     if (workspace) {
-      localStorage.setItem(currentKey, JSON.stringify(workspace));
-      console.log('🏢 Workspace saved to localStorage:', currentKey);
+      localStorage.setItem('selectedWorkspace', JSON.stringify(workspace));
     } else {
-      localStorage.removeItem(currentKey);
-      console.log('🏢 Workspace removed from localStorage:', currentKey);
+      localStorage.removeItem('selectedWorkspace');
     }
   };
 

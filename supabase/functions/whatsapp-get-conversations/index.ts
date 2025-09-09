@@ -3,8 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
 };
 
 serve(async (req) => {
@@ -39,14 +38,8 @@ serve(async (req) => {
     const workspaceId = req.headers.get('x-workspace-id');
     
     console.log('🔄 Fetching WhatsApp conversations for user:', systemUserId, 'workspace:', workspaceId);
-    console.log('📋 Request headers received:');
-    console.log('  x-system-user-id:', systemUserId);
-    console.log('  x-system-user-email:', systemUserEmail);
-    console.log('  x-workspace-id:', workspaceId);
-    console.log('📝 Request method:', req.method);
     
     if (!systemUserId) {
-      console.log('❌ Missing system user ID');
       return new Response(JSON.stringify({ 
         success: false,
         error: 'User authentication required',
@@ -80,24 +73,6 @@ serve(async (req) => {
     // Check if user is master or admin
     const isMasterOrAdmin = userProfile.profile === 'master' || userProfile.profile === 'admin';
     
-    // For master/admin, if no workspace_id provided, try to get their first workspace
-    let finalWorkspaceId = workspaceId;
-    if (!finalWorkspaceId && isMasterOrAdmin) {
-      console.log('🔍 No workspace provided for master/admin, fetching user workspaces...');
-      const { data: userWorkspaces } = await supabase
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', systemUserId)
-        .limit(1);
-        
-      if (userWorkspaces && userWorkspaces.length > 0) {
-        finalWorkspaceId = userWorkspaces[0].workspace_id;
-        console.log('✅ Using first available workspace for user:', finalWorkspaceId);
-      } else {
-        console.log('⚠️ No workspaces found for user, will search globally');
-      }
-    }
-    
     let conversationsQuery = supabase
       .from('conversations')
       .select(`
@@ -123,22 +98,15 @@ serve(async (req) => {
       .eq('canal', 'whatsapp');
 
     // Apply workspace filtering for Masters and Admins
-    if (finalWorkspaceId && (userProfile.profile === 'master' || userProfile.profile === 'admin')) {
-      console.log(`🏢 Filtering conversations by workspace: ${finalWorkspaceId}`);
-      conversationsQuery = conversationsQuery.eq('workspace_id', finalWorkspaceId);
+    if (workspaceId && (userProfile.profile === 'master' || userProfile.profile === 'admin')) {
+      console.log(`🏢 Filtering conversations by workspace: ${workspaceId}`);
+      conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
     }
 
     if (!isMasterOrAdmin) {
       console.log('🔒 User is not admin/master, filtering by assigned connections');
       
-      // Start with user's default channel if they have one
-      let connectionIds: string[] = [];
-      
-      if (userProfile.default_channel) {
-        console.log(`📱 Adding user's default channel: ${userProfile.default_channel}`);
-        connectionIds.push(userProfile.default_channel);
-      }
-      
+      // For regular users, filter by their assigned connections
       // Get user's assigned instance names
       const { data: userInstances, error: instancesError } = await supabase
         .from('instance_user_assignments')
@@ -153,6 +121,9 @@ serve(async (req) => {
       console.log(`👤 User has ${userInstances?.length || 0} assigned instances`);
       const instanceNames = userInstances?.map(i => i.instance) || [];
       
+      // Also include user's default channel if they have one
+      let connectionIds: string[] = [];
+      
       if (instanceNames.length > 0) {
         // Get connections for assigned instances
         const { data: userConnections, error: connectionsError } = await supabase
@@ -165,13 +136,15 @@ serve(async (req) => {
           throw connectionsError;
         }
 
-        // Add instance connections to the list
-        const instanceConnectionIds = userConnections?.map(c => c.id) || [];
-        instanceConnectionIds.forEach(id => {
-          if (!connectionIds.includes(id)) {
-            connectionIds.push(id);
-          }
-        });
+        connectionIds = userConnections?.map(c => c.id) || [];
+      }
+      
+      // Add user's default channel if they have one
+      if (userProfile.default_channel) {
+        console.log(`📱 Adding user's default channel: ${userProfile.default_channel}`);
+        if (!connectionIds.includes(userProfile.default_channel)) {
+          connectionIds.push(userProfile.default_channel);
+        }
       }
       
       if (connectionIds.length === 0) {
@@ -187,15 +160,17 @@ serve(async (req) => {
       console.log(`🔗 User has access to ${connectionIds.length} connections`);
       console.log(`🔗 Connection IDs: ${connectionIds.join(', ')}`);
       
+      // At this point, connectionIds includes both assigned instances and default channel
+      
       // Filter conversations by user's connections and assignment
       conversationsQuery = conversationsQuery
         .in('connection_id', connectionIds)
         .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
         
       // Apply workspace filtering for regular users if workspace is provided
-      if (finalWorkspaceId) {
-        console.log(`🏢 Filtering user conversations by workspace: ${finalWorkspaceId}`);
-        conversationsQuery = conversationsQuery.eq('workspace_id', finalWorkspaceId);
+      if (workspaceId) {
+        console.log(`🏢 Filtering user conversations by workspace: ${workspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
       }
     } else {
       console.log('👑 User is admin/master, fetching all conversations');
