@@ -138,9 +138,23 @@ export const useAuthState = () => {
   };
 
   const logout = async () => {
+    // Clear user-specific workspace selection
+    const userData = localStorage.getItem('currentUser');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        localStorage.removeItem(`selectedWorkspace_${user.id}`);
+      } catch (error) {
+        console.error('Error clearing user workspace:', error);
+      }
+    }
+    
     setUser(null);
     setUserRole(null);
     localStorage.removeItem('currentUser');
+    
+    // Clear any old global workspace key as well
+    localStorage.removeItem('selectedWorkspace');
     
     // Também fazer logout do Supabase Auth
     try {
