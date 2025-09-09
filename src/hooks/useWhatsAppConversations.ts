@@ -75,19 +75,6 @@ export const useWhatsAppConversations = () => {
         console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
       }
 
-      // Teste de conectividade primeiro
-      console.log('🔧 Testing edge function connectivity...');
-      const { data: testResponse, error: testError } = await supabase.functions.invoke('whatsapp-get-conversations', {
-        method: 'GET',
-        headers: { ...headers, 'test': 'true' }
-      });
-
-      if (testError) {
-        console.error('❌ Test failed:', testError);
-        throw testError;
-      }
-      console.log('✅ Test successful:', testResponse);
-
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
         method: 'GET',
         headers

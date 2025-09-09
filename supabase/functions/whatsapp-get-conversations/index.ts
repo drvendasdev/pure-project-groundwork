@@ -13,65 +13,43 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  // Test endpoint
-  if (req.url.includes('?test=true')) {
-    return new Response(
-      JSON.stringify({ success: true, message: 'Edge function is working', timestamp: new Date().toISOString() }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
   try {
-    console.log('🚀 Edge function started');
-    console.log('📋 Request headers received:', Object.fromEntries(req.headers.entries()));
+    console.log('🚀 whatsapp-get-conversations started');
     
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
     if (!SUPABASE_URL || !SERVICE_ROLE) {
-      console.error('❌ Missing Supabase configuration');
       throw new Error("Missing Supabase configuration");
     }
 
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
-      auth: { persistSession: false },
-      global: { headers: { "X-Client-Info": "whatsapp-get-conversations" } },
-    });
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
     // Get user info from headers
     const systemUserId = req.headers.get('x-system-user-id');
-    const systemUserEmail = req.headers.get('x-system-user-email');
     const workspaceId = req.headers.get('x-workspace-id');
     
-    console.log('🔄 Fetching WhatsApp conversations for user:', systemUserId, 'workspace:', workspaceId);
+    console.log('🔄 Fetching for user:', systemUserId, 'workspace:', workspaceId);
     
     if (!systemUserId) {
       return new Response(JSON.stringify({ 
         success: false,
-        error: 'User authentication required',
-        details: 'x-system-user-id header is missing'
+        error: 'User authentication required'
       }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Get user's profile to check permissions and default channel
+    // Get user profile
     const { data: userProfile, error: userError } = await supabase
       .from('system_users')
-      .select('id, profile, default_channel')
+      .select('id, profile')
       .eq('id', systemUserId)
       .single();
 
     if (userError || !userProfile) {
-      console.error('❌ Error fetching user profile:', userError);
+      console.error('❌ Error fetching user:', userError);
       return new Response(JSON.stringify({ 
         success: false,
         error: 'User not found' 
@@ -83,9 +61,7 @@ serve(async (req) => {
 
     console.log(`👤 User profile: ${userProfile.profile}`);
 
-    // Check if user is master or admin
-    const isMasterOrAdmin = userProfile.profile === 'master' || userProfile.profile === 'admin';
-    
+    // Build query
     let conversationsQuery = supabase
       .from('conversations')
       .select(`
@@ -110,82 +86,37 @@ serve(async (req) => {
       `)
       .eq('canal', 'whatsapp');
 
-    // Para Masters e Admins, aplicar filtro por workspace se disponível
-    if (isMasterOrAdmin && workspaceId) {
-      console.log(`🏢 Master/Admin filtering conversations by workspace: ${workspaceId}`);
-      conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
-    } else if (isMasterOrAdmin && !workspaceId) {
-      console.log('⚠️ Master/Admin sem workspace, permitindo acesso global');
-      // Masters podem ver tudo se não especificarem workspace
-    }
-
-    if (!isMasterOrAdmin) {
-      console.log('🔒 User is not admin/master, filtering by assigned connections');
-      
-      // For regular users, filter by their assigned connections
-      // Get user's assigned instance names
-      const { data: userInstances, error: instancesError } = await supabase
+    // Apply filters based on user type
+    if (userProfile.profile === 'master' || userProfile.profile === 'admin') {
+      if (workspaceId) {
+        console.log(`🏢 Filtering by workspace: ${workspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      }
+    } else {
+      // For regular users, get their assigned instances
+      const { data: userInstances } = await supabase
         .from('instance_user_assignments')
         .select('instance')
         .eq('user_id', systemUserId);
 
-      if (instancesError) {
-        console.error('❌ Error fetching user instances:', instancesError);
-        throw instancesError;
-      }
-
-      console.log(`👤 User has ${userInstances?.length || 0} assigned instances`);
       const instanceNames = userInstances?.map(i => i.instance) || [];
       
-      // Also include user's default channel if they have one
-      let connectionIds: string[] = [];
-      
       if (instanceNames.length > 0) {
-        // Get connections for assigned instances
-        const { data: userConnections, error: connectionsError } = await supabase
+        const { data: userConnections } = await supabase
           .from('connections')
           .select('id')
           .in('instance_name', instanceNames);
 
-        if (connectionsError) {
-          console.error('❌ Error fetching user connections:', connectionsError);
-          throw connectionsError;
-        }
-
-        connectionIds = userConnections?.map(c => c.id) || [];
-      }
-      
-      // Add user's default channel if they have one
-      if (userProfile.default_channel) {
-        console.log(`📱 Adding user's default channel: ${userProfile.default_channel}`);
-        if (!connectionIds.includes(userProfile.default_channel)) {
-          connectionIds.push(userProfile.default_channel);
-        }
-      }
-      
-      if (connectionIds.length === 0) {
-        console.log('⚠️ User has no assigned instances or default channel, returning empty result');
-        return new Response(JSON.stringify({
-          success: true,
-          data: []
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      console.log(`🔗 User has access to ${connectionIds.length} connections`);
-      console.log(`🔗 Connection IDs: ${connectionIds.join(', ')}`);
-      
-      // At this point, connectionIds includes both assigned instances and default channel
-      
-      // Filter conversations by user's connections and assignment
-      conversationsQuery = conversationsQuery
-        .in('connection_id', connectionIds)
-        .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
+        const connectionIds = userConnections?.map(c => c.id) || [];
         
-      // Apply workspace filtering for regular users if workspace is provided
+        if (connectionIds.length > 0) {
+          conversationsQuery = conversationsQuery
+            .in('connection_id', connectionIds)
+            .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
+        }
+      }
+      
       if (workspaceId) {
-        console.log(`🏢 Filtering user conversations by workspace: ${workspaceId}`);
         conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
       }
     }
@@ -193,31 +124,21 @@ serve(async (req) => {
     const { data: conversationsData, error: conversationsError } = await conversationsQuery
       .order('last_activity_at', { ascending: false });
 
-    console.log(`📊 Query executed. Error: ${conversationsError ? JSON.stringify(conversationsError) : 'none'}`);
-    console.log(`📊 Raw conversations returned: ${conversationsData?.length || 0}`);
-    
     if (conversationsError) {
       console.error('❌ Error fetching conversations:', conversationsError);
       throw conversationsError;
     }
 
     console.log(`📋 Found ${conversationsData?.length || 0} conversations`);
-    if (conversationsData && conversationsData.length > 0) {
-      console.log(`📋 First conversation sample:`, JSON.stringify(conversationsData[0], null, 2));
-    }
 
-    // Fetch messages for all conversations in batches
+    // Fetch messages for each conversation
     const conversationsWithMessages = await Promise.all(
       (conversationsData || []).map(async (conv) => {
-        const { data: messagesData, error: messagesError } = await supabase
+        const { data: messagesData } = await supabase
           .from('messages')
           .select('*')
           .eq('conversation_id', conv.id)
           .order('created_at', { ascending: true });
-
-        if (messagesError) {
-          console.error('❌ Error fetching messages for conversation', conv.id, ':', messagesError);
-        }
 
         return {
           id: conv.id,
@@ -258,7 +179,7 @@ serve(async (req) => {
       })
     );
 
-    console.log(`✅ Successfully fetched ${conversationsWithMessages.length} conversations with messages`);
+    console.log(`✅ Successfully fetched ${conversationsWithMessages.length} conversations`);
 
     return new Response(
       JSON.stringify({ 
@@ -272,13 +193,11 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Error in whatsapp-get-conversations:', error);
-    console.error('❌ Error details:', error.stack);
     
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message,
-        details: error.stack 
+        error: error.message
       }),
       { 
         status: 500,
