@@ -842,7 +842,7 @@ const stopRecording = () => {
 
                 <div className="flex items-center gap-2">
                   <AddTagButton
-                    contactId={selectedConversation.contact.id}
+                    conversationId={selectedConversation.id}
                     isDarkMode={isDarkMode}
                     onTagAdded={() => {
                       // Refresh conversations after adding tag
