@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { useSessionManager } from "@/hooks/useSessionManager";
 
 import { Dashboard } from "./Dashboard";
 import { Conversas } from "./modules/Conversas";
@@ -24,6 +25,7 @@ import { Conexoes } from "./modules/Conexoes";
 import { AdministracaoUsuarios } from "./modules/AdministracaoUsuarios";
 import { AdministracaoFinanceiro } from "./modules/AdministracaoFinanceiro";
 import { AdministracaoConfiguracoes } from "./modules/AdministracaoConfiguracoes";
+import { AdministracaoDashboard } from "./modules/AdministracaoDashboard";
 import { ParceirosClientes } from "./modules/ParceirosClientes";
 import { WorkspaceEmpresas } from "./modules/WorkspaceEmpresas";
 import { WorkspaceUsersPage } from "./modules/WorkspaceUsersPage";
@@ -56,9 +58,13 @@ export type ModuleType =
   | "administracao-usuarios"
   | "administracao-financeiro"
   | "administracao-configuracoes"
+  | "administracao-dashboard"
   | "editar-agente";
 
 export function TezeusCRM() {
+  // Monitor de sessão global
+  useSessionManager();
+  
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -161,6 +167,8 @@ export function TezeusCRM() {
         return <AdministracaoFinanceiro />;
       case "administracao-configuracoes":
         return <AdministracaoConfiguracoes />;
+      case "administracao-dashboard":
+        return <AdministracaoDashboard />;
       case "editar-agente":
         return editingAgentId ? <EditarAgente agentId={editingAgentId} /> : <Dashboard {...moduleProps} />;
       default:

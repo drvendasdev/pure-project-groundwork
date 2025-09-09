@@ -332,6 +332,7 @@ export type Database = {
           qr_code: string | null
           status: string
           updated_at: string | null
+          use_workspace_default: boolean | null
           workspace_id: string
         }
         Insert: {
@@ -346,6 +347,7 @@ export type Database = {
           qr_code?: string | null
           status?: string
           updated_at?: string | null
+          use_workspace_default?: boolean | null
           workspace_id: string
         }
         Update: {
@@ -360,6 +362,7 @@ export type Database = {
           qr_code?: string | null
           status?: string
           updated_at?: string | null
+          use_workspace_default?: boolean | null
           workspace_id?: string
         }
         Relationships: [
@@ -469,6 +472,44 @@ export type Database = {
           },
         ]
       }
+      conversation_assignments: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string
+          conversation_id: string
+          from_assigned_user_id: string | null
+          id: string
+          to_assigned_user_id: string | null
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by: string
+          conversation_id: string
+          from_assigned_user_id?: string | null
+          id?: string
+          to_assigned_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string
+          conversation_id?: string
+          from_assigned_user_id?: string | null
+          id?: string
+          to_assigned_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_assignments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_participants: {
         Row: {
           conversation_id: string
@@ -543,6 +584,7 @@ export type Database = {
       conversations: {
         Row: {
           agente_ativo: boolean | null
+          assigned_at: string | null
           assigned_user_id: string | null
           canal: string | null
           connection_id: string | null
@@ -561,6 +603,7 @@ export type Database = {
         }
         Insert: {
           agente_ativo?: boolean | null
+          assigned_at?: string | null
           assigned_user_id?: string | null
           canal?: string | null
           connection_id?: string | null
@@ -579,6 +622,7 @@ export type Database = {
         }
         Update: {
           agente_ativo?: boolean | null
+          assigned_at?: string | null
           assigned_user_id?: string | null
           canal?: string | null
           connection_id?: string | null
@@ -646,6 +690,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      dashboard_cards: {
+        Row: {
+          action_url: string | null
+          created_at: string
+          description: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          metadata: Json | null
+          order_position: number
+          title: string
+          type: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          action_url?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          metadata?: Json | null
+          order_position?: number
+          title: string
+          type: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          action_url?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          metadata?: Json | null
+          order_position?: number
+          title?: string
+          type?: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: []
       }
       evolution_instance_tokens: {
         Row: {
@@ -1126,6 +1215,57 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_logs: {
+        Row: {
+          created_at: string | null
+          event_type: string | null
+          id: string
+          instance_id: string | null
+          payload_json: Json | null
+          response_body: string | null
+          response_status: number | null
+          status: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_json?: Json | null
+          response_body?: string | null
+          response_status?: number | null
+          status?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_json?: Json | null
+          response_body?: string | null
+          response_status?: number | null
+          status?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
       workspace_limits: {
         Row: {
           connection_limit: number
@@ -1155,7 +1295,7 @@ export type Database = {
           created_at: string
           id: string
           is_hidden: boolean
-          role: Database["public"]["Enums"]["workspace_role"]
+          role: Database["public"]["Enums"]["system_profile"]
           user_id: string
           workspace_id: string
         }
@@ -1163,7 +1303,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hidden?: boolean
-          role?: Database["public"]["Enums"]["workspace_role"]
+          role?: Database["public"]["Enums"]["system_profile"]
           user_id: string
           workspace_id: string
         }
@@ -1171,7 +1311,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hidden?: boolean
-          role?: Database["public"]["Enums"]["workspace_role"]
+          role?: Database["public"]["Enums"]["system_profile"]
           user_id?: string
           workspace_id?: string
         }
@@ -1201,6 +1341,45 @@ export type Database = {
             foreignKeyName: "workspace_members_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
+      workspace_webhook_settings: {
+        Row: {
+          created_at: string | null
+          updated_at: string | null
+          webhook_secret: string
+          webhook_url: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          updated_at?: string | null
+          webhook_secret: string
+          webhook_url: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          updated_at?: string | null
+          webhook_secret?: string
+          webhook_url?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_webhook_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_webhook_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
             referencedRelation: "workspaces_view"
             referencedColumns: ["workspace_id"]
           },
@@ -1339,7 +1518,7 @@ export type Database = {
       }
       is_workspace_member: {
         Args: {
-          p_min_role?: Database["public"]["Enums"]["workspace_role"]
+          p_min_role?: Database["public"]["Enums"]["system_profile"]
           p_workspace_id: string
         }
         Returns: boolean
@@ -1385,6 +1564,7 @@ export type Database = {
     Enums: {
       app_role: "master" | "user" | "admin"
       org_role: "OWNER" | "ADMIN" | "USER"
+      system_profile: "master" | "admin" | "user"
       workspace_role: "mentor_master" | "gestor" | "colaborador"
     }
     CompositeTypes: {
@@ -1515,6 +1695,7 @@ export const Constants = {
     Enums: {
       app_role: ["master", "user", "admin"],
       org_role: ["OWNER", "ADMIN", "USER"],
+      system_profile: ["master", "admin", "user"],
       workspace_role: ["mentor_master", "gestor", "colaborador"],
     },
   },

@@ -59,7 +59,9 @@ function extractMetadata(data: any) {
     hasMedia: false,
     contactPhone: null,
     messageId: null,
-    fromMe: false
+    fromMe: false,
+    remoteJid: null,
+    phoneNumber: null
   };
 
   if (data.data) {
@@ -69,7 +71,9 @@ function extractMetadata(data: any) {
       metadata.fromMe = data.data.key.fromMe || false;
       
       if (data.data.key.remoteJid) {
-        metadata.contactPhone = data.data.key.remoteJid.replace('@s.whatsapp.net', '').substring(0, 8) + '***';
+        metadata.remoteJid = data.data.key.remoteJid;
+        metadata.phoneNumber = data.data.key.remoteJid.replace('@s.whatsapp.net', '');
+        metadata.contactPhone = metadata.phoneNumber.substring(0, 8) + '***';
       }
     }
 
@@ -196,22 +200,25 @@ async function uploadMediaToStorage(supabase: any, mediaData: string, fileName: 
   }
 }
 
-async function processMessage(supabase: any, connectionId: string, messageData: any, correlationId: string) {
+async function processMessage(supabase: any, workspaceId: string, connectionId: string, messageData: any, correlationId: string) {
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    // Get or create contact
-    const phoneNumber = key.remoteJid.replace('@s.whatsapp.net', '');
+    // Normalize remoteJid to phone_number
+    const remoteJid = key.remoteJid;
+    const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || phoneNumber;
+
+    console.log('📞 Processing message for contact:', { remoteJid, phoneNumber, contactName, workspaceId });
 
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .upsert({
         phone: phoneNumber,
         name: contactName,
-        org_id: '00000000-0000-0000-0000-000000000000' // Default workspace
+        workspace_id: workspaceId
       }, {
-        onConflict: 'phone,org_id',
+        onConflict: 'phone,workspace_id',
         ignoreDuplicates: false
       })
       .select()
@@ -219,21 +226,23 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
 
     if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
       await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
-        'Failed to upsert contact', { error: contactError, phoneNumber });
+        'Failed to upsert contact', { error: contactError, phoneNumber, workspaceId });
       return;
     }
+
+    console.log('👤 Contact resolved:', { contactId: contact?.id, phoneNumber });
 
     // Get or create conversation
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
       .upsert({
         contact_id: contact?.id,
-        evolution_instance: connectionId,
-        org_id: '00000000-0000-0000-0000-000000000000',
+        connection_id: connectionId,
+        workspace_id: workspaceId,
         status: 'open',
         canal: 'whatsapp'
       }, {
-        onConflict: 'contact_id,evolution_instance',
+        onConflict: 'contact_id,connection_id',
         ignoreDuplicates: false
       })
       .select()
@@ -241,9 +250,11 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
 
     if (conversationError) {
       await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
-        'Failed to upsert conversation', { error: conversationError });
+        'Failed to upsert conversation', { error: conversationError, workspaceId });
       return;
     }
+
+    console.log('💬 Conversation resolved:', { conversationId: conversation?.id, contactId: contact?.id });
 
     // Process message content
     let content = '';
@@ -298,6 +309,7 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
       .from('messages')
       .insert({
         conversation_id: conversation.id,
+        workspace_id: workspaceId,
         content,
         message_type: messageType,
         sender_type: 'contact',
@@ -316,10 +328,11 @@ async function processMessage(supabase: any, connectionId: string, messageData: 
 
     if (messageError) {
       await logEvent(supabase, connectionId, correlationId, 'MESSAGE_INSERT_ERROR', 'error', 
-        'Failed to insert message', { error: messageError });
+        'Failed to insert message', { error: messageError, workspaceId });
     } else {
+      console.log('✅ Message inserted successfully:', { conversationId: conversation.id, messageType, phoneNumber });
       await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSED', 'info', 
-        'Message processed successfully', { messageType, phoneNumber });
+        'Message processed successfully', { messageType, phoneNumber, workspaceId });
     }
 
   } catch (error) {
@@ -423,12 +436,14 @@ serve(async (req) => {
       
       // Extract metadata for logging
       const metadata = extractMetadata(body);
-      console.log('📥 Webhook recebido:', {
+        console.log('📥 Webhook recebido:', {
         correlationId,
         event: metadata.event,
         instance: metadata.instance,
         messageType: metadata.messageType,
         hasMedia: metadata.hasMedia,
+        remoteJid: metadata.remoteJid,
+        phoneNumber: metadata.phoneNumber,
         contactPhone: metadata.contactPhone,
         messageId: metadata.messageId,
         fromMe: metadata.fromMe
@@ -436,16 +451,17 @@ serve(async (req) => {
 
       const { event, instance, data } = body;
 
-      // Find connection by instance name
+      // Find connection and workspace by instance name
       const { data: connection } = await supabaseClient
         .from('connections')
-        .select('id')
+        .select('id, workspace_id')
         .eq('instance_name', instance)
         .single();
 
       if (connection) {
+        console.log('🔗 Connection found:', { connectionId: connection.id, workspaceId: connection.workspace_id, instance });
         await logEvent(supabaseClient, connection.id, correlationId, 'WEBHOOK_RECEIVED', 'info', 
-          'Webhook received for connection', { event, instance });
+          'Webhook received for connection', { event, instance, workspaceId: connection.workspace_id });
 
         switch (event) {
           case 'qrcode.updated':
@@ -495,8 +511,10 @@ serve(async (req) => {
           case 'MESSAGES_UPSERT':
             if (data.messages && Array.isArray(data.messages)) {
               for (const messageData of data.messages) {
-                await processMessage(supabaseClient, connection.id, messageData, correlationId);
+                await processMessage(supabaseClient, connection.workspace_id, connection.id, messageData, correlationId);
               }
+            } else if (data.message) {
+              await processMessage(supabaseClient, connection.workspace_id, connection.id, data, correlationId);
             }
             break;
 
@@ -510,6 +528,10 @@ serve(async (req) => {
             await logEvent(supabaseClient, connection.id, correlationId, 'UNKNOWN_EVENT', 'warn', 
               'Unknown webhook event received', { event, data });
         }
+      } else {
+        console.log('⚠️ No connection found for instance:', instance);
+        await logEvent(supabaseClient, null, correlationId, 'CONNECTION_NOT_FOUND', 'warn', 
+          'No connection found for instance', { instance });
       }
 
       // Handle legacy channel updates for backwards compatibility

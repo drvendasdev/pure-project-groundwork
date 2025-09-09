@@ -163,12 +163,25 @@ export const ChatWidget = ({
 
       // Enviar mensagem de boas-vindas se for nova conversa
       if (!existingConversation) {
+        const userData = localStorage.getItem('currentUser');
+        const currentUserData = userData ? JSON.parse(userData) : null;
+        
+        const headers: Record<string, string> = {};
+        if (currentUserData?.id) {
+          headers['x-system-user-id'] = currentUserData.id;
+          headers['x-system-user-email'] = currentUserData.email || '';
+        }
+        if (selectedWorkspace?.workspace_id) {
+          headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+        }
+
         await supabase.functions.invoke('ai-chat-response', {
           body: {
             messageId: null,
             conversationId: conversation.id,
             content: 'Olá! Como posso ajudar você hoje?'
-          }
+          },
+          headers
         });
       }
 
@@ -219,13 +232,26 @@ export const ChatWidget = ({
         origem_resposta: 'manual'
       }]);
 
-      // Acionar resposta da IA
+      // Acionar resposta da IA with workspace context
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      const headers: Record<string, string> = {};
+      if (currentUserData?.id) {
+        headers['x-system-user-id'] = currentUserData.id;
+        headers['x-system-user-email'] = currentUserData.email || '';
+      }
+      if (selectedWorkspace?.workspace_id) {
+        headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+      }
+
       await supabase.functions.invoke('ai-chat-response', {
         body: {
           messageId: newMessage.id,
           conversationId,
           content
-        }
+        },
+        headers
       });
 
     } catch (error) {

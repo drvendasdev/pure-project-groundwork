@@ -111,7 +111,7 @@ serve(async (req) => {
             instanceName: instanceName,
             qrcode: true,
             integration: "WHATSAPP-BAILEYS",
-            events: ["MESSAGES_UPSERT"]
+            events: ["MESSAGES_UPSERT", "QRCODE_UPDATED"]
           };
 
           console.log('Creating Evolution instance:', { instanceName, createBody });

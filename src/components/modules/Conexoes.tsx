@@ -1,10 +1,15 @@
 import React from 'react';
 import { ConexoesNova } from './ConexoesNova';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 export function Conexoes() {
-  // For backward compatibility, we'll use a fixed workspace ID
-  // This should be updated to use proper workspace context
-  const defaultWorkspaceId = '00000000-0000-0000-0000-000000000000';
+  const { selectedWorkspace } = useWorkspace();
   
-  return <ConexoesNova workspaceId={defaultWorkspaceId} />;
+  // Use selected workspace or fallback to default for backward compatibility
+  const workspaceId = selectedWorkspace?.workspace_id || '00000000-0000-0000-0000-000000000000';
+  
+  console.log('🏢 Conexoes component - selectedWorkspace:', selectedWorkspace);
+  console.log('🔑 Conexoes component - using workspaceId:', workspaceId);
+  
+  return <ConexoesNova workspaceId={workspaceId} />;
 }

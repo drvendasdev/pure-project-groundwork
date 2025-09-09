@@ -162,7 +162,7 @@ serve(async (req) => {
       // Prepare webhook configuration only if webhook URL is valid
       const webhookConfig = globalWebhookEnabled || !webhookUrl ? {} : {
         webhook: webhookUrl,
-        webhook_by_events: false,
+        webhook_by_events: true,
         webhook_base64: false,
         ...(config.evolutionWebhookSecret && {
           webhook_headers: {
@@ -170,12 +170,8 @@ serve(async (req) => {
           }
         }),
         events: [
-          'APPLICATION_STARTUP',
-          'QRCODE_UPDATED',
-          'CONNECTION_UPDATE',
           'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'SEND_MESSAGE'
+          'QRCODE_UPDATED'
         ]
       };
 
@@ -271,7 +267,7 @@ serve(async (req) => {
                   },
                   body: JSON.stringify({
                     url: webhookUrl,
-                    webhook_by_events: false,
+                    webhook_by_events: true,
                     webhook_base64: false,
                     ...(config.evolutionWebhookSecret && {
                       headers: {
@@ -279,12 +275,8 @@ serve(async (req) => {
                       }
                     }),
                     events: [
-                      'APPLICATION_STARTUP',
-                      'QRCODE_UPDATED',
-                      'CONNECTION_UPDATE',
                       'MESSAGES_UPSERT',
-                      'MESSAGES_UPDATE',
-                      'SEND_MESSAGE'
+                      'QRCODE_UPDATED'
                     ]
                   })
                 });

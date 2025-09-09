@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
 }
 
 serve(async (req) => {
@@ -25,6 +25,131 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Get user identification - try multiple sources
+    let systemUserId = req.headers.get('x-system-user-id')
+    let userEmail = req.headers.get('x-system-user-email')
+    
+    console.log('Headers received:', {
+      'x-system-user-id': systemUserId,
+      'x-system-user-email': userEmail,
+      'authorization': req.headers.get('Authorization') ? 'present' : 'missing'
+    })
+
+    // Fallback to auth if headers not provided
+    if (!systemUserId || !userEmail) {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader) {
+        console.error('No authorization header and no fallback headers provided')
+        return new Response(
+          JSON.stringify({ success: false, error: 'Authentication required. Please provide either authorization header or user identification headers.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Get current user profile
+      const supabaseAuth = createClient(
+        supabaseUrl,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        {
+          global: {
+            headers: {
+              Authorization: authHeader
+            }
+          }
+        }
+      )
+      
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
+      if (authError || !user) {
+        console.error('Auth error:', authError)
+        return new Response(
+          JSON.stringify({ success: false, error: 'User not authenticated' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Get system_user_id from metadata or fallback to extracting from synthetic email
+      systemUserId = user.user_metadata?.system_user_id;
+      userEmail = user.email
+      
+      if (!systemUserId && userEmail) {
+        // Extract UUID from synthetic email format: ${uuid}@{domain}
+        const emailMatch = userEmail.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})@/);
+        if (emailMatch) {
+          systemUserId = emailMatch[1];
+          console.log('Extracted system_user_id from email:', systemUserId);
+        }
+      }
+    }
+
+    if (!systemUserId) {
+      console.error('Could not determine system user ID')
+      return new Response(
+        JSON.stringify({ success: false, error: 'User identification failed' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('Using system_user_id:', systemUserId)
+
+    const { data: systemUser, error: userError } = await supabase
+      .from('system_users')
+      .select('profile')
+      .eq('id', systemUserId)
+      .maybeSingle()
+    
+    if (userError) {
+      console.error('Error fetching system user:', userError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to verify user profile' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!systemUser) {
+      console.error('System user not found:', systemUserId)
+      return new Response(
+        JSON.stringify({ success: false, error: 'User profile not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    // Check if user can manage this workspace
+    const isMaster = systemUser.profile === 'master'
+    let canManageWorkspace = isMaster
+    
+    console.log('User profile:', systemUser.profile, 'isMaster:', isMaster)
+    
+    if (!isMaster) {
+      // Check if user is admin or master in this workspace
+      const { data: membership, error: membershipError } = await supabase
+        .from('workspace_members')
+        .select('role')
+        .eq('user_id', systemUserId)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle()
+      
+      if (membershipError) {
+        console.error('Error checking workspace membership:', membershipError)
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to verify workspace permissions' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log('Workspace membership:', membership)
+      canManageWorkspace = membership?.role === 'admin' || membership?.role === 'master'
+    }
+    
+    if (!canManageWorkspace) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Insufficient permissions to manage this workspace' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`User authorized to manage workspace ${workspaceId}`)
 
     switch (action) {
       case 'list':
@@ -67,7 +192,7 @@ serve(async (req) => {
         }
 
         // Transform the data to match the expected format
-        const members = membersData.map(member => {
+        let members = membersData.map(member => {
           const user = users?.find(u => u.id === member.user_id)
           return {
             id: member.id,
@@ -85,6 +210,11 @@ serve(async (req) => {
             } : null
           }
         })
+
+        // Filter out master users if current user is not master (hide master users from admins)
+        if (!isMaster) {
+          members = members.filter(member => member.user?.profile !== 'master')
+        }
 
         return new Response(
           JSON.stringify({ success: true, members }),

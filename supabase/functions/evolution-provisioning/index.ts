@@ -157,15 +157,11 @@ serve(async (req) => {
         const webhookUrl = `${supabaseFunctionsWebhook}?token=${evolutionWebhookSecret}`;
         webhookConfig = {
           webhook: webhookUrl,
-          webhook_by_events: false,
+          webhook_by_events: true,
           webhook_base64: false,
           events: [
-            'APPLICATION_STARTUP',
-            'QRCODE_UPDATED', 
-            'CONNECTION_UPDATE',
             'MESSAGES_UPSERT',
-            'MESSAGES_UPDATE',
-            'SEND_MESSAGE'
+            'QRCODE_UPDATED'
           ]
         };
       }

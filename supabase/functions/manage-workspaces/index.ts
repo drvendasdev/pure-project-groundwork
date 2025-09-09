@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
 };
 
 Deno.serve(async (req) => {
@@ -14,10 +14,109 @@ Deno.serve(async (req) => {
   try {
     const { action, workspaceId, name, cnpj, connectionLimit } = await req.json();
     console.log('Request received:', { action, workspaceId, name, cnpj, connectionLimit });
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    let systemUserId: string | null = null;
+    let systemUserEmail: string | null = null;
+
+    // Try JWT authentication first
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      const supabaseAuth = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: {
+            headers: {
+              Authorization: authHeader
+            }
+          }
+        }
+      );
+      
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+      if (!authError && user) {
+        console.log('JWT authentication successful');
+        
+        // Extract system user ID from metadata or email
+        systemUserId = user.user_metadata?.system_user_id;
+        systemUserEmail = user.user_metadata?.system_email || user.email;
+        
+        if (!systemUserId) {
+          // Extract from email if it's a UUID format (our synthetic emails)
+          const emailMatch = user.email?.match(/^([0-9a-f-]{36})@/);
+          if (emailMatch) {
+            systemUserId = emailMatch[1];
+          }
+        }
+      } else {
+        console.log('JWT authentication failed:', authError);
+      }
+    }
+
+    // Fallback to header-based authentication
+    if (!systemUserId) {
+      console.log('Attempting header-based authentication');
+      
+      systemUserId = req.headers.get('x-system-user-id');
+      systemUserEmail = req.headers.get('x-system-user-email');
+
+      if (!systemUserId || !systemUserEmail) {
+        console.error('Missing authentication headers');
+        return new Response(
+          JSON.stringify({ error: 'Authentication required' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate user exists and email matches
+      const { data: userValidation, error: validationError } = await supabase
+        .from('system_users')
+        .select('email, status')
+        .eq('id', systemUserId)
+        .eq('status', 'active')
+        .single();
+
+      if (validationError || !userValidation || userValidation.email !== systemUserEmail) {
+        console.error('Header authentication validation failed:', validationError);
+        return new Response(
+          JSON.stringify({ error: 'Invalid user credentials' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('Header-based authentication successful');
+    }
+
+    // Get user profile from system_users table
+    const { data: userProfile, error: profileError } = await supabase
+      .from('system_users')
+      .select('profile')
+      .eq('id', systemUserId)
+      .single();
+
+    if (profileError || !userProfile) {
+      console.error('Failed to get user profile:', profileError);
+      return new Response(
+        JSON.stringify({ error: 'User profile not found' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('User authenticated:', { systemUserId, profile: userProfile.profile, action });
+
+    // Check if user is master
+    if (userProfile.profile !== 'master') {
+      console.log('Access denied: user is not master');
+      return new Response(
+        JSON.stringify({ error: 'Only master users can manage workspaces' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (action === 'create') {
       const { data, error } = await supabase

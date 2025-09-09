@@ -11,74 +11,64 @@ export function useWorkspaces() {
   const { user, userRole } = useAuth();
 
   const fetchWorkspaces = async () => {
+    if (!user) {
+      setWorkspaces([]);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // If user is master, show all workspaces (except reserved)
-      if (userRole === 'master') {
-        const { data, error } = await supabase
-          .from('workspaces_view')
-          .select('*')
-          .neq('workspace_id', '00000000-0000-0000-0000-000000000000')
-          .order('name');
-
-        if (error) {
-          throw error;
+      // Always use the Edge function to bypass RLS issues
+      console.log('Fetching workspaces via Edge function for user:', user.id, 'role:', userRole);
+      
+      const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
+        headers: {
+          'x-system-user-id': user.id,
+          'x-system-user-email': user.email || ''
         }
+      });
 
-        setWorkspaces(data || []);
-      } else {
-        // For regular users, filter by their workspace memberships
-        if (!user?.id) {
-          setWorkspaces([]);
-          return;
-        }
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
 
-        // Check if user is mentor_master (can see all workspaces)
-        const { data: mentorMasterCheck } = await supabase
-          .from('workspace_members')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('role', 'mentor_master')
-          .limit(1);
+      // Transform the data to match expected format
+      const workspaceData = data?.workspaces?.map((w: any) => ({
+        workspace_id: w.workspace_id || w.id,
+        name: w.name,
+        slug: w.slug,
+        cnpj: w.cnpj,
+        created_at: w.created_at,
+        updated_at: w.updated_at,
+        connections_count: w.connections_count || 0
+      })) || [];
 
-        if (mentorMasterCheck && mentorMasterCheck.length > 0) {
-          // User is mentor_master, show all workspaces
-          const { data, error } = await supabase
-            .from('workspaces_view')
-            .select('*')
-            .neq('workspace_id', '00000000-0000-0000-0000-000000000000')
-            .order('name');
+      console.log('Found workspaces for user:', workspaceData);
+      setWorkspaces(workspaceData);
 
-          if (error) {
-            throw error;
-          }
+      // Fallback: buscar connections_count diretamente se não veio da Edge function
+      if (workspaceData.some((w: any) => !w.connections_count && w.connections_count !== 0)) {
+        console.log('Fetching connections count as fallback...');
+        try {
+          const { data: connectionsData } = await supabase
+            .from('connections')
+            .select('workspace_id')
+            .in('workspace_id', workspaceData.map((w: any) => w.workspace_id));
+          
+          const connectionCounts = connectionsData?.reduce((acc: any, conn: any) => {
+            acc[conn.workspace_id] = (acc[conn.workspace_id] || 0) + 1;
+            return acc;
+          }, {}) || {};
 
-          setWorkspaces(data || []);
-        } else {
-          // User is gestor or colaborador, filter by their workspace assignments
-          const { data, error } = await supabase
-            .from('workspace_members')
-            .select(`
-              workspace_id,
-              role,
-              workspaces_view!inner(*)
-            `)
-            .eq('user_id', user.id);
-
-          if (error) {
-            throw error;
-          }
-
-          // Filter workspaces based on user role with proper access control
-          // Gestores and mentor_master can see workspace management
-          // Colaboradores don't see workspace management
-          const filteredWorkspaces = data?.filter(membership => {
-            if (membership.role === 'mentor_master') return true;
-            if (membership.role === 'gestor') return true;
-            return false; // Colaboradores don't see workspace management
-          }).map(membership => membership.workspaces_view) || [];
-
-          setWorkspaces(filteredWorkspaces);
+          const updatedWorkspaces = workspaceData.map((w: any) => ({
+            ...w,
+            connections_count: connectionCounts[w.workspace_id] || 0
+          }));
+          
+          setWorkspaces(updatedWorkspaces);
+        } catch (fallbackError) {
+          console.log('Fallback connections count failed, using 0:', fallbackError);
         }
       }
     } catch (error) {
@@ -102,10 +92,34 @@ export function useWorkspaces() {
   const createWorkspace = async (name: string, cnpj?: string, connectionLimit?: number) => {
     try {
       const { data, error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'create', name, cnpj, connectionLimit }
+        body: { action: 'create', name, cnpj, connectionLimit },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || ''
+        }
       });
 
       if (error) {
+        // Handle specific error types
+        if (error.message?.includes('401') || error.message?.includes('authenticated')) {
+          toast({
+            title: "Erro de Autenticação",
+            description: "Sua sessão expirou. Faça login novamente.",
+            variant: "destructive"
+          });
+        } else if (error.message?.includes('403') || error.message?.includes('master')) {
+          toast({
+            title: "Acesso Negado",
+            description: "Somente usuários master podem criar empresas.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Erro",
+            description: "Falha ao criar empresa",
+            variant: "destructive"
+          });
+        }
         throw error;
       }
 
@@ -116,13 +130,17 @@ export function useWorkspaces() {
 
       fetchWorkspaces(); // Refresh list
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating workspace:', error);
-      toast({
-        title: "Erro",
-        description: "Falha ao criar empresa",
-        variant: "destructive"
-      });
+      
+      // If error wasn't handled above, show generic message
+      if (!error.message?.includes('401') && !error.message?.includes('403')) {
+        toast({
+          title: "Erro",
+          description: "Falha ao criar empresa",
+          variant: "destructive"
+        });
+      }
       throw error;
     }
   };
@@ -130,7 +148,11 @@ export function useWorkspaces() {
   const updateWorkspace = async (workspaceId: string, updates: { name?: string; cnpj?: string; connectionLimit?: number }) => {
     try {
       const { error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'update', workspaceId, ...updates }
+        body: { action: 'update', workspaceId, ...updates },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || ''
+        }
       });
 
       if (error) {
@@ -157,7 +179,11 @@ export function useWorkspaces() {
   const deleteWorkspace = async (workspaceId: string) => {
     try {
       const { error } = await supabase.functions.invoke('manage-workspaces', {
-        body: { action: 'delete', workspaceId }
+        body: { action: 'delete', workspaceId },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || ''
+        }
       });
 
       if (error) {

@@ -176,3 +176,9 @@ verify_jwt = false
 
 [functions.manage-workspace-members]
 verify_jwt = false
+
+[functions.list-user-workspaces]
+verify_jwt = false
+
+[functions.manage-dashboard-cards]
+verify_jwt = false

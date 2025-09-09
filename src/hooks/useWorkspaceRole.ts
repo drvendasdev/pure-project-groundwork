@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
-export type WorkspaceRole = 'mentor_master' | 'gestor' | 'colaborador';
+export type WorkspaceRole = 'master' | 'admin' | 'user';
 
 interface WorkspaceRoleHook {
   userWorkspaceRole: WorkspaceRole | null;
-  isMentorMaster: boolean;
-  isGestor: (workspaceId?: string) => boolean;
-  isColaborador: (workspaceId?: string) => boolean;
+  isMaster: boolean;
+  isAdmin: (workspaceId?: string) => boolean;
+  isUser: (workspaceId?: string) => boolean;
   canCreateConnections: (workspaceId?: string) => boolean;
   canManageWorkspace: (workspaceId?: string) => boolean;
   getUserWorkspaces: () => Promise<string[]>;
@@ -31,38 +31,51 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
       }
 
       try {
-        // Fetch user's workspace memberships
-        const { data: memberships, error } = await supabase
-          .from('workspace_members')
-          .select('workspace_id, role')
-          .eq('user_id', user.id);
+        console.log('Fetching workspace roles via Edge function for user:', user.id);
+        
+        // Use the Edge function to get workspace data and role information
+        const { data, error } = await supabase.functions.invoke('list-user-workspaces', {
+          headers: {
+            'x-system-user-id': user.id,
+            'x-system-user-email': user.email || ''
+          }
+        });
 
         if (error) {
-          console.error('Error fetching workspace roles:', error);
-          setUserWorkspaceRole(null);
+          console.error('Error fetching workspace data from Edge function:', error);
+          // Fallback to userRole from auth if Edge function fails
+          console.log('Falling back to userRole from auth:', userRole);
+          setUserWorkspaceRole(userRole === 'master' ? 'master' : userRole === 'admin' ? 'admin' : 'user');
           setUserWorkspaces([]);
+          setLoading(false);
           return;
         }
 
+        const backendUserRole = data?.userRole || 'user';
+        const memberships = data?.userMemberships || [];
+
         if (memberships && memberships.length > 0) {
-          setUserWorkspaces(memberships.map(m => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
+          setUserWorkspaces(memberships.map((m: any) => ({ workspaceId: m.workspace_id, role: m.role as WorkspaceRole })));
           
-          // Check if user is mentor_master in any workspace
-          const isMentorMaster = memberships.some(m => m.role === 'mentor_master');
-          if (isMentorMaster) {
-            setUserWorkspaceRole('mentor_master');
+          // Check if user is master in any workspace or globally
+          const isMaster = backendUserRole === 'master' || memberships.some((m: any) => m.role === 'master');
+          if (isMaster) {
+            setUserWorkspaceRole('master');
           } else {
             // Set the highest role
-            const hasGestor = memberships.some(m => m.role === 'gestor');
-            setUserWorkspaceRole(hasGestor ? 'gestor' : 'colaborador');
+            const hasAdmin = memberships.some((m: any) => m.role === 'admin');
+            setUserWorkspaceRole(hasAdmin ? 'admin' : 'user');
           }
         } else {
-          setUserWorkspaceRole(null);
+          // Check if user is globally master
+          setUserWorkspaceRole(backendUserRole === 'master' ? 'master' : null);
           setUserWorkspaces([]);
         }
       } catch (error) {
         console.error('Error in fetchUserWorkspaceRoles:', error);
-        setUserWorkspaceRole(null);
+        // Fallback to userRole from auth if there's an exception
+        console.log('Falling back to userRole from auth due to error:', userRole);
+        setUserWorkspaceRole(userRole === 'master' ? 'master' : userRole === 'admin' ? 'admin' : 'user');
         setUserWorkspaces([]);
       } finally {
         setLoading(false);
@@ -70,49 +83,49 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
     };
 
     fetchUserWorkspaceRoles();
-  }, [user?.id]);
+  }, [user?.id, userRole]);
 
-  const isMentorMaster = userRole === 'master' || userWorkspaceRole === 'mentor_master';
+  const isMaster = userRole === 'master' || userWorkspaceRole === 'master';
 
-  const isGestor = (workspaceId?: string) => {
-    if (userRole === 'master' || userWorkspaceRole === 'mentor_master') return true;
-    if (!workspaceId) return userWorkspaceRole === 'gestor';
-    return userWorkspaces.some(w => w.workspaceId === workspaceId && (w.role === 'gestor' || w.role === 'mentor_master'));
+  const isAdmin = (workspaceId?: string) => {
+    if (userRole === 'master' || userWorkspaceRole === 'master') return true;
+    if (!workspaceId) return userWorkspaceRole === 'admin';
+    return userWorkspaces.some(w => w.workspaceId === workspaceId && (w.role === 'admin' || w.role === 'master'));
   };
 
-  const isColaborador = (workspaceId?: string) => {
-    if (!workspaceId) return userWorkspaceRole === 'colaborador';
-    return userWorkspaces.some(w => w.workspaceId === workspaceId && w.role === 'colaborador');
+  const isUser = (workspaceId?: string) => {
+    if (!workspaceId) return userWorkspaceRole === 'user';
+    return userWorkspaces.some(w => w.workspaceId === workspaceId && w.role === 'user');
   };
 
   const canCreateConnections = (workspaceId?: string) => {
-    // mentor_master can create connections anywhere
-    if (isMentorMaster) return true;
+    // master can create connections anywhere
+    if (isMaster) return true;
     
-    // gestor can create connections in their workspace
+    // admin can create connections in their workspace
     if (workspaceId) {
-      return isGestor(workspaceId);
+      return isAdmin(workspaceId);
     }
     
-    // If no specific workspace, check if user is at least gestor somewhere
-    return userWorkspaceRole === 'gestor';
+    // If no specific workspace, check if user is at least admin somewhere
+    return userWorkspaceRole === 'admin';
   };
 
   const canManageWorkspace = (workspaceId?: string) => {
-    // mentor_master can manage any workspace
-    if (isMentorMaster) return true;
+    // master can manage any workspace
+    if (isMaster) return true;
     
-    // gestor can manage their workspace
+    // admin can manage their workspace (but not create new ones)
     if (workspaceId) {
-      return isGestor(workspaceId);
+      return isAdmin(workspaceId);
     }
     
     return false;
   };
 
   const getUserWorkspaces = async (): Promise<string[]> => {
-    if (isMentorMaster) {
-      // mentor_master has access to all workspaces
+    if (isMaster) {
+      // master has access to all workspaces
       const { data: allWorkspaces } = await supabase
         .from('workspaces')
         .select('id')
@@ -126,9 +139,9 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
 
   return {
     userWorkspaceRole,
-    isMentorMaster,
-    isGestor,
-    isColaborador,
+    isMaster,
+    isAdmin,
+    isUser,
     canCreateConnections,
     canManageWorkspace,
     getUserWorkspaces,

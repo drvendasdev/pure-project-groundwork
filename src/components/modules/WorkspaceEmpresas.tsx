@@ -21,6 +21,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import { useAuth } from "@/hooks/useAuth";
 import { CreateWorkspaceModal } from "@/components/modals/CreateWorkspaceModal";
 import { WorkspaceConfigModal } from "@/components/modals/WorkspaceConfigModal";
 import { formatDistanceToNow } from "date-fns";
@@ -33,7 +35,9 @@ interface WorkspaceEmpresasProps {
 }
 
 export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: WorkspaceEmpresasProps) {
-  const { workspaces, isLoading, deleteWorkspace } = useWorkspaces();
+  const { workspaces, isLoading, deleteWorkspace, fetchWorkspaces } = useWorkspaces();
+  const { isMaster, isAdmin } = useWorkspaceRole();
+  const { userRole } = useAuth(); // Adicionar userRole como fallback
   const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -79,6 +83,8 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
         await deleteWorkspace(workspaceToDelete.workspace_id);
         setDeleteDialogOpen(false);
         setWorkspaceToDelete(null);
+        // Refresh workspaces list after deletion
+        fetchWorkspaces();
       } catch (error) {
         // Error handled in hook
       }
@@ -89,6 +95,8 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
     setShowCreateModal(open);
     if (!open) {
       setEditingWorkspace(null);
+      // Refresh workspaces list after modal closes
+      fetchWorkspaces();
     }
   };
 
@@ -126,10 +134,12 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
             Gerencie suas empresas e workspaces
           </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          Nova Empresa
-        </Button>
+        {(isMaster || userRole === 'master') && (
+          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Empresa
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -143,28 +153,34 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
-                    {workspace.connections_count} conexões
+                    conexões: {workspace.connections_count || 0}
                   </Badge>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
+                  {(isMaster || userRole === 'master') && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEditClick(workspace)}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleDeleteClick(workspace)}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Excluir
-                      </DropdownMenuItem>
+                      {(isMaster || userRole === 'master') && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleEditClick(workspace)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteClick(workspace)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
-                  </DropdownMenu>
+                    </DropdownMenu>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -192,26 +208,28 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-2"
-                  onClick={() => handleUsersClick(workspace)}
-                >
-                  <Users className="w-4 h-4" />
-                  Usuários
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-2"
-                  onClick={() => handleConfigClick(workspace)}
-                >
-                  <Settings className="w-4 h-4" />
-                  Config
-                </Button>
-              </div>
+              {(isMaster || isAdmin(workspace.workspace_id!) || userRole === 'master' || userRole === 'admin') && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => handleUsersClick(workspace)}
+                  >
+                    <Users className="w-4 h-4" />
+                    Usuários
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-2"
+                    onClick={() => handleConfigClick(workspace)}
+                  >
+                    <Settings className="w-4 h-4" />
+                    Config
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -222,12 +240,14 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
           <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">Nenhuma empresa encontrada</h3>
           <p className="text-muted-foreground mb-4">
-            Crie sua primeira empresa para começar
+            {(isMaster || userRole === 'master') ? "Crie sua primeira empresa para começar" : "Nenhuma empresa atribuída"}
           </p>
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Criar Primeira Empresa
-          </Button>
+          {(isMaster || userRole === 'master') && (
+            <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Criar Primeira Empresa
+            </Button>
+          )}
         </div>
       )}
 

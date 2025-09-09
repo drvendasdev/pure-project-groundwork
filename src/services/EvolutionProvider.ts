@@ -30,9 +30,32 @@ interface ConnectionsListResponse {
 class EvolutionProvider {
   async listConnections(workspaceId: string): Promise<ConnectionsListResponse> {
     try {
+      console.log('🔍 EvolutionProvider.listConnections called with workspaceId:', workspaceId);
+      
+      // Get user data for headers
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      console.log('👤 Current user data:', currentUserData);
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': workspaceId
+      };
+      
+      console.log('📤 Calling evolution-list-connections with headers:', headers);
+
       const { data } = await supabase.functions.invoke('evolution-list-connections', {
-        body: { workspaceId }
+        body: { workspaceId },
+        headers
       });
+      
+      console.log('📥 Evolution API response:', data);
       
       if (!data?.success) {
         return { 
@@ -63,11 +86,19 @@ class EvolutionProvider {
       }
     });
     
+    console.log('Create connection response:', data);
+    
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to create connection');
     }
     
-    return data.connection;
+    // If there's a QR code in the response, include it in the connection
+    const connection = data.connection;
+    if (data.qr_code && !connection.qr_code) {
+      connection.qr_code = data.qr_code;
+    }
+    
+    return connection;
   }
 
   async getConnectionStatus(connectionId: string): Promise<ConnectionResponse> {
@@ -83,12 +114,18 @@ class EvolutionProvider {
   }
 
   async getQRCode(connectionId: string): Promise<{ qr_code: string }> {
-    const { data } = await supabase.functions.invoke('evolution-get-qr', {
+    const { data } = await supabase.functions.invoke('evolution-refresh-qr', {
       body: { connectionId }
     });
     
+    console.log('QR Code response:', data);
+    
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to get QR code');
+    }
+    
+    if (!data.qr_code) {
+      throw new Error('QR Code não encontrado na resposta');
     }
     
     return { qr_code: data.qr_code };

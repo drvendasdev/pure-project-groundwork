@@ -279,12 +279,51 @@ serve(async (req) => {
       }
     }
 
-    // 1. Criar ou encontrar contato
+    // 1. Resolver workspace_id e connection_id a partir da evolutionInstance
+    let workspace_id = null;
+    let connection_id = null;
+    
+    if (evolutionInstance) {
+      // Primeiro, tentar encontrar pela tabela connections
+      const { data: connectionData } = await supabase
+        .from('connections')
+        .select('id, workspace_id')
+        .eq('instance_name', evolutionInstance)
+        .single();
+      
+      if (connectionData) {
+        workspace_id = connectionData.workspace_id;
+        connection_id = connectionData.id;
+        console.log('Connection encontrada:', { evolutionInstance, workspace_id, connection_id });
+      } else {
+        // Fallback: buscar na tabela evolution_instance_tokens
+        const { data: tokenData } = await supabase
+          .from('evolution_instance_tokens')
+          .select('workspace_id')
+          .eq('instance_name', evolutionInstance)
+          .single();
+        
+        if (tokenData) {
+          workspace_id = tokenData.workspace_id;
+          console.log('Workspace encontrado via tokens:', { evolutionInstance, workspace_id });
+        } else {
+          console.warn('Nenhum workspace encontrado para a instância:', evolutionInstance);
+          throw new Error(`Instância ${evolutionInstance} não encontrada em nenhum workspace`);
+        }
+      }
+    }
+
+    if (!workspace_id) {
+      throw new Error('workspace_id é obrigatório para processar mensagens');
+    }
+
+    // 2. Criar ou encontrar contato (agora com workspace_id)
     let contact;
     const { data: existingContact } = await supabase
       .from('contacts')
       .select('*')
       .eq('phone', phoneNumber)
+      .eq('workspace_id', workspace_id)
       .single();
 
     if (existingContact) {
@@ -300,12 +339,13 @@ serve(async (req) => {
         contact = existingContact;
       }
     } else {
-      // Criar novo contato
+      // Criar novo contato (agora com workspace_id)
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
           name: contactName || phoneNumber,
-          phone: phoneNumber
+          phone: phoneNumber,
+          workspace_id: workspace_id
         })
         .select()
         .single();
@@ -316,12 +356,13 @@ serve(async (req) => {
       contact = newContact;
     }
 
-    // 2. Encontrar ou criar conversa ativa
+    // 3. Encontrar ou criar conversa ativa (agora com workspace_id e connection_id)
     let conversation;
     const { data: existingConversation } = await supabase
       .from('conversations')
       .select('*')
       .eq('contact_id', contact.id)
+      .eq('workspace_id', workspace_id)
       .eq('canal', 'whatsapp')
       .eq('status', 'open')
       .order('created_at', { ascending: false })
@@ -380,11 +421,13 @@ serve(async (req) => {
         }
       }
 
-      // Criar nova conversa - N8N gerencia a IA, não o sistema local
+      // Criar nova conversa - N8N gerencia a IA, não o sistema local (agora com workspace_id e connection_id)
       const { data: newConversation, error: convError } = await supabase
         .from('conversations')
         .insert({
           contact_id: contact.id,
+          workspace_id: workspace_id,
+          connection_id: connection_id,
           canal: 'whatsapp',
           agente_ativo: false, // N8N gerencia as respostas
           status: 'open',
@@ -449,11 +492,12 @@ serve(async (req) => {
     // Determinar content - usar payload completo em modo debug ou message extraído
     const finalContent = debugRawAsMessage ? JSON.stringify(webhookData, null, 2) : message;
 
-    // 3. Inserir mensagem
+    // 4. Inserir mensagem (agora com workspace_id)
     const { data: newMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversation.id,
+        workspace_id: workspace_id,
         content: finalContent,
         sender_type: 'contact',
         message_type: messageType,
@@ -470,7 +514,7 @@ serve(async (req) => {
       throw new Error(`Erro ao inserir mensagem: ${messageError.message}`);
     }
 
-    // 4. Atualizar última atividade da conversa
+    // 5. Atualizar última atividade da conversa
     await supabase
       .from('conversations')
       .update({ 
@@ -479,7 +523,7 @@ serve(async (req) => {
       })
       .eq('id', conversation.id);
 
-    // 5. Buscar configurações do agente para enviar ao N8N
+    // 6. Buscar configurações do agente para enviar ao N8N
     let agentConfig = null;
     const { data: activeAgent } = await supabase
       .from('ai_agents')
@@ -525,6 +569,169 @@ serve(async (req) => {
 
     console.log('Mensagem registrada no CRM. N8N deve processar a resposta.');
 
+    // 7. Forward event to N8N webhook (after CRM registration)
+    const requestUrl = new URL(req.url);
+    const customN8nUrl = requestUrl.searchParams.get('n8nUrl'); // Allow override for testing
+    
+    // Determinar destino do webhook com prioridade: ?n8nUrl > workspace config > N8N_WEBHOOK_URL
+    let n8nWebhookUrls = null;
+    let webhookSecret = null;
+    let webhookSource = '';
+    
+    if (customN8nUrl) {
+      n8nWebhookUrls = customN8nUrl;
+      webhookSource = 'url_override';
+      console.log('🔧 Using custom N8N URL from ?n8nUrl parameter');
+    } else {
+      // Buscar configuração do workspace
+      const { data: workspaceWebhook } = await supabase
+        .from('workspace_webhook_settings')
+        .select('webhook_url, webhook_secret')
+        .eq('workspace_id', workspace_id)
+        .single();
+      
+      if (workspaceWebhook?.webhook_url) {
+        n8nWebhookUrls = workspaceWebhook.webhook_url;
+        webhookSecret = workspaceWebhook.webhook_secret;
+        webhookSource = 'workspace_settings';
+        console.log('🏢 Using workspace webhook settings:', { 
+          workspace_id, 
+          hasSecret: !!webhookSecret 
+        });
+      } else {
+        // Fallback para variável de ambiente
+        n8nWebhookUrls = Deno.env.get('N8N_WEBHOOK_URL');
+        webhookSource = 'environment_variable';
+        if (n8nWebhookUrls) {
+          console.log('🌍 Using N8N_WEBHOOK_URL environment variable');
+        }
+      }
+    }
+    
+    const forwardingResults = [];
+    
+    if (n8nWebhookUrls) {
+      // Support multiple URLs separated by comma
+      const urlList = n8nWebhookUrls.split(',').map(url => url.trim()).filter(url => url);
+      
+      // Get configuration
+      const n8nMethod = Deno.env.get('N8N_WEBHOOK_METHOD') || 'POST';
+      const n8nAuthHeader = Deno.env.get('N8N_WEBHOOK_AUTH_HEADER');
+      const n8nExtraHeaders = Deno.env.get('N8N_WEBHOOK_EXTRA_HEADERS');
+      
+      console.log(`📤 Forwarding to ${urlList.length} N8N endpoint(s) using ${n8nMethod} (source: ${webhookSource})`);
+      
+      const n8nPayload = {
+        event: 'message_received',
+        conversation_id: conversation.id,
+        contact_id: contact.id,
+        message_id: newMessage.id,
+        phone_number: phoneNumber,
+        contact_name: contactName,
+        content: finalContent,
+        message_type: messageType,
+        evolution_instance: evolutionInstance,
+        workspace_id: workspace_id,
+        connection_id: connection_id,
+        external_id: externalId,
+        timestamp: timestamp,
+        agent_config: agentConfig,
+        metadata: {
+          extraction_path: extractionPath,
+          debug_mode: debugRawAsMessage,
+          raw_payload_size: JSON.stringify(webhookData).length
+        }
+      };
+
+      for (const targetUrl of urlList) {
+        const startTime = Date.now();
+        let result = {
+          url: targetUrl,
+          method: n8nMethod,
+          status: null,
+          response: null,
+          error: null,
+          duration_ms: 0,
+          source: webhookSource
+        };
+
+        try {
+          // Prepare headers
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          
+          // Add workspace secret if available
+          if (webhookSecret) {
+            headers['X-Secret'] = webhookSecret;
+            console.log(`🔐 Adding workspace webhook secret to headers`);
+          }
+          
+          // Add auth header if configured via environment
+          if (n8nAuthHeader) {
+            const [key, value] = n8nAuthHeader.split(':', 2);
+            if (key && value) {
+              headers[key.trim()] = value.trim();
+            }
+          }
+          
+          // Add extra headers if configured (JSON format)
+          if (n8nExtraHeaders) {
+            try {
+              const extraHeaders = JSON.parse(n8nExtraHeaders);
+              Object.assign(headers, extraHeaders);
+            } catch (e) {
+              console.warn('⚠️ Invalid N8N_WEBHOOK_EXTRA_HEADERS format, skipping');
+            }
+          }
+
+          let fetchOptions: RequestInit;
+          let finalUrl = targetUrl;
+
+          if (n8nMethod.toUpperCase() === 'GET') {
+            // For GET, send data as query parameters
+            const urlObj = new URL(targetUrl);
+            Object.entries(n8nPayload).forEach(([key, value]) => {
+              urlObj.searchParams.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+            });
+            finalUrl = urlObj.toString();
+            fetchOptions = { method: 'GET', headers };
+          } else {
+            // For POST/PUT/etc, send as JSON body
+            fetchOptions = {
+              method: n8nMethod,
+              headers,
+              body: JSON.stringify(n8nPayload)
+            };
+          }
+
+          console.log(`🌐 Calling ${n8nMethod} ${targetUrl}`);
+          
+          const n8nResponse = await fetch(finalUrl, fetchOptions);
+          result.duration_ms = Date.now() - startTime;
+          result.status = n8nResponse.status;
+          result.response = await n8nResponse.text();
+          
+          console.log(`✅ N8N ${targetUrl} Response: ${result.status} (${result.duration_ms}ms) - ${result.response?.substring(0, 200)}`);
+          
+          if (!n8nResponse.ok) {
+            result.error = `HTTP ${result.status}`;
+            console.error(`❌ N8N webhook failed: ${result.status} - ${result.response}`);
+          }
+          
+        } catch (n8nError) {
+          result.duration_ms = Date.now() - startTime;
+          result.error = n8nError.message;
+          console.error(`❌ Error forwarding to N8N ${targetUrl}:`, n8nError.message);
+        }
+        
+        forwardingResults.push(result);
+      }
+    } else {
+      console.log('⚠️ No N8N webhook URL configured - skipping N8N forwarding');
+      console.log('💡 Configure webhook in Administration → Settings → Evolution Webhooks or set N8N_WEBHOOK_URL environment variable');
+    }
+
     return new Response(JSON.stringify({
       success: true,
       data: {
@@ -544,7 +751,13 @@ serve(async (req) => {
           external_id: externalId
         },
         debug_mode: debugRawAsMessage,
-        payload_size: JSON.stringify(webhookData).length
+        payload_size: JSON.stringify(webhookData).length,
+        n8n_forwarding: {
+          configured: !!n8nWebhookUrls,
+          source: webhookSource,
+          workspace_id: workspace_id,
+          results: forwardingResults
+        }
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

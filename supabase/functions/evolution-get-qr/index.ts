@@ -64,13 +64,26 @@ serve(async (req) => {
       )
     }
 
-    // Call Evolution API to get QR code
-    const qrResponse = await fetch(`${evolutionConfig.url}/instance/connect/${connection.instance_name}`, {
+    // Call Evolution API to get QR code - try the connect endpoint first
+    let qrResponse = await fetch(`${evolutionConfig.url}/instance/connect/${connection.instance_name}`, {
       method: 'GET',
       headers: {
         'apikey': evolutionConfig.apiKey
       }
     })
+
+    // If connect fails, try fetchInstance endpoint
+    if (!qrResponse.ok) {
+      console.log('Connect endpoint failed, trying fetchInstance...')
+      qrResponse = await fetch(`${evolutionConfig.url}/instance/fetchInstance/${connection.instance_name}`, {
+        method: 'GET',
+        headers: {
+          'apikey': evolutionConfig.apiKey
+        }
+      })
+    }
+
+    console.log('Evolution QR API response status:', qrResponse.status)
 
     if (!qrResponse.ok) {
       // Handle errors as text instead of JSON to prevent parsing issues
@@ -87,12 +100,27 @@ serve(async (req) => {
     }
 
     const qrData = await qrResponse.json()
+    console.log('Evolution QR API response data:', qrData)
+    
+    // Extract QR code from response
+    const extractedQRCode = qrData.qrcode?.base64 || qrData.qrcode?.code || qrData.qrcode || qrData.qr;
+    
+    if (!extractedQRCode) {
+      console.error('No QR code found in Evolution API response:', qrData)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'QR Code não encontrado na resposta da API Evolution' 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
     
     // Update connection with new QR code
     await supabase
       .from('connections')
       .update({ 
-        qr_code: qrData.qrcode || qrData.qr,
+        qr_code: extractedQRCode,
         status: 'qr',
         updated_at: new Date().toISOString()
       })
@@ -101,7 +129,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        qr_code: qrData.qrcode || qrData.qr
+        qr_code: extractedQRCode
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

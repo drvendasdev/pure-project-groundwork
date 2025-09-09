@@ -88,9 +88,12 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
 
   const loadConnections = async () => {
     try {
+      console.log('🔄 ConexoesNova.loadConnections called with workspaceId:', workspaceId);
       setIsLoading(true);
       
       const response = await evolutionProvider.listConnections(workspaceId);
+      console.log('📋 ConexoesNova received response:', response);
+      
       setConnections(response.connections);
       refreshLimits(); // Refresh limits when connections are loaded
     } catch (error) {
@@ -173,6 +176,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         workspaceId
       });
 
+      console.log('Created connection:', connection);
+
       toast({
         title: 'Sucesso',
         description: 'Instância criada com sucesso!',
@@ -184,6 +189,14 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       // Reload connections (silently)
       loadConnections();
       refreshLimits(); // Refresh limits after creating connection
+
+      // If connection has QR code, automatically open QR modal
+      if (connection.qr_code) {
+        setSelectedConnection(connection);
+        setIsQRModalOpen(true);
+        // Start polling for connection status
+        startPolling(connection.id);
+      }
 
     } catch (error) {
       console.error('Error creating instance:', error);
@@ -302,6 +315,31 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       setIsConnecting(true);
       setSelectedConnection(connection);
       
+      // Check if connection already has QR code
+      if (connection.qr_code) {
+        console.log('Using existing QR code:', connection.qr_code);
+        
+        // If qr_code is a JSON string, parse it and extract base64
+        let qrCodeData = connection.qr_code;
+        try {
+          const parsed = JSON.parse(connection.qr_code);
+          if (parsed.base64) {
+            qrCodeData = parsed.base64;
+          }
+        } catch (e) {
+          // If it's not JSON, use as is
+          console.log('QR code is not JSON, using as is');
+        }
+        
+        setSelectedConnection(prev => prev ? { ...prev, qr_code: qrCodeData, status: 'qr' } : null);
+        setIsQRModalOpen(true);
+        
+        // Start polling for connection status
+        startPolling(connection.id);
+        return;
+      }
+      
+      // If no QR code, try to get one from API
       const response = await evolutionProvider.getQRCode(connection.id);
       
       if (response.qr_code) {

@@ -76,6 +76,7 @@ export function AdministracaoUsuarios() {
   const handleAddUser = async (userData: {
     name: string;
     email: string;
+    empresa: string;
     profile: string;
     status: string;
     senha: string;
@@ -98,7 +99,6 @@ export function AdministracaoUsuarios() {
     }
   };
   const handleUpdateUser = async (updatedUser: SystemUser) => {
-
     const result = await updateUser({
       id: updatedUser.id,
       name: updatedUser.name,
@@ -155,6 +155,7 @@ export function AdministracaoUsuarios() {
               <TableHead className="text-foreground font-medium text-center">Nome</TableHead>
               <TableHead className="text-foreground font-medium">Email</TableHead>
               <TableHead className="text-foreground font-medium">Perfil</TableHead>
+              <TableHead className="text-foreground font-medium">Empresa</TableHead>
               <TableHead className="text-foreground font-medium">Status</TableHead>
               <TableHead className="text-foreground font-medium text-center">Ações</TableHead>
             </TableRow>
@@ -170,10 +171,15 @@ export function AdministracaoUsuarios() {
                   {user.email}
                 </TableCell>
                 <TableCell>
-                  <span className="text-foreground capitalize">
+                 <span className="text-foreground capitalize">
                     {user.profile}
                   </span>
                 </TableCell>
+               <TableCell>
+                <span className="text-foreground">
+                   {user.empresa || (user.workspaces?.map(w => w.name).join(", ") || "-")} 
+                  </span>
+            </TableCell>
                 <TableCell>
                   <Badge 
                     variant={user.status === 'active' ? 'secondary' : 'outline'} 

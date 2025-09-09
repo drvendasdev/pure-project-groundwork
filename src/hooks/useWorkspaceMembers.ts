@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface WorkspaceMember {
   id: string;
   workspace_id: string;
   user_id: string;
-  role: 'colaborador' | 'gestor' | 'mentor_master';
+  role: 'user' | 'admin' | 'master';
   is_hidden: boolean;
   created_at: string;
   user?: {
@@ -22,6 +23,18 @@ export function useWorkspaceMembers(workspaceId?: string) {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const getRequestHeaders = () => {
+    const headers: Record<string, string> = {};
+    if (user?.id) {
+      headers['x-system-user-id'] = user.id;
+    }
+    if (user?.email) {
+      headers['x-system-user-email'] = user.email;
+    }
+    return headers;
+  };
 
   const fetchMembers = async () => {
     if (!workspaceId) {
@@ -35,7 +48,8 @@ export function useWorkspaceMembers(workspaceId?: string) {
         body: {
           action: 'list',
           workspaceId
-        }
+        },
+        headers: getRequestHeaders()
       });
 
       if (error) {
@@ -48,12 +62,14 @@ export function useWorkspaceMembers(workspaceId?: string) {
       }
 
       setMembers(data.members || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in fetchMembers:', error);
       setMembers([]);
+      
+      const errorMessage = error?.message || "Erro ao carregar membros do workspace.";
       toast({
         title: "Erro",
-        description: "Erro ao carregar membros do workspace.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -65,7 +81,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
     fetchMembers();
   }, [workspaceId]);
 
-  const addMember = async (userId: string, role: 'colaborador' | 'gestor' | 'mentor_master') => {
+  const addMember = async (userId: string, role: 'user' | 'admin' | 'master') => {
     if (!workspaceId) return;
 
     try {
@@ -75,7 +91,8 @@ export function useWorkspaceMembers(workspaceId?: string) {
           workspaceId,
           userId,
           role
-        }
+        },
+        headers: getRequestHeaders()
       });
 
       if (error) {
@@ -94,11 +111,13 @@ export function useWorkspaceMembers(workspaceId?: string) {
 
       // Refresh the members list
       await fetchMembers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in addMember:', error);
+      
+      const errorMessage = error?.message || "Erro ao adicionar membro ao workspace.";
       toast({
         title: "Erro",
-        description: "Erro ao adicionar membro ao workspace.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -113,7 +132,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
       default_channel?: string;
       phone?: string;
     },
-    role: 'colaborador' | 'gestor' | 'mentor_master'
+    role: 'user' | 'admin' | 'master'
   ) => {
     if (!workspaceId) return;
 
@@ -143,7 +162,8 @@ export function useWorkspaceMembers(workspaceId?: string) {
           workspaceId: workspaceId,
           userId: newUserId,
           role: role
-        }
+        },
+        headers: getRequestHeaders()
       });
 
       if (memberError) {
@@ -179,7 +199,7 @@ export function useWorkspaceMembers(workspaceId?: string) {
     }
   };
 
-  const updateMember = async (memberId: string, updates: { role?: 'colaborador' | 'gestor' | 'mentor_master'; is_hidden?: boolean }) => {
+  const updateMember = async (memberId: string, updates: { role?: 'user' | 'admin' | 'master'; is_hidden?: boolean }) => {
     if (!workspaceId) return;
 
     try {
@@ -189,7 +209,8 @@ export function useWorkspaceMembers(workspaceId?: string) {
           workspaceId,
           memberId,
           updates
-        }
+        },
+        headers: getRequestHeaders()
       });
 
       if (error) {
@@ -208,11 +229,13 @@ export function useWorkspaceMembers(workspaceId?: string) {
 
       // Refresh the members list
       await fetchMembers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in updateMember:', error);
+      
+      const errorMessage = error?.message || "Erro ao atualizar membro.";
       toast({
         title: "Erro",
-        description: "Erro ao atualizar membro.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -271,7 +294,8 @@ export function useWorkspaceMembers(workspaceId?: string) {
           action: 'remove',
           workspaceId,
           memberId
-        }
+        },
+        headers: getRequestHeaders()
       });
 
       if (error) {
@@ -290,11 +314,13 @@ export function useWorkspaceMembers(workspaceId?: string) {
 
       // Refresh the members list
       await fetchMembers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in removeMember:', error);
+      
+      const errorMessage = error?.message || "Erro ao remover membro do workspace.";
       toast({
         title: "Erro",
-        description: "Erro ao remover membro do workspace.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

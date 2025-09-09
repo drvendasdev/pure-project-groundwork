@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, User, UserPlus, Edit, Trash, Eye, EyeOff } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import {
   Table,
   TableBody,
@@ -27,23 +29,26 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 const roleLabels = {
-  colaborador: 'Colaborador',
-  gestor: 'Gestor',
-  mentor_master: 'Mentor Master'
+  user: 'Usuário',
+  admin: 'Administrador',
+  master: 'Master'
 };
 
 const roleVariants = {
-  colaborador: 'secondary' as const,
-  gestor: 'default' as const,
-  mentor_master: 'destructive' as const
+  user: 'secondary' as const,
+  admin: 'default' as const,
+  master: 'destructive' as const
 };
 
 export function WorkspaceUsersPage() {
   const navigate = useNavigate();
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { workspaces } = useWorkspaces();
+  const { userRole } = useAuth();
+  const { isMaster, isAdmin } = useWorkspaceRole();
   const [showAddUser, setShowAddUser] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'colaborador' | 'gestor' | 'mentor_master'>('colaborador');
+  const [selectedRole, setSelectedRole] = useState<'user' | 'admin' | 'master'>('user');
+  const [selectedConnections, setSelectedConnections] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<WorkspaceMember | null>(null);
   const [editingUser, setEditingUser] = useState<WorkspaceMember | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,6 +69,9 @@ export function WorkspaceUsersPage() {
   const { members, isLoading, createUserAndAddToWorkspace, updateMember, updateUser, removeMember } = useWorkspaceMembers(workspaceId || '');
   const { connections, isLoading: connectionsLoading } = useWorkspaceConnections(workspaceId || '');
   const { toast } = useToast();
+  
+  // Check if user can manage this workspace
+  const canManageWorkspace = userRole === 'master' || isMaster || isAdmin(workspaceId) || userRole === 'admin';
   
   if (!workspaceId) {
     navigate('/workspace-empresas');
@@ -105,6 +113,34 @@ export function WorkspaceUsersPage() {
     }
   }, [defaultInstance, connections, formData.default_channel]);
 
+  const saveUserConnections = async (userId: string, connectionNames: string[]) => {
+    try {
+      // Delete existing assignments
+      await supabase
+        .from('instance_user_assignments')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert new assignments
+      if (connectionNames.length > 0) {
+        const assignments = connectionNames.map(instanceName => ({
+          user_id: userId,
+          instance: instanceName,
+          is_default: false
+        }));
+
+        const { error } = await supabase
+          .from('instance_user_assignments')
+          .insert(assignments);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Error saving user connections:', error);
+      throw error;
+    }
+  };
+
   const handleCreateUser = async () => {
     if (!formData.name || !formData.email || !formData.profile || !formData.senha) {
       toast({
@@ -145,7 +181,7 @@ export function WorkspaceUsersPage() {
         default_channel: '',
         phone: ''
       });
-      setSelectedRole('colaborador');
+      setSelectedRole('user');
       setShowAddUser(false);
       setDefaultInstance(null);
       
@@ -169,13 +205,13 @@ export function WorkspaceUsersPage() {
       default_channel: '',
       phone: ''
     });
-    setSelectedRole('colaborador');
+    setSelectedRole('user');
     setShowAddUser(false);
     setEditingUser(null);
     setDefaultInstance(null);
   };
 
-  const handleUpdateRole = async (memberId: string, newRole: 'colaborador' | 'gestor' | 'mentor_master') => {
+  const handleUpdateRole = async (memberId: string, newRole: 'user' | 'admin' | 'master') => {
     try {
       await updateMember(memberId, { role: newRole });
       setEditingMember(null);
@@ -230,6 +266,11 @@ export function WorkspaceUsersPage() {
         await updateMember(editingUser.id, { role: selectedRole });
       }
 
+      // Save user connections
+      if (editingUser.user.id) {
+        await saveUserConnections(editingUser.user.id, selectedConnections);
+      }
+
       handleCancel();
       
       toast({
@@ -279,16 +320,18 @@ export function WorkspaceUsersPage() {
       {/* Add User Section */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">Membros ({members.length})</h3>
-        <Button
-          onClick={() => setShowAddUser(!showAddUser)}
-          className="gap-2"
-        >
-          <UserPlus className="w-4 h-4" />
-          Adicionar Usuário
-        </Button>
+        {canManageWorkspace && (
+          <Button
+            onClick={() => setShowAddUser(!showAddUser)}
+            className="gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            Adicionar Usuário
+          </Button>
+        )}
       </div>
 
-      {showAddUser && (
+      {showAddUser && canManageWorkspace && (
         <div className="border rounded-lg p-6 space-y-6">
           <h4 className="font-medium text-lg">
             {editingUser ? 'Editar Usuário' : 'Criar Novo Usuário'}
@@ -328,7 +371,9 @@ export function WorkspaceUsersPage() {
                   <SelectContent>
                     <SelectItem value="user">Usuário</SelectItem>
                     <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="master">Master</SelectItem>
+                    {(userRole === 'master' || isMaster) && (
+                      <SelectItem value="master">Master</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -393,6 +438,43 @@ export function WorkspaceUsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              
+              <div className="space-y-2 col-span-2">
+                <Label>Conexões do Usuário</Label>
+                <div className="border rounded-lg p-3 space-y-2 max-h-32 overflow-y-auto">
+                  {connections.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhuma conexão disponível</p>
+                  ) : (
+                    connections.map((connection) => (
+                      <div key={connection.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`connection-${connection.id}`}
+                          checked={selectedConnections.includes(connection.instance_name)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedConnections(prev => [...prev, connection.instance_name]);
+                            } else {
+                              setSelectedConnections(prev => prev.filter(name => name !== connection.instance_name));
+                            }
+                          }}
+                          className="rounded border border-input"
+                        />
+                        <label
+                          htmlFor={`connection-${connection.id}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {connection.instance_name} {connection.phone_number ? `— ${connection.phone_number}` : ''} 
+                          {connection.status === 'connected' && ' ✓'}
+                        </label>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Selecione as conexões que este usuário pode visualizar e gerenciar conversas.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -454,30 +536,37 @@ export function WorkspaceUsersPage() {
                   <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleEditUser(member)}
-                        title="Editar usuário"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditingMember(editingMember?.id === member.id ? null : member)}
-                        title="Editar função"
-                      >
-                        <User className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRemoveMember(member.id)}
-                        title="Remover membro"
-                      >
-                        <Trash className="w-4 h-4" />
-                      </Button>
+                      {canManageWorkspace && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditUser(member)}
+                            title="Editar usuário"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditingMember(editingMember?.id === member.id ? null : member)}
+                            title="Editar função"
+                          >
+                            <User className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemoveMember(member.id)}
+                            title="Remover membro"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                      {!canManageWorkspace && (
+                        <span className="text-muted-foreground text-sm">Somente leitura</span>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

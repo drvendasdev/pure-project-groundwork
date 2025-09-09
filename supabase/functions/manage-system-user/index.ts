@@ -14,8 +14,8 @@ Deno.serve(async (req) => {
     const requestBody = await req.text();
     console.log('Request received:', requestBody);
     
-    const { action, userData } = JSON.parse(requestBody);
-    console.log('Action:', action, 'UserData keys:', Object.keys(userData || {}));
+    const { action, userData, userId } = JSON.parse(requestBody);
+    console.log('Action:', action, 'UserData keys:', Object.keys(userData || {}), 'UserId:', userId);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -29,6 +29,66 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // For operations that need permission checks, get current user
+    let currentUserProfile = null;
+    let currentUserWorkspaces: string[] = [];
+    
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader && action === 'list') {
+      try {
+        const supabaseAuth = createClient(
+          supabaseUrl,
+          Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+          {
+            global: {
+              headers: {
+                Authorization: authHeader
+              }
+            }
+          }
+        );
+        
+        const { data: { user } } = await supabaseAuth.auth.getUser();
+        
+        // Get system_user_id from metadata or fallback to extracting from synthetic email
+        let systemUserId = user?.user_metadata?.system_user_id;
+        if (!systemUserId && user?.email) {
+          // Extract UUID from synthetic email format: ${uuid}@{domain}
+          const emailMatch = user.email.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})@/);
+          if (emailMatch) {
+            systemUserId = emailMatch[1];
+            console.log('Extracted system_user_id from email:', systemUserId);
+          }
+        } else if (systemUserId) {
+          console.log('Using system_user_id from metadata:', systemUserId);
+        }
+        
+        if (user && systemUserId) {
+          const { data: systemUser } = await supabase
+            .from('system_users')
+            .select('profile')
+            .eq('id', systemUserId)
+            .single();
+          
+          currentUserProfile = systemUser?.profile;
+          console.log('Current user profile:', currentUserProfile);
+          
+          // Get user workspaces if not master
+          if (currentUserProfile && currentUserProfile !== 'master') {
+            const { data: memberships } = await supabase
+              .from('workspace_members')
+              .select('workspace_id')
+              .eq('user_id', systemUserId);
+            
+            currentUserWorkspaces = memberships?.map(m => m.workspace_id) || [];
+            console.log('Current user workspaces:', currentUserWorkspaces);
+          }
+        }
+      } catch (authError) {
+        console.log('Auth check error (continuing with service role):', authError);
+      }
+    }
 
     if (action === 'create') {
       const { name, email, profile, senha, cargo_ids, default_channel, status } = userData;
@@ -120,7 +180,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'list') {
-      const { data, error } = await supabase
+      const { data: users, error } = await supabase
         .from('system_users_view')
         .select('*')
         .order('created_at', { ascending: false });
@@ -133,19 +193,107 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Filter users based on current user permissions
+      let filteredUsers = users;
+      
+      if (currentUserProfile === 'admin' && currentUserWorkspaces.length > 0) {
+        // Admin users only see users from their workspaces
+        const { data: memberships } = await supabase
+          .from('workspace_members')
+          .select('user_id')
+          .in('workspace_id', currentUserWorkspaces);
+        
+        const allowedUserIds = new Set(memberships?.map(m => m.user_id) || []);
+        filteredUsers = users.filter(user => allowedUserIds.has(user.id));
+        console.log('Filtered users for admin:', filteredUsers.length, 'out of', users.length);
+      }
+
+      // Enrich users with workspace information
+      if (filteredUsers && filteredUsers.length > 0) {
+        const userIds = filteredUsers.map(user => user.id);
+        
+        // Get workspace memberships for filtered users
+        const { data: memberships } = await supabase
+          .from('workspace_members')
+          .select('user_id, role, workspace_id')
+          .in('user_id', userIds);
+
+        // Get workspace details
+        const workspaceIds = memberships ? Array.from(new Set(memberships.map(m => m.workspace_id))) : [];
+        const { data: workspaces } = await supabase
+          .from('workspaces')
+          .select('id, name')
+          .in('id', workspaceIds);
+
+        // Create workspace lookup
+        const workspaceMap = new Map();
+        if (workspaces) {
+          workspaces.forEach(ws => workspaceMap.set(ws.id, ws));
+        }
+
+        // Enrich each user with workspace data
+        const enrichedUsers = filteredUsers.map(user => {
+          const userMemberships = memberships ? memberships.filter(m => m.user_id === user.id) : [];
+          const userWorkspaces = userMemberships.map(m => ({
+            id: m.workspace_id,
+            name: workspaceMap.get(m.workspace_id)?.name || 'Workspace não encontrado',
+            role: m.role
+          }));
+
+          // Create empresa summary string
+          let empresa = '-';
+          if (userWorkspaces.length > 0) {
+            if (userWorkspaces.length === 1) {
+              empresa = userWorkspaces[0].name;
+            } else {
+              empresa = `${userWorkspaces[0].name} (+${userWorkspaces.length - 1})`;
+            }
+          }
+
+          return {
+            ...user,
+            workspaces: userWorkspaces,
+            empresa
+          };
+        });
+
+        return new Response(
+          JSON.stringify({ success: true, data: enrichedUsers }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ success: true, data }),
+        JSON.stringify({ success: true, data: users }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (action === 'update') {
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'User ID is required for update' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const { cargo_ids, ...userUpdateData } = userData;
+      
+      // Clean up empty string values and convert to null for UUID fields
+      const cleanedData = { ...userUpdateData };
+      if (cleanedData.default_channel === '' || cleanedData.default_channel === 'undefined') {
+        cleanedData.default_channel = null;
+      }
+      if (cleanedData.phone === '') {
+        cleanedData.phone = null;
+      }
+      
+      console.log('Updating user with cleaned data:', cleanedData);
       
       const { data, error } = await supabase
         .from('system_users')
-        .update(userUpdateData)
-        .eq('id', userData.id)
+        .update(cleanedData)
+        .eq('id', userId)
         .select()
         .single();
 
@@ -163,14 +311,14 @@ Deno.serve(async (req) => {
         await supabase
           .from('system_user_cargos')
           .delete()
-          .eq('user_id', userData.id);
+          .eq('user_id', userId);
 
         // Add new cargos
         if (Array.isArray(cargo_ids) && cargo_ids.length > 0) {
           for (const cargoId of cargo_ids) {
             await supabase
               .from('system_user_cargos')
-              .insert({ user_id: userData.id, cargo_id: cargoId });
+              .insert({ user_id: userId, cargo_id: cargoId });
           }
         }
       }
@@ -182,16 +330,23 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete') {
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'User ID is required for delete' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // First delete cargo assignments
       await supabase
         .from('system_user_cargos')
         .delete()
-        .eq('user_id', userData.id);
+        .eq('user_id', userId);
 
       const { data, error } = await supabase
         .from('system_users')
         .delete()
-        .eq('id', userData.id)
+        .eq('id', userId)
         .select()
         .single();
 

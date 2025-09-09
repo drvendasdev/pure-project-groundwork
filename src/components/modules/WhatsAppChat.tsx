@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageStatusIndicator } from "@/components/ui/message-status-indicator";
 import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
+import { useAuth } from "@/hooks/useAuth";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
@@ -15,6 +16,8 @@ import { parsePhoneNumber } from 'libphonenumber-js';
 import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
 import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
+import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
+import { AddTagButton } from "@/components/chat/AddTagButton";
 import { 
   Search, 
   Send, 
@@ -52,8 +55,11 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     markAsRead, 
     assumirAtendimento, 
     reativarIA, 
-    clearAllConversations 
+    clearAllConversations,
+    acceptConversation,
+    fetchConversations
   } = useWhatsAppConversations();
+  const { user } = useAuth();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
   const { assignments } = useInstanceAssignments();
@@ -70,6 +76,61 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("");
   const [isUpdatingProfileImages, setIsUpdatingProfileImages] = useState(false);
+  
+  // Estados para as abas baseadas no papel
+  const [activeTab, setActiveTab] = useState<string>('all');
+  
+  // Definir abas baseado no papel do usuário
+  const getUserTabs = () => {
+    const userProfile = user?.profile;
+    
+    if (userProfile === 'master') {
+      // MentorMaster: mesmas vistas do Admin
+      return [
+        { id: 'all', label: 'Todas', count: conversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
+        { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
+      ];
+    } else if (userProfile === 'admin') {
+      // Admin: todas as abas do workspace
+      return [
+        { id: 'all', label: 'Todas', count: conversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
+        { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
+      ];
+    } else {
+      // User: apenas suas conversas e não designadas
+      const myConversations = conversations.filter(c => c.assigned_user_id === user?.id);
+      const unassignedConversations = conversations.filter(c => !c.assigned_user_id);
+      
+      return [
+        { id: 'mine', label: 'Minhas', count: myConversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: unassignedConversations.length }
+      ];
+    }
+  };
+  
+  const tabs = getUserTabs();
+
+  // Filtrar conversas baseado na aba ativa
+  const getFilteredConversations = () => {
+    switch (activeTab) {
+      case 'all':
+        return conversations;
+      case 'mine':
+        return conversations.filter(c => c.assigned_user_id === user?.id);
+      case 'unassigned':
+        return conversations.filter(c => !c.assigned_user_id);
+      case 'in_progress':
+        return conversations.filter(c => c.status === 'em_atendimento');
+      case 'closed':
+        return conversations.filter(c => c.status === 'closed');
+      default:
+        return conversations;
+    }
+  };
   const [peekModalOpen, setPeekModalOpen] = useState(false);
   const [peekConversation, setPeekConversation] = useState<WhatsAppConversation | null>(null);
 const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -474,7 +535,37 @@ const stopRecording = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+          
+          {/* Abas baseadas no papel do usuário */}
+          <div className="border-b border-border">
+            <div className="flex">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                    activeTab === tab.id
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={cn(
+                      "ml-2 px-2 py-1 text-xs rounded-full",
+                      activeTab === tab.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+          
                   <div>
                     <label className="text-sm font-medium mb-2 block">Filtre pela tag</label>
                     <Select value={selectedTag} onValueChange={setSelectedTag}>
@@ -526,8 +617,24 @@ const stopRecording = () => {
 
         {/* Lista de conversas */}
         <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+              </div>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center space-y-2">
+                <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
+                <p className="text-xs text-muted-foreground">Configure conexões WhatsApp para ver conversas</p>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-0">
-            {filteredConversations.map((conversation) => {
+            {getFilteredConversations().map((conversation) => {
               const lastMessage = getLastMessage(conversation);
               const lastActivity = getActivityTime(conversation);
               const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
@@ -665,6 +772,7 @@ const stopRecording = () => {
               );
             })}
           </div>
+          )}
         </ScrollArea>
 
         {/* Campo para nova conversa */}
@@ -702,7 +810,7 @@ const stopRecording = () => {
         {selectedConversation ? (
           <>
             {/* Cabeçalho do chat */}
-            <div className="p-4 border-b border-border">
+            <div className="p-4 border-b border-border bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <Avatar className="w-10 h-10">
@@ -713,46 +821,51 @@ const stopRecording = () => {
                         className="object-cover"
                       />
                     )}
-                    <AvatarFallback className={cn("text-white", getAvatarColor(selectedConversation.contact.name))}>
+                    <AvatarFallback style={{ backgroundColor: getAvatarColor(selectedConversation.contact.name) }} className="text-white">
                       {getInitials(selectedConversation.contact.name)}
                     </AvatarFallback>
                   </Avatar>
                   
-                  <div>
-                    <h3 className="font-semibold text-foreground">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-gray-900 text-base">
                       {selectedConversation.contact.name}
                     </h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Circle className="w-2 h-2 fill-green-500 text-green-500" />
-                      <span>Online</span>
-                      {selectedConversation.agente_ativo && (
-                        <span className="text-yellow-600">• IA Ativa</span>
-                      )}
-                    </div>
+                    <AddTagButton
+                      conversationId={selectedConversation.id}
+                      isDarkMode={isDarkMode}
+                      onTagAdded={() => {
+                        // Refresh conversations after adding tag
+                        fetchConversations();
+                      }}
+                    />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button 
+                <div className="flex items-center gap-3">
+                  <Button
                     variant="ghost" 
-                    size="icon"
+                    size="sm"
                     onClick={handleToggleAgent}
                     className={cn(
-                      "transition-colors",
+                      "h-8 px-3 rounded-full text-sm font-medium transition-colors",
                       selectedConversation.agente_ativo 
-                        ? "text-yellow-600 hover:text-yellow-700" 
-                        : "text-gray-400 hover:text-gray-600"
+                        ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     )}
                     title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
                   >
-                    <Bot className="w-5 h-5" />
+                    <Bot className="w-4 h-4 mr-1" />
+                    Agente IA
                   </Button>
-                  <Button variant="ghost" size="icon">
-                    <Phone className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
+                  
+                  <AcceptConversationButton
+                    conversation={selectedConversation}
+                    onAccept={async (conversationId: string) => {
+                      // Refresh conversations after accepting
+                      await fetchConversations();
+                    }}
+                    className="h-8 px-4 bg-yellow-400 hover:bg-yellow-500 text-black font-medium rounded-md"
+                  />
                 </div>
               </div>
             </div>

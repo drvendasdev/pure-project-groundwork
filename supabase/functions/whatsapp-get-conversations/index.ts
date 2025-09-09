@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 serve(async (req) => {
@@ -12,14 +13,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
   try {
+    console.log('🚀 whatsapp-get-conversations started');
+    
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
@@ -27,15 +23,46 @@ serve(async (req) => {
       throw new Error("Missing Supabase configuration");
     }
 
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
-      auth: { persistSession: false },
-      global: { headers: { "X-Client-Info": "whatsapp-get-conversations" } },
-    });
+    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    console.log('🔄 Fetching WhatsApp conversations...');
+    // Get user info from headers
+    const systemUserId = req.headers.get('x-system-user-id');
+    const workspaceId = req.headers.get('x-workspace-id');
+    
+    console.log('🔄 Fetching for user:', systemUserId, 'workspace:', workspaceId);
+    
+    if (!systemUserId) {
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'User authentication required'
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    // Fetch conversations with contacts (using service role to bypass RLS)
-    const { data: conversationsData, error: conversationsError } = await supabase
+    // Get user profile
+    const { data: userProfile, error: userError } = await supabase
+      .from('system_users')
+      .select('id, profile')
+      .eq('id', systemUserId)
+      .single();
+
+    if (userError || !userProfile) {
+      console.error('❌ Error fetching user:', userError);
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'User not found' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`👤 User profile: ${userProfile.profile}`);
+
+    // Build base query
+    let conversationsQuery = supabase
       .from('conversations')
       .select(`
         id,
@@ -46,6 +73,10 @@ serve(async (req) => {
         created_at,
         evolution_instance,
         contact_id,
+        assigned_user_id,
+        assigned_at,
+        connection_id,
+        workspace_id,
         contacts (
           id,
           name,
@@ -54,7 +85,70 @@ serve(async (req) => {
           profile_image_url
         )
       `)
-      .eq('canal', 'whatsapp')
+      .eq('canal', 'whatsapp');
+
+    // Apply filters based on user role and workspace - REGRAS ESPECÍFICAS
+    if (userProfile.profile === 'master') {
+      // MentorMaster: vê tudo do workspace selecionado
+      if (workspaceId) {
+        console.log(`🏢 MentorMaster filtering by workspace: ${workspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      } else {
+        console.log('⚠️ MentorMaster sem workspace, acesso limitado');
+        // Sem workspace selecionado, não vê nada
+        conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+      }
+    } else if (userProfile.profile === 'admin') {
+      // Admin: vê tudo do seu workspace
+      if (workspaceId) {
+        console.log(`🏢 Admin filtering by workspace: ${workspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      } else {
+        console.log('⚠️ Admin sem workspace, buscando workspace do usuário');
+        // Buscar workspace do admin
+        const { data: userWorkspace } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', systemUserId)
+          .single();
+        
+        if (userWorkspace?.workspace_id) {
+          conversationsQuery = conversationsQuery.eq('workspace_id', userWorkspace.workspace_id);
+        } else {
+          // Se não encontrar workspace, não vê nada
+          conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+    } else {
+      // User: vê apenas atribuídas a ele OU não atribuídas do workspace
+      console.log('👤 User filtering by assignments and workspace');
+      
+      // Filtro crítico: só conversas atribuídas a ele OU não atribuídas
+      conversationsQuery = conversationsQuery.or(
+        `assigned_user_id.eq.${systemUserId},assigned_user_id.is.null`
+      );
+      
+      // Sempre filtrar por workspace
+      if (workspaceId) {
+        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      } else {
+        // Buscar workspace do usuário
+        const { data: userWorkspace } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', systemUserId)
+          .single();
+        
+        if (userWorkspace?.workspace_id) {
+          conversationsQuery = conversationsQuery.eq('workspace_id', userWorkspace.workspace_id);
+        } else {
+          // Se não encontrar workspace, não vê nada
+          conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+    }
+
+    const { data: conversationsData, error: conversationsError } = await conversationsQuery
       .order('last_activity_at', { ascending: false });
 
     if (conversationsError) {
@@ -64,18 +158,14 @@ serve(async (req) => {
 
     console.log(`📋 Found ${conversationsData?.length || 0} conversations`);
 
-    // Fetch messages for all conversations in batches
+    // Fetch messages for each conversation
     const conversationsWithMessages = await Promise.all(
       (conversationsData || []).map(async (conv) => {
-        const { data: messagesData, error: messagesError } = await supabase
+        const { data: messagesData } = await supabase
           .from('messages')
           .select('*')
           .eq('conversation_id', conv.id)
           .order('created_at', { ascending: true });
-
-        if (messagesError) {
-          console.error('❌ Error fetching messages for conversation', conv.id, ':', messagesError);
-        }
 
         return {
           id: conv.id,
@@ -98,6 +188,10 @@ serve(async (req) => {
           last_activity_at: conv.last_activity_at,
           created_at: conv.created_at,
           evolution_instance: conv.evolution_instance,
+          assigned_user_id: conv.assigned_user_id,
+          assigned_at: conv.assigned_at,
+          connection_id: conv.connection_id,
+          workspace_id: conv.workspace_id,
           messages: (messagesData || []).map(msg => ({
             id: msg.id,
             content: msg.content,
@@ -114,7 +208,7 @@ serve(async (req) => {
       })
     );
 
-    console.log(`✅ Successfully fetched ${conversationsWithMessages.length} conversations with messages`);
+    console.log(`✅ Successfully fetched ${conversationsWithMessages.length} conversations`);
 
     return new Response(
       JSON.stringify({ 
@@ -132,7 +226,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false,
-        error: error.message 
+        error: error.message
       }),
       { 
         status: 500,

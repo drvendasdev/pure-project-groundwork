@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface WhatsAppMessage {
   id: string;
@@ -25,25 +27,60 @@ export interface WhatsAppConversation {
     profile_image_url?: string;
   };
   agente_ativo: boolean;
-  status: 'open' | 'closed' | 'pending';
+  status: 'open' | 'closed' | 'pending' | 'em_atendimento';
   unread_count: number;
   last_activity_at: string;
   created_at: string;
   evolution_instance?: string | null;
+  assigned_user_id?: string | null;
+  assigned_at?: string | null;
+  connection_id?: string;
+  workspace_id?: string;
   messages: WhatsAppMessage[];
 }
 
 export const useWhatsAppConversations = () => {
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedWorkspace } = useWorkspace();
+  const { user, logout } = useAuth();
 
   const fetchConversations = async () => {
     try {
       setLoading(true);
       console.log('🔄 Carregando conversas do WhatsApp...');
 
-      // Use Edge Function to bypass RLS issues
-      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations');
+      // Get current user from localStorage (custom auth system)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        console.log('No user data in localStorage');
+        toast({
+          title: "Erro de autenticação",
+          description: "Usuário não autenticado. Faça login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Use Edge Function with user authentication headers and workspace context
+      const headers: Record<string, string> = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || ''
+      };
+
+      // Add workspace context - OBRIGATÓRIO para Masters e Admins
+      if (selectedWorkspace?.workspace_id) {
+        headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+      } else {
+        console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
+      }
+
+      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
+        method: 'GET',
+        headers
+      });
 
       if (functionError) {
         throw functionError;
@@ -57,16 +94,109 @@ export const useWhatsAppConversations = () => {
       
       setConversations(conversationsWithMessages);
       console.log(`✅ ${conversationsWithMessages.length} conversas carregadas`);
+      
+      if (conversationsWithMessages.length === 0) {
+        console.log('ℹ️ Nenhuma conversa encontrada. Verifique se há conexões configuradas e conversas ativas.');
+      }
     } catch (error) {
       console.error('❌ Erro ao buscar conversas:', error);
       console.error('Error details:', error.message, error.details);
-      toast({
-        title: "Erro",
-        description: `Erro ao carregar conversas do WhatsApp: ${error.message}`,
-        variant: "destructive",
-      });
+      
+      // If it's a fetch error, provide more specific guidance
+      if (error.name === 'FunctionsFetchError') {
+        toast({
+          title: "Erro de conexão",
+          description: "Não foi possível conectar ao servidor. Verifique sua conexão.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erro",
+          description: `Erro ao carregar conversas do WhatsApp: ${error.message}`,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Accept conversation function
+  const acceptConversation = useCallback(async (conversationId: string) => {
+    try {
+      // Get current user from localStorage (custom auth system)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('conversations')
+        .update({ assigned_user_id: currentUserData.id })
+        .eq('id', conversationId);
+
+      if (error) {
+        console.error('Error accepting conversation:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao aceitar conversa",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Conversa aceita",
+        description: "Você aceitou esta conversa",
+      });
+      
+      // Update local state
+      setConversations(prev => 
+        prev.map(conv => 
+          conv.id === conversationId 
+            ? { ...conv, assigned_user_id: currentUserData.id }
+            : conv
+        )
+      );
+    } catch (error) {
+      console.error('Error in acceptConversation:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao aceitar conversa",
+        variant: "destructive",
+      });
+    }
+  }, []);
+
+  // Função utilitária para obter tipo de arquivo
+  const getFileType = (fileName: string): string => {
+    const extension = fileName.toLowerCase().split('.').pop();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'webp':
+        return 'image/jpeg';
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+        return 'video/mp4';
+      case 'mp3':
+      case 'wav':
+      case 'ogg':
+        return 'audio/mpeg';
+      case 'pdf':
+        return 'application/pdf';
+      default:
+        return 'application/octet-stream';
     }
   };
 
@@ -79,126 +209,104 @@ export const useWhatsAppConversations = () => {
     fileUrl?: string, 
     fileName?: string
   ) => {
-    let newMessage: any = null;
-    
     try {
       console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
 
-      // Obter o usuário logado do localStorage ou auth context
+      // Obter dados do usuário logado
       const userData = localStorage.getItem('currentUser');
-      const currentUser = userData ? JSON.parse(userData) : null;
-
-      // Inserir mensagem no banco com status 'sending' e sender_id
-      const { data: insertedMessage, error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          content,
-          sender_type: 'agent',
-          sender_id: currentUser?.id || null,
-          message_type: messageType,
-          status: 'sending',
-          origem_resposta: 'manual',
-          file_url: fileUrl,
-          file_name: fileName,
-          workspace_id: '00000000-0000-0000-0000-000000000000' // Default workspace_id for now
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        throw insertError;
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
       }
 
-      newMessage = insertedMessage;
+      // Verificar se há workspace selecionado ou usar fallback
+      let workspaceId = selectedWorkspace?.workspace_id;
+      
+      if (!workspaceId) {
+        // Fallback para workspace padrão se não há selecionado
+        workspaceId = "00000000-0000-0000-0000-000000000000";
+        console.warn('⚠️ Nenhum workspace selecionado, usando workspace padrão');
+      }
 
-      // Atualizar estado local imediatamente
-      setConversations(prev => prev.map(conv => {
-        if (conv.id === conversationId) {
-          return {
-            ...conv,
-            messages: [...conv.messages, {
-              id: newMessage.id,
-              content,
-              sender_type: 'agent',
-              created_at: newMessage.created_at,
-              status: 'sending',
-              message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
-              file_url: fileUrl,
-              file_name: fileName,
-              origem_resposta: 'manual'
-            }]
-          };
-        }
-        return conv;
-      }));
+      // Montar payload conforme novo contrato da função (workspace_id é opcional)
+      const payload = {
+        conversation_id: conversationId,
+        content: content,
+        message_type: messageType,
+        sender_id: currentUserData.id,
+        sender_type: "agent",
+        file_url: fileUrl,
+        file_name: fileName
+      };
 
-      // Enviar via N8N (não enviamos evolutionInstance para forçar uso da última mensagem inbound)
-      const { data: sendResult, error: apiError } = await supabase.functions.invoke('n8n-send-message', {
-        body: {
-          messageId: newMessage.id,
-          phoneNumber: contactPhone,
-          content,
-          messageType,
-          fileUrl,
-          fileName
-        }
+      const headers: Record<string, string> = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || ''
+      };
+
+      // Add workspace context if available (send-message derives workspace from conversation)
+      if (selectedWorkspace?.workspace_id) {
+        headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+      }
+
+      const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
+        body: payload,
+        headers
       });
 
       if (apiError) {
-        console.error('Erro ao enviar via N8N:', apiError);
-        
-        // Verificar se é problema de configuração
-        let errorMessage = "Erro ao enviar mensagem";
-        if (apiError.message?.includes('N8N não configurado')) {
-          errorMessage = 'Sistema de mensagens não configurado. Entre em contato com o administrador.';
-        } else if (apiError.message?.includes('Evolution API')) {
-          errorMessage = 'API de WhatsApp não configurada. Verifique as configurações.';
-        } else if (apiError.message?.includes('senderId is empty')) {
-          errorMessage = 'Usuário não identificado. Faça login novamente.';
-        } else if (apiError.message?.includes('No evolution instance found')) {
-          errorMessage = 'Nenhuma instância de WhatsApp configurada para este usuário.';
-        } else {
-          errorMessage = `Erro no envio: ${apiError.message || 'Erro desconhecido'}`;
-        }
-        
+        console.error('Erro ao enviar via edge function:', apiError);
+        const errorMessage = apiError.message || 'Erro ao enviar mensagem';
         throw new Error(errorMessage);
       }
 
-      // Verificar se o resultado indica falha
-      if (sendResult && !sendResult.success) {
+      if (!sendResult?.success) {
         console.error('Envio falhou:', sendResult);
-        throw new Error(sendResult.error || 'Falha no envio da mensagem');
+        const errorMessage = sendResult?.message || sendResult?.error || 'Falha no envio da mensagem';
+        throw new Error(errorMessage);
+      }
+
+      // Atualizar estado local com a mensagem enviada
+      const messageId = sendResult.message?.id;
+      if (messageId) {
+        setConversations(prev => prev.map(conv => {
+          if (conv.id === conversationId) {
+            const messageExists = conv.messages.some(msg => msg.id === messageId);
+            if (!messageExists) {
+              return {
+                ...conv,
+                messages: [...conv.messages, {
+                  id: messageId,
+                  content,
+                  sender_type: 'agent',
+                  created_at: sendResult.message.created_at || new Date().toISOString(),
+                  status: 'sent',
+                  message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
+                  file_url: fileUrl,
+                  file_name: fileName,
+                  origem_resposta: 'manual'
+                }]
+              };
+            }
+          }
+          return conv;
+        }));
       }
 
       console.log('✅ Mensagem enviada com sucesso:', sendResult);
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
       
-      // Atualizar UI para mostrar erro apenas se tivermos o ID da mensagem
-      if (newMessage?.id) {
-        setConversations(prev => prev.map(conv => {
-          if (conv.id === conversationId) {
-            return {
-              ...conv,
-              messages: conv.messages.map(msg => 
-                msg.id === newMessage.id 
-                  ? { ...msg, status: 'failed' as const }
-                  : msg
-              )
-            };
-          }
-          return conv;
-        }));
-      }
-      
       toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Erro ao enviar mensagem",
+        title: "Erro ao enviar mensagem",
+        description: error instanceof Error ? error.message : "Erro desconhecido ao enviar mensagem",
         variant: "destructive",
       });
+      
+      throw error;
     }
-  }, [conversations]);
+  }, [setConversations]);
 
   // Assumir atendimento (desativar IA)
   const assumirAtendimento = useCallback(async (conversationId: string) => {
@@ -317,9 +425,26 @@ export const useWhatsAppConversations = () => {
     }
   }, []);
 
-  // Real-time subscriptions
+  // Real-time subscriptions and workspace dependency
   useEffect(() => {
-    fetchConversations();
+    // Get current user from localStorage
+    const userData = localStorage.getItem('currentUser');
+    const currentUserData = userData ? JSON.parse(userData) : null;
+    
+    if (currentUserData?.id) {
+      console.log('🧹 Limpando subscriptions real-time');
+      fetchConversations();
+    }
+  }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
+
+  useEffect(() => {
+    // Get current user from localStorage
+    const userData = localStorage.getItem('currentUser');
+    const currentUserData = userData ? JSON.parse(userData) : null;
+    
+    if (!currentUserData?.id) {
+      return;
+    }
 
     // Subscription para novas mensagens
     const messagesChannel = supabase
@@ -521,6 +646,7 @@ export const useWhatsAppConversations = () => {
     assumirAtendimento,
     reativarIA,
     clearAllConversations,
-    fetchConversations
+    fetchConversations,
+    acceptConversation
   };
 };
