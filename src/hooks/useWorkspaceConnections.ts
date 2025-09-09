@@ -16,6 +16,7 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
   const fetchConnections = async () => {
     if (!workspaceId) return;
     
+    console.log('🔍 fetchConnections called with workspaceId:', workspaceId);
     setIsLoading(true);
     try {
       // First, try direct query to connections table
@@ -24,6 +25,8 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
         .select('id, instance_name, phone_number, status')
         .eq('workspace_id', workspaceId)
         .order('instance_name');
+
+      console.log('📊 Direct query result:', { data, error, workspaceId });
 
       if (error || !data || data.length === 0) {
         console.warn('Error fetching connections directly or empty results, trying fallback:', error);

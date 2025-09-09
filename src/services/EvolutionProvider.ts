@@ -30,22 +30,32 @@ interface ConnectionsListResponse {
 class EvolutionProvider {
   async listConnections(workspaceId: string): Promise<ConnectionsListResponse> {
     try {
+      console.log('🔍 EvolutionProvider.listConnections called with workspaceId:', workspaceId);
+      
       // Get user data for headers
       const userData = localStorage.getItem('currentUser');
       const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      console.log('👤 Current user data:', currentUserData);
       
       if (!currentUserData?.id) {
         throw new Error('Usuário não autenticado');
       }
 
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': workspaceId
+      };
+      
+      console.log('📤 Calling evolution-list-connections with headers:', headers);
+
       const { data } = await supabase.functions.invoke('evolution-list-connections', {
         body: { workspaceId },
-        headers: {
-          'x-system-user-id': currentUserData.id,
-          'x-system-user-email': currentUserData.email || '',
-          'x-workspace-id': workspaceId
-        }
+        headers
       });
+      
+      console.log('📥 Evolution API response:', data);
       
       if (!data?.success) {
         return { 

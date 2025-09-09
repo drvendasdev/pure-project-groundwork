@@ -88,9 +88,12 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
 
   const loadConnections = async () => {
     try {
+      console.log('🔄 ConexoesNova.loadConnections called with workspaceId:', workspaceId);
       setIsLoading(true);
       
       const response = await evolutionProvider.listConnections(workspaceId);
+      console.log('📋 ConexoesNova received response:', response);
+      
       setConnections(response.connections);
       refreshLimits(); // Refresh limits when connections are loaded
     } catch (error) {
