@@ -737,39 +737,25 @@ const stopRecording = () => {
                       <div className="flex items-center gap-2">
                         {conversation.tags && conversation.tags.length > 0 && (
                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1">
-                                  {conversation.tags.map((tag, index) => (
-                                    <div 
-                                      key={tag.id}
-                                      className="w-2.5 h-2.5 rounded-full"
-                                      style={{ backgroundColor: tag.color }}
-                                    />
-                                  ))}
-                                  <svg 
-                                    className="w-3 h-3 text-muted-foreground" 
-                                    viewBox="0 0 24 24" 
-                                    fill="currentColor"
-                                  >
-                                    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
-                                  </svg>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="space-y-1">
-                                  {conversation.tags.map((tag) => (
-                                    <div key={tag.id} className="flex items-center gap-2">
-                                      <div 
-                                        className="w-2 h-2 rounded-full"
-                                        style={{ backgroundColor: tag.color }}
-                                      />
-                                      <span className="text-xs">{tag.name}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
+                            <div className="flex items-center gap-1">
+                              {conversation.tags.map((tag) => (
+                                <Tooltip key={tag.id}>
+                                  <TooltipTrigger asChild>
+                                    <svg 
+                                      className="w-3 h-3" 
+                                      viewBox="0 0 24 24" 
+                                      fill={tag.color}
+                                      style={{ stroke: 'white', strokeWidth: 1 }}
+                                    >
+                                      <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+                                    </svg>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <span className="text-xs">{tag.name}</span>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
                           </TooltipProvider>
                         )}
                         
