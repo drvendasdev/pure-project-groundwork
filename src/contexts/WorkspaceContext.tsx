@@ -75,13 +75,21 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   }, []);
 
   const setSelectedWorkspace = (workspace: Workspace | null) => {
+    console.log('🏢 setSelectedWorkspace called:', { 
+      oldWorkspace: selectedWorkspace?.workspace_id, 
+      newWorkspace: workspace?.workspace_id,
+      workspaceName: workspace?.name
+    });
+    
     setSelectedWorkspaceState(workspace);
     const currentKey = getStorageKey();
     
     if (workspace) {
       localStorage.setItem(currentKey, JSON.stringify(workspace));
+      console.log('🏢 Workspace saved to localStorage:', currentKey);
     } else {
       localStorage.removeItem(currentKey);
+      console.log('🏢 Workspace removed from localStorage:', currentKey);
     }
   };
 

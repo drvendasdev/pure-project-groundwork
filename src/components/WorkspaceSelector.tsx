@@ -16,13 +16,26 @@ export function WorkspaceSelector() {
 
   // Validate selected workspace and auto-select first available
   useEffect(() => {
+    console.log('🏢 WorkspaceSelector useEffect triggered:', {
+      isLoading,
+      workspacesLength: workspaces.length,
+      selectedWorkspace: selectedWorkspace?.workspace_id,
+      workspaces: workspaces.map(w => ({ id: w.workspace_id, name: w.name }))
+    });
+    
     if (!isLoading && workspaces.length > 0) {
       // Check if current selected workspace is valid for this user
       const isValidWorkspace = selectedWorkspace && 
         workspaces.some(w => w.workspace_id === selectedWorkspace.workspace_id);
       
+      console.log('🏢 Workspace validation:', { 
+        isValidWorkspace, 
+        selectedWorkspaceId: selectedWorkspace?.workspace_id,
+        availableWorkspaces: workspaces.map(w => w.workspace_id)
+      });
+      
       if (!isValidWorkspace) {
-        console.log('Selected workspace is invalid or missing, selecting first available:', workspaces[0]);
+        console.log('🏢 Selected workspace is invalid or missing, selecting first available:', workspaces[0]);
         setSelectedWorkspace(workspaces[0]);
       }
     }
