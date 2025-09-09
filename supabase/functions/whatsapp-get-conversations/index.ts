@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 serve(async (req) => {
@@ -19,11 +20,23 @@ serve(async (req) => {
     );
   }
 
+  // Test endpoint
+  if (req.url.includes('?test=true')) {
+    return new Response(
+      JSON.stringify({ success: true, message: 'Edge function is working', timestamp: new Date().toISOString() }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
+    console.log('🚀 Edge function started');
+    console.log('📋 Request headers received:', Object.fromEntries(req.headers.entries()));
+    
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
     if (!SUPABASE_URL || !SERVICE_ROLE) {
+      console.error('❌ Missing Supabase configuration');
       throw new Error("Missing Supabase configuration");
     }
 
@@ -97,26 +110,16 @@ serve(async (req) => {
       `)
       .eq('canal', 'whatsapp');
 
-    // Para Masters e Admins, filtrar sempre por workspace
-    if (isMasterOrAdmin) {
-      if (!workspaceId) {
-        console.log('⚠️ Master/Admin sem workspace especificado, retornando vazio');
-        return new Response(JSON.stringify({ 
-          success: true,
-          data: [],
-          message: 'Selecione uma empresa para ver as conversas'
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-      
+    // Para Masters e Admins, aplicar filtro por workspace se disponível
+    if (isMasterOrAdmin && workspaceId) {
       console.log(`🏢 Master/Admin filtering conversations by workspace: ${workspaceId}`);
-      console.log(`🔍 User profile: ${userProfile.profile}, User ID: ${systemUserId}`);
       conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
-      
-      // Log para debug da query
-      console.log(`📊 About to run query for workspace: ${workspaceId}`);
-    } else {
+    } else if (isMasterOrAdmin && !workspaceId) {
+      console.log('⚠️ Master/Admin sem workspace, permitindo acesso global');
+      // Masters podem ver tudo se não especificarem workspace
+    }
+
+    if (!isMasterOrAdmin) {
       console.log('🔒 User is not admin/master, filtering by assigned connections');
       
       // For regular users, filter by their assigned connections
