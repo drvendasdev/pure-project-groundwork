@@ -116,21 +116,102 @@ serve(async (req) => {
     // Permitir override direto de workspace_id
     const directWorkspaceId = payload.workspace_id ?? payload.workspaceId ?? null;
     
-    // Extrair e normalizar campos do payload com mais fallbacks
-    const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
+  // Extrair e normalizar campos do payload com mais fallbacks
+  const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
+  
+  // Normalizar remoteJid para phone_number (aceitar várias fontes)
+  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
+  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
+  
+  if (!phoneNumber && remoteJid) {
+    phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+    console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
+  }
+  
+  // Suporte para camelCase e base64 direto
+  let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? null;
+  const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? payload.messageType ?? "text").toString().toLowerCase();
+  let fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? payload.media?.url ?? payload.imageMessage?.url ?? payload.videoMessage?.url ?? payload.audioMessage?.url ?? payload.documentMessage?.url ?? null;
+  let fileName = payload.file_name ?? payload.fileName ?? payload.filename ?? payload.media?.filename ?? payload.imageMessage?.fileName ?? payload.videoMessage?.fileName ?? payload.audioMessage?.fileName ?? payload.documentMessage?.fileName ?? null;
+  let mimeType = payload.mime_type ?? payload.mimeType ?? payload.mimetype ?? payload.contentType ?? null;
+  
+  // Detectar e processar base64 direto
+  let base64Data = payload.base64 ?? payload.base64Data ?? null;
+  let processedMedia = false;
+  
+  // Se responseMessage contém base64 (data:image/jpeg;base64,...)
+  if (responseMessage && typeof responseMessage === 'string' && responseMessage.includes('data:') && responseMessage.includes('base64,')) {
+    base64Data = responseMessage;
+    responseMessage = null; // Limpar responseMessage quando é base64
+    console.log(`🔄 [${requestId}] Detected base64 in responseMessage, processing as media`);
+  }
+  
+  // Se temos base64, processar automaticamente
+  if (base64Data && !fileUrl) {
+    console.log(`📁 [${requestId}] Processing base64 data automatically`);
     
-    // Normalizar remoteJid para phone_number (aceitar várias fontes)
-    let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
-    let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
-    
-    if (!phoneNumber && remoteJid) {
-      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-      console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
+    try {
+      // Extrair dados do base64
+      let actualBase64Data: string;
+      let detectedMimeType = mimeType;
+      
+      if (base64Data.includes('data:') && base64Data.includes('base64,')) {
+        // Data URL format: data:image/jpeg;base64,/9j/4AAQ...
+        const [header, data] = base64Data.split('base64,');
+        actualBase64Data = data;
+        if (!detectedMimeType) {
+          const mimeMatch = header.match(/data:([^;]+)/);
+          detectedMimeType = mimeMatch?.[1] || 'application/octet-stream';
+        }
+      } else {
+        // Raw base64
+        actualBase64Data = base64Data;
+        detectedMimeType = detectedMimeType || 'application/octet-stream';
+      }
+      
+      // Converter base64 para Uint8Array
+      const binaryData = Uint8Array.from(atob(actualBase64Data), c => c.charCodeAt(0));
+      
+      // Determinar extensão do arquivo
+      let fileExtension = '';
+      if (detectedMimeType.includes('image/jpeg')) fileExtension = '.jpg';
+      else if (detectedMimeType.includes('image/png')) fileExtension = '.png';
+      else if (detectedMimeType.includes('image/gif')) fileExtension = '.gif';
+      else if (detectedMimeType.includes('video/mp4')) fileExtension = '.mp4';
+      else if (detectedMimeType.includes('audio/mp3')) fileExtension = '.mp3';
+      else if (detectedMimeType.includes('application/pdf')) fileExtension = '.pdf';
+      else fileExtension = '.bin';
+      
+      // Gerar nome do arquivo se não fornecido
+      const finalFileName = fileName || `media_${Date.now()}${fileExtension}`;
+      
+      // Upload para Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('whatsapp-media')
+        .upload(`conversation-media/${workspaceId}/${finalFileName}`, binaryData, {
+          contentType: detectedMimeType,
+          upsert: true
+        });
+      
+      if (uploadError) {
+        console.error(`❌ [${requestId}] Error uploading base64 to storage:`, uploadError);
+      } else {
+        // Gerar URL pública
+        const { data: urlData } = supabase.storage
+          .from('whatsapp-media')
+          .getPublicUrl(uploadData.path);
+          
+        fileUrl = urlData.publicUrl;
+        fileName = finalFileName;
+        mimeType = detectedMimeType;
+        processedMedia = true;
+        
+        console.log(`✅ [${requestId}] Base64 processed and uploaded: ${fileUrl}`);
+      }
+    } catch (error) {
+      console.error(`❌ [${requestId}] Error processing base64:`, error);
     }
-    const responseMessage = payload.response_message ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? null;
-    const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? payload.messageType ?? "text").toString().toLowerCase();
-    const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? payload.media?.url ?? payload.imageMessage?.url ?? payload.videoMessage?.url ?? payload.audioMessage?.url ?? payload.documentMessage?.url ?? null;
-    const fileName = payload.file_name ?? payload.fileName ?? payload.filename ?? payload.media?.filename ?? payload.imageMessage?.fileName ?? payload.videoMessage?.fileName ?? payload.audioMessage?.fileName ?? payload.documentMessage?.fileName ?? null;
+  }
     const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
     const instanceId = payload.instance_id ?? payload.instanceId ?? payload.instanceID ?? null;
     const connectionId = payload.connection_id ?? payload.connectionId ?? null;
@@ -141,8 +222,8 @@ serve(async (req) => {
     const senderType = payload.sender_type ?? (payload.messageTimestamp ? "contact" : "agent");
     const messageStatus = payload.status ?? (senderType === "contact" ? "received" : "sent");
 
-    const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
-    const hasValidContent = !!(responseMessage || (fileUrl && finalMessageType !== "text"));
+  const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
+  const hasValidContent = !!(responseMessage || (fileUrl && finalMessageType !== "text") || base64Data);
 
     // Validações mínimas
     if (!conversationId && !phoneNumber) {
