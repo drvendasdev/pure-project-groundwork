@@ -22,7 +22,7 @@ export function WorkspaceSelector() {
         workspaces.some(w => w.workspace_id === selectedWorkspace.workspace_id);
       
       if (!isValidWorkspace) {
-        console.log('Selected workspace is invalid or missing, selecting first available');
+        console.log('Selected workspace is invalid or missing, selecting first available:', workspaces[0]);
         setSelectedWorkspace(workspaces[0]);
       }
     }
