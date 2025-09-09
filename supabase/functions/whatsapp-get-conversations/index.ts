@@ -49,10 +49,10 @@ serve(async (req) => {
       });
     }
 
-    // Get user's profile to check permissions
+    // Get user's profile to check permissions and default channel
     const { data: userProfile, error: userError } = await supabase
       .from('system_users')
-      .select('id, profile')
+      .select('id, profile, default_channel')
       .eq('id', systemUserId)
       .single();
 
@@ -113,32 +113,34 @@ serve(async (req) => {
       console.log(`👤 User has ${userInstances?.length || 0} assigned instances`);
       const instanceNames = userInstances?.map(i => i.instance) || [];
       
-      if (instanceNames.length === 0) {
-        console.log('⚠️ User has no assigned instances, returning empty result');
-        return new Response(JSON.stringify({
-          success: true,
-          data: []
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // Also include user's default channel if they have one
+      let connectionIds: string[] = [];
+      
+      if (instanceNames.length > 0) {
+        // Get connections for assigned instances
+        const { data: userConnections, error: connectionsError } = await supabase
+          .from('connections')
+          .select('id')
+          .in('instance_name', instanceNames);
+
+        if (connectionsError) {
+          console.error('❌ Error fetching user connections:', connectionsError);
+          throw connectionsError;
+        }
+
+        connectionIds = userConnections?.map(c => c.id) || [];
       }
       
-      // Get connections for these instances
-      const { data: userConnections, error: connectionsError } = await supabase
-        .from('connections')
-        .select('id')
-        .in('instance_name', instanceNames);
-
-      if (connectionsError) {
-        console.error('❌ Error fetching user connections:', connectionsError);
-        throw connectionsError;
+      // Add user's default channel if they have one
+      if (userProfile.default_channel) {
+        console.log(`📱 Adding user's default channel: ${userProfile.default_channel}`);
+        if (!connectionIds.includes(userProfile.default_channel)) {
+          connectionIds.push(userProfile.default_channel);
+        }
       }
-
-      const connectionIds = userConnections?.map(c => c.id) || [];
-      console.log(`🔗 User has access to ${connectionIds.length} connections`);
       
       if (connectionIds.length === 0) {
-        console.log('⚠️ User has no accessible connections, returning empty result');
+        console.log('⚠️ User has no assigned instances or default channel, returning empty result');
         return new Response(JSON.stringify({
           success: true,
           data: []
@@ -146,6 +148,11 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      console.log(`🔗 User has access to ${connectionIds.length} connections`);
+      console.log(`🔗 Connection IDs: ${connectionIds.join(', ')}`);
+      
+      // At this point, connectionIds includes both assigned instances and default channel
       
       // Filter conversations by user's connections and assignment
       conversationsQuery = conversationsQuery
