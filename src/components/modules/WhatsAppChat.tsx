@@ -38,6 +38,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { cn } from "@/lib/utils";
 
 interface WhatsAppChatProps {
@@ -383,6 +384,11 @@ const stopRecording = () => {
 
   return (
     <div className="flex h-full bg-white overflow-hidden">
+      {/* Workspace Selector - Hidden but needed for workspace selection */}
+      <div className="hidden">
+        <WorkspaceSelector />
+      </div>
+      
       {/* Sidebar com lista de conversas */}
       <div className="w-80 min-w-80 border-r border-border flex flex-col">
         {/* Header */}
