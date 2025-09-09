@@ -425,14 +425,25 @@ export const useWhatsAppConversations = () => {
     }
   }, []);
 
-  // Real-time subscriptions
+  // Real-time subscriptions and workspace dependency
   useEffect(() => {
     // Get current user from localStorage
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (currentUserData?.id) {
+      console.log('🧹 Limpando subscriptions real-time');
       fetchConversations();
+    }
+  }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
+
+  useEffect(() => {
+    // Get current user from localStorage
+    const userData = localStorage.getItem('currentUser');
+    const currentUserData = userData ? JSON.parse(userData) : null;
+    
+    if (!currentUserData?.id) {
+      return;
     }
 
     // Subscription para novas mensagens
