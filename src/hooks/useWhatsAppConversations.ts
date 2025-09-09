@@ -68,9 +68,11 @@ export const useWhatsAppConversations = () => {
         'x-system-user-email': currentUserData.email || ''
       };
 
-      // Add workspace context if available
+      // Add workspace context - OBRIGATÓRIO para Masters e Admins
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+      } else {
+        console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
       }
 
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {

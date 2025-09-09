@@ -97,13 +97,23 @@ serve(async (req) => {
       `)
       .eq('canal', 'whatsapp');
 
-    // Apply workspace filtering for Masters and Admins
-    if (workspaceId && (userProfile.profile === 'master' || userProfile.profile === 'admin')) {
-      console.log(`🏢 Filtering conversations by workspace: ${workspaceId}`);
+    // SEMPRE aplicar filtro de workspace para Masters e Admins
+    if (isMasterOrAdmin) {
+      if (!workspaceId) {
+        console.log('❌ Master/Admin must specify workspace');
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: 'Workspace required for master/admin users',
+          details: 'x-workspace-id header is required'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      console.log(`🏢 Master/Admin filtering conversations by workspace: ${workspaceId}`);
       conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
-    }
-
-    if (!isMasterOrAdmin) {
+    } else {
       console.log('🔒 User is not admin/master, filtering by assigned connections');
       
       // For regular users, filter by their assigned connections
@@ -172,8 +182,6 @@ serve(async (req) => {
         console.log(`🏢 Filtering user conversations by workspace: ${workspaceId}`);
         conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
       }
-    } else {
-      console.log('👑 User is admin/master, fetching all conversations');
     }
 
     const { data: conversationsData, error: conversationsError } = await conversationsQuery
