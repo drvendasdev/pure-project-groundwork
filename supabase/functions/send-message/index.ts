@@ -42,18 +42,28 @@ function validateRequestBody(body: any): { isValid: boolean; errors: string[] } 
   return { isValid: errors.length === 0, errors };
 }
 
-// Extrair email do usuário do JWT para validação no sistema customizado
-function extractUserEmailFromJWT(authHeader: string | null): string | null {
+// Extrair informações do usuário do JWT para validação no sistema customizado
+function extractUserDataFromJWT(authHeader: string | null): { email: string | null; systemUserId: string | null; systemEmail: string | null } {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
+    return { email: null, systemUserId: null, systemEmail: null };
   }
   
   try {
     const token = authHeader.substring(7);
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.email || null;
+    
+    // Try to get system information from user metadata first
+    const systemUserId = payload.user_metadata?.system_user_id || payload.system_user_id;
+    const systemEmail = payload.user_metadata?.system_email || payload.system_email;
+    
+    // Return system email if available, otherwise regular email
+    return { 
+      email: systemEmail || payload.email || null,
+      systemUserId,
+      systemEmail 
+    };
   } catch {
-    return null;
+    return { email: null, systemUserId: null, systemEmail: null };
   }
 }
 
@@ -132,8 +142,8 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } }
     });
 
-    // Extrair email do usuário do JWT para validação no sistema customizado
-    const currentUserEmail = extractUserEmailFromJWT(authHeader);
+    // Extrair informações do usuário do JWT para validação no sistema customizado
+    const { email: currentUserEmail, systemUserId, systemEmail } = extractUserDataFromJWT(authHeader);
     
     if (!currentUserEmail) {
       console.error(`❌ [${requestId}] Invalid JWT token - no email found`);
@@ -147,15 +157,19 @@ serve(async (req) => {
       });
     }
 
-    console.log(`🔍 [${requestId}] Validating system user: ${currentUserEmail}`);
+    console.log(`🔍 [${requestId}] Validating system user: ${currentUserEmail} (system_id: ${systemUserId})`);
 
     // Validar que o usuário existe no sistema customizado
-    const { data: systemUser, error: userError } = await supabase
-      .from('system_users')
-      .select('id, profile, status')
-      .eq('email', currentUserEmail)
-      .eq('status', 'active')
-      .single();
+    // Use system_user_id if available, otherwise fall back to email
+    let userQuery = supabase.from('system_users').select('id, profile, status');
+    
+    if (systemUserId) {
+      userQuery = userQuery.eq('id', systemUserId);
+    } else {
+      userQuery = userQuery.eq('email', currentUserEmail);
+    }
+    
+    const { data: systemUser, error: userError } = await userQuery.eq('status', 'active').single();
 
     if (userError || !systemUser) {
       console.error(`❌ [${requestId}] System user not found or inactive:`, userError);
