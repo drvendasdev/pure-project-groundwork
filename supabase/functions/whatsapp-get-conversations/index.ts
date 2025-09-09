@@ -113,7 +113,14 @@ serve(async (req) => {
     if (!isMasterOrAdmin) {
       console.log('🔒 User is not admin/master, filtering by assigned connections');
       
-      // For regular users, filter by their assigned connections
+      // Start with user's default channel if they have one
+      let connectionIds: string[] = [];
+      
+      if (userProfile.default_channel) {
+        console.log(`📱 Adding user's default channel: ${userProfile.default_channel}`);
+        connectionIds.push(userProfile.default_channel);
+      }
+      
       // Get user's assigned instance names
       const { data: userInstances, error: instancesError } = await supabase
         .from('instance_user_assignments')
@@ -128,9 +135,6 @@ serve(async (req) => {
       console.log(`👤 User has ${userInstances?.length || 0} assigned instances`);
       const instanceNames = userInstances?.map(i => i.instance) || [];
       
-      // Also include user's default channel if they have one
-      let connectionIds: string[] = [];
-      
       if (instanceNames.length > 0) {
         // Get connections for assigned instances
         const { data: userConnections, error: connectionsError } = await supabase
@@ -143,15 +147,13 @@ serve(async (req) => {
           throw connectionsError;
         }
 
-        connectionIds = userConnections?.map(c => c.id) || [];
-      }
-      
-      // Add user's default channel if they have one
-      if (userProfile.default_channel) {
-        console.log(`📱 Adding user's default channel: ${userProfile.default_channel}`);
-        if (!connectionIds.includes(userProfile.default_channel)) {
-          connectionIds.push(userProfile.default_channel);
-        }
+        // Add instance connections to the list
+        const instanceConnectionIds = userConnections?.map(c => c.id) || [];
+        instanceConnectionIds.forEach(id => {
+          if (!connectionIds.includes(id)) {
+            connectionIds.push(id);
+          }
+        });
       }
       
       if (connectionIds.length === 0) {
@@ -166,8 +168,6 @@ serve(async (req) => {
 
       console.log(`🔗 User has access to ${connectionIds.length} connections`);
       console.log(`🔗 Connection IDs: ${connectionIds.join(', ')}`);
-      
-      // At this point, connectionIds includes both assigned instances and default channel
       
       // Filter conversations by user's connections and assignment
       conversationsQuery = conversationsQuery
