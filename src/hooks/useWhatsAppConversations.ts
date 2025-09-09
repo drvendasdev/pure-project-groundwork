@@ -638,7 +638,7 @@ export const useWhatsAppConversations = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, []);
+  }, [selectedWorkspace?.workspace_id]);
 
   return {
     conversations,
