@@ -74,6 +74,9 @@ export const useWhatsAppConversations = () => {
       // Add workspace context if available
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+        console.log('🏢 Using selected workspace:', selectedWorkspace.workspace_id);
+      } else {
+        console.log('⚠️ No selected workspace, fetchConversations will try without workspace filter');
       }
 
       console.log('📡 Calling edge function with headers:', headers);
@@ -441,11 +444,16 @@ export const useWhatsAppConversations = () => {
       workspaceId: selectedWorkspace?.workspace_id
     });
     
-    if (currentUserData?.id && selectedWorkspace?.workspace_id) {
-      console.log('✅ Calling fetchConversations...');
-      fetchConversations();
+    if (currentUserData?.id) {
+      if (selectedWorkspace?.workspace_id) {
+        console.log('✅ Calling fetchConversations with selected workspace...');
+        fetchConversations();
+      } else {
+        console.log('⚠️ No selected workspace, will fetch conversations anyway for this user');
+        fetchConversations();
+      }
     } else {
-      console.log('⚠️ Missing user or workspace, not fetching conversations');
+      console.log('⚠️ Missing user, not fetching conversations');
     }
 
     // Subscription para novas mensagens

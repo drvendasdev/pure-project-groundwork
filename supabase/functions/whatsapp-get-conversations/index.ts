@@ -80,6 +80,24 @@ serve(async (req) => {
     // Check if user is master or admin
     const isMasterOrAdmin = userProfile.profile === 'master' || userProfile.profile === 'admin';
     
+    // For master/admin, if no workspace_id provided, try to get their first workspace
+    let finalWorkspaceId = workspaceId;
+    if (!finalWorkspaceId && isMasterOrAdmin) {
+      console.log('🔍 No workspace provided for master/admin, fetching user workspaces...');
+      const { data: userWorkspaces } = await supabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', systemUserId)
+        .limit(1);
+        
+      if (userWorkspaces && userWorkspaces.length > 0) {
+        finalWorkspaceId = userWorkspaces[0].workspace_id;
+        console.log('✅ Using first available workspace for user:', finalWorkspaceId);
+      } else {
+        console.log('⚠️ No workspaces found for user, will search globally');
+      }
+    }
+    
     let conversationsQuery = supabase
       .from('conversations')
       .select(`
@@ -105,9 +123,9 @@ serve(async (req) => {
       .eq('canal', 'whatsapp');
 
     // Apply workspace filtering for Masters and Admins
-    if (workspaceId && (userProfile.profile === 'master' || userProfile.profile === 'admin')) {
-      console.log(`🏢 Filtering conversations by workspace: ${workspaceId}`);
-      conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+    if (finalWorkspaceId && (userProfile.profile === 'master' || userProfile.profile === 'admin')) {
+      console.log(`🏢 Filtering conversations by workspace: ${finalWorkspaceId}`);
+      conversationsQuery = conversationsQuery.eq('workspace_id', finalWorkspaceId);
     }
 
     if (!isMasterOrAdmin) {
@@ -175,9 +193,9 @@ serve(async (req) => {
         .or(`assigned_user_id.is.null,assigned_user_id.eq.${systemUserId}`);
         
       // Apply workspace filtering for regular users if workspace is provided
-      if (workspaceId) {
-        console.log(`🏢 Filtering user conversations by workspace: ${workspaceId}`);
-        conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      if (finalWorkspaceId) {
+        console.log(`🏢 Filtering user conversations by workspace: ${finalWorkspaceId}`);
+        conversationsQuery = conversationsQuery.eq('workspace_id', finalWorkspaceId);
       }
     } else {
       console.log('👑 User is admin/master, fetching all conversations');
