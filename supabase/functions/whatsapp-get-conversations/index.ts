@@ -111,7 +111,11 @@ serve(async (req) => {
       }
       
       console.log(`🏢 Master/Admin filtering conversations by workspace: ${workspaceId}`);
+      console.log(`🔍 User profile: ${userProfile.profile}, User ID: ${systemUserId}`);
       conversationsQuery = conversationsQuery.eq('workspace_id', workspaceId);
+      
+      // Log para debug da query
+      console.log(`📊 About to run query for workspace: ${workspaceId}`);
     } else {
       console.log('🔒 User is not admin/master, filtering by assigned connections');
       
@@ -186,12 +190,18 @@ serve(async (req) => {
     const { data: conversationsData, error: conversationsError } = await conversationsQuery
       .order('last_activity_at', { ascending: false });
 
+    console.log(`📊 Query executed. Error: ${conversationsError ? JSON.stringify(conversationsError) : 'none'}`);
+    console.log(`📊 Raw conversations returned: ${conversationsData?.length || 0}`);
+    
     if (conversationsError) {
       console.error('❌ Error fetching conversations:', conversationsError);
       throw conversationsError;
     }
 
     console.log(`📋 Found ${conversationsData?.length || 0} conversations`);
+    if (conversationsData && conversationsData.length > 0) {
+      console.log(`📋 First conversation sample:`, JSON.stringify(conversationsData[0], null, 2));
+    }
 
     // Fetch messages for all conversations in batches
     const conversationsWithMessages = await Promise.all(
