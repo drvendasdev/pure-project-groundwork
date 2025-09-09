@@ -205,9 +205,8 @@ export const useWhatsAppConversations = () => {
         console.warn('⚠️ Nenhum workspace selecionado, usando workspace padrão');
       }
 
-      // Montar payload conforme novo contrato da função
+      // Montar payload conforme novo contrato da função (workspace_id é opcional)
       const payload = {
-        workspace_id: workspaceId,
         conversation_id: conversationId,
         content: content,
         message_type: messageType,
@@ -226,12 +225,14 @@ export const useWhatsAppConversations = () => {
 
       if (apiError) {
         console.error('Erro ao enviar via edge function:', apiError);
-        throw new Error(apiError.message || 'Erro ao enviar mensagem');
+        const errorMessage = apiError.message || 'Erro ao enviar mensagem';
+        throw new Error(errorMessage);
       }
 
       if (!sendResult?.success) {
         console.error('Envio falhou:', sendResult);
-        throw new Error(sendResult.error || 'Falha no envio da mensagem');
+        const errorMessage = sendResult?.message || sendResult?.error || 'Falha no envio da mensagem';
+        throw new Error(errorMessage);
       }
 
       // Atualizar estado local com a mensagem enviada
@@ -266,8 +267,8 @@ export const useWhatsAppConversations = () => {
       console.error('❌ Erro ao enviar mensagem:', error);
       
       toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Erro ao enviar mensagem",
+        title: "Erro ao enviar mensagem",
+        description: error instanceof Error ? error.message : "Erro desconhecido ao enviar mensagem",
         variant: "destructive",
       });
       

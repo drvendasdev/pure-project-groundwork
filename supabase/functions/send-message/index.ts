@@ -15,9 +15,7 @@ function generateRequestId(): string {
 function validateRequestBody(body: any): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  if (!body.workspace_id || typeof body.workspace_id !== 'string') {
-    errors.push('workspace_id is required and must be a string');
-  }
+  // workspace_id is now optional - can be derived from conversation_id
   
   if (!body.conversation_id || typeof body.conversation_id !== 'string') {
     errors.push('conversation_id is required and must be a string');
@@ -31,7 +29,7 @@ function validateRequestBody(body: any): { isValid: boolean; errors: string[] } 
     errors.push('sender_id is required and must be a string');
   }
   
-  const validMessageTypes = ['text', 'image', 'audio', 'video', 'file'];
+  const validMessageTypes = ['text', 'image', 'audio', 'video', 'file', 'document'];
   if (!validMessageTypes.includes(body.message_type)) {
     errors.push(`message_type must be one of: ${validMessageTypes.join(', ')}`);
   }
@@ -97,7 +95,8 @@ serve(async (req) => {
       });
     }
 
-    const { workspace_id, conversation_id, content, message_type, sender_id, sender_type, file_url, file_name } = body;
+    const { conversation_id, content, message_type, sender_id, sender_type, file_url, file_name } = body;
+    let { workspace_id } = body;
 
     // Validar Authorization header
     const authHeader = req.headers.get('authorization');
@@ -192,7 +191,11 @@ serve(async (req) => {
       });
     }
 
-    if (conversation.workspace_id !== workspace_id) {
+    // If workspace_id not provided, derive from conversation
+    if (!workspace_id) {
+      workspace_id = conversation.workspace_id;
+      console.log(`📝 [${requestId}] Derived workspace_id from conversation: ${workspace_id}`);
+    } else if (conversation.workspace_id !== workspace_id) {
       console.error(`❌ [${requestId}] Workspace mismatch: conversation(${conversation.workspace_id}) != request(${workspace_id})`);
       return new Response(JSON.stringify({
         code: 'WORKSPACE_MISMATCH',
@@ -317,7 +320,7 @@ serve(async (req) => {
         }
       };
       endpoint = `${connectionSecrets.evolution_url}/message/sendWhatsAppAudio/${connection.instance_name}`;
-    } else {
+    } else if (message_type === 'file' || message_type === 'document') {
       // file/document
       evolutionPayload = {
         number: phoneNumber,
@@ -328,6 +331,16 @@ serve(async (req) => {
         }
       };
       endpoint = `${connectionSecrets.evolution_url}/message/sendMedia/${connection.instance_name}`;
+    } else {
+      console.error(`❌ [${requestId}] Unsupported message type: ${message_type}`);
+      return new Response(JSON.stringify({
+        code: 'UNSUPPORTED_MESSAGE_TYPE',
+        message: `Message type '${message_type}' is not supported`,
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Enviar para Evolution API
