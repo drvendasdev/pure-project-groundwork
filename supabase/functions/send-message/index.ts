@@ -421,8 +421,8 @@ serve(async (req) => {
     const { data: n8nResponse, error: n8nError } = await supabase.functions.invoke('n8n-send-message', {
       body: n8nPayload,
       headers: {
-        'x-system-user-id': systemUserId,
-        'x-system-user-email': systemUserEmail
+        'x-system-user-id': systemUserId || sender_id,
+        'x-system-user-email': currentUserEmail || systemUserEmailHeader || ''
       }
     });
 
