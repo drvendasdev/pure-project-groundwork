@@ -74,7 +74,6 @@ export const useWhatsAppConversations = () => {
       }
 
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
-        method: 'GET',
         headers
       });
 
@@ -427,7 +426,7 @@ export const useWhatsAppConversations = () => {
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    if (currentUserData?.id) {
+    if (currentUserData?.id && selectedWorkspace?.workspace_id) {
       fetchConversations();
     }
 
