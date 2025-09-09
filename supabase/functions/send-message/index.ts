@@ -86,7 +86,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log(`🚀 [${requestId}] Send message request initiated`);
+    console.log(`🚀 [${requestId}] Send message request initiated - ROUTING VIA N8N`);
     console.log(`🔍 [${requestId}] Headers received:`, {
       'x-system-user-id': req.headers.get('x-system-user-id'),
       'x-system-user-email': req.headers.get('x-system-user-email'),
@@ -368,49 +368,9 @@ serve(async (req) => {
       });
     }
 
-    // Enviar para Evolution API
-    console.log(`🚀 [${requestId}] Sending to Evolution: ${endpoint}`);
+    // Insert message into database with "sending" status first
+    console.log(`📝 [${requestId}] Inserting message with "sending" status`);
     
-    const evolutionResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': connectionSecrets.token,
-      },
-      body: JSON.stringify(evolutionPayload),
-    });
-
-    let evolutionData: any = {};
-    const responseText = await evolutionResponse.text();
-    
-    if (!evolutionResponse.ok) {
-      console.error(`❌ [${requestId}] Evolution API error:`, {
-        status: evolutionResponse.status,
-        statusText: evolutionResponse.statusText,
-        body: responseText
-      });
-      
-      return new Response(JSON.stringify({
-        code: 'PROVIDER_ERROR',
-        message: 'External provider failed to send message',
-        providerStatus: evolutionResponse.status,
-        providerMessage: responseText,
-        requestId
-      }), {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    try {
-      evolutionData = JSON.parse(responseText);
-    } catch {
-      evolutionData = { response: responseText };
-    }
-
-    console.log(`✅ [${requestId}] Evolution API success`);
-
-    // Inserir mensagem no banco
     const { data: message, error: messageError } = await supabase
       .from('messages')
       .insert({
@@ -422,10 +382,13 @@ serve(async (req) => {
         message_type,
         file_url,
         file_name,
-        status: 'sent',
+        status: 'sending',
         origem_resposta: 'manual',
-        external_id: evolutionData.key?.id || null,
-        metadata: { evolution_response: evolutionData, requestId }
+        metadata: { 
+          sent_via: 'n8n_route', 
+          requestId,
+          timestamp: new Date().toISOString()
+        }
       })
       .select()
       .single();
@@ -442,6 +405,60 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    // Route through N8N by calling n8n-send-message function
+    console.log(`🚀 [${requestId}] Routing message through N8N...`);
+    
+    const n8nPayload = {
+      messageId: message.id,
+      phoneNumber: contact.phone,
+      content,
+      messageType: message_type,
+      fileUrl: file_url,
+      fileName: file_name
+    };
+
+    const { data: n8nResponse, error: n8nError } = await supabase.functions.invoke('n8n-send-message', {
+      body: n8nPayload,
+      headers: {
+        'x-system-user-id': systemUserId,
+        'x-system-user-email': systemUserEmail
+      }
+    });
+
+    if (n8nError) {
+      console.error(`❌ [${requestId}] N8N routing failed:`, n8nError);
+      
+      // Mark message as failed
+      await supabase
+        .from('messages')
+        .update({ 
+          status: 'failed',
+          metadata: { 
+            error: n8nError.message,
+            sent_via: 'n8n_route_failed',
+            requestId,
+            timestamp: new Date().toISOString()
+          }
+        })
+        .eq('id', message.id);
+
+      return new Response(JSON.stringify({
+        code: 'N8N_ROUTING_ERROR',
+        message: 'Failed to route message through N8N',
+        details: n8nError.message,
+        requestId
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`✅ [${requestId}] Message routed through N8N successfully`);
+    
+    // N8N function will handle updating the message status to 'sent'
+    // Return success with message details
+
 
     // Atualizar timestamp da conversa
     await supabase
@@ -462,10 +479,10 @@ serve(async (req) => {
         conversation_id: message.conversation_id,
         content: message.content,
         message_type: message.message_type,
-        status: message.status,
+        status: 'sending', // Will be updated to 'sent' by N8N function
         created_at: message.created_at
       },
-      evolutionResponse: evolutionData,
+      n8nResponse: n8nResponse,
       requestId
     }), {
       status: 201,
