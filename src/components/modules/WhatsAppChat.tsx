@@ -810,7 +810,7 @@ const stopRecording = () => {
         {selectedConversation ? (
           <>
             {/* Cabeçalho do chat */}
-            <div className="p-4 border-b border-border">
+            <div className="p-4 border-b border-border bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <Avatar className="w-10 h-10">
@@ -821,61 +821,51 @@ const stopRecording = () => {
                         className="object-cover"
                       />
                     )}
-                    <AvatarFallback className={cn("text-white", getAvatarColor(selectedConversation.contact.name))}>
+                    <AvatarFallback style={{ backgroundColor: getAvatarColor(selectedConversation.contact.name) }} className="text-white">
                       {getInitials(selectedConversation.contact.name)}
                     </AvatarFallback>
                   </Avatar>
                   
-                  <div>
-                    <h3 className="font-semibold text-foreground">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-gray-900 text-base">
                       {selectedConversation.contact.name}
                     </h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Circle className="w-2 h-2 fill-green-500 text-green-500" />
-                      <span>Online</span>
-                      {selectedConversation.agente_ativo && (
-                        <span className="text-yellow-600">• IA Ativa</span>
-                      )}
-                    </div>
+                    <AddTagButton
+                      conversationId={selectedConversation.id}
+                      isDarkMode={isDarkMode}
+                      onTagAdded={() => {
+                        // Refresh conversations after adding tag
+                        fetchConversations();
+                      }}
+                    />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <AddTagButton
-                    conversationId={selectedConversation.id}
-                    isDarkMode={isDarkMode}
-                    onTagAdded={() => {
-                      // Refresh conversations after adding tag
-                      fetchConversations();
-                    }}
-                  />
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleToggleAgent}
+                    className={cn(
+                      "h-8 px-3 rounded-full text-sm font-medium transition-colors",
+                      selectedConversation.agente_ativo 
+                        ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    )}
+                    title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
+                  >
+                    <Bot className="w-4 h-4 mr-1" />
+                    Agente IA
+                  </Button>
+                  
                   <AcceptConversationButton
                     conversation={selectedConversation}
                     onAccept={async (conversationId: string) => {
                       // Refresh conversations after accepting
                       await fetchConversations();
                     }}
+                    className="h-8 px-4 bg-yellow-400 hover:bg-yellow-500 text-black font-medium rounded-md"
                   />
-                  <Button
-                    variant="ghost" 
-                    size="icon"
-                    onClick={handleToggleAgent}
-                    className={cn(
-                      "transition-colors",
-                      selectedConversation.agente_ativo 
-                        ? "text-yellow-600 hover:text-yellow-700" 
-                        : "text-gray-400 hover:text-gray-600"
-                    )}
-                    title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
-                  >
-                    <Bot className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon">
-                    <Phone className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
                 </div>
               </div>
             </div>
