@@ -1,6 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Initialize Supabase client once at module level
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('Missing required environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+}
+
+const supabase = createClient(supabaseUrl, serviceRoleKey);
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -146,7 +156,7 @@ serve(async (req) => {
     console.log(`🔄 [${requestId}] Detected base64 in responseMessage, processing as media`);
   }
   
-  // Se temos base64, processar automaticamente
+  // Se temos base64, processar automaticamente  
   if (base64Data && !fileUrl) {
     console.log(`📁 [${requestId}] Processing base64 data automatically`);
     
@@ -172,23 +182,28 @@ serve(async (req) => {
       // Converter base64 para Uint8Array
       const binaryData = Uint8Array.from(atob(actualBase64Data), c => c.charCodeAt(0));
       
-      // Determinar extensão do arquivo
+      // Determinar extensão do arquivo baseado no MIME type
       let fileExtension = '';
       if (detectedMimeType.includes('image/jpeg')) fileExtension = '.jpg';
       else if (detectedMimeType.includes('image/png')) fileExtension = '.png';
       else if (detectedMimeType.includes('image/gif')) fileExtension = '.gif';
       else if (detectedMimeType.includes('video/mp4')) fileExtension = '.mp4';
-      else if (detectedMimeType.includes('audio/mp3')) fileExtension = '.mp3';
+      else if (detectedMimeType.includes('audio/mpeg') || detectedMimeType.includes('audio/mp3')) fileExtension = '.mp3';
+      else if (detectedMimeType.includes('audio/wav')) fileExtension = '.wav';
+      else if (detectedMimeType.includes('audio/ogg')) fileExtension = '.ogg';
       else if (detectedMimeType.includes('application/pdf')) fileExtension = '.pdf';
       else fileExtension = '.bin';
       
       // Gerar nome do arquivo se não fornecido
       const finalFileName = fileName || `media_${Date.now()}${fileExtension}`;
       
+      // Path padronizado para storage
+      const storagePath = `conversation-media/${Date.now()}_${finalFileName}`;
+      
       // Upload para Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('whatsapp-media')
-        .upload(`conversation-media/${workspaceId}/${finalFileName}`, binaryData, {
+        .upload(storagePath, binaryData, {
           contentType: detectedMimeType,
           upsert: true
         });
@@ -218,8 +233,9 @@ serve(async (req) => {
     const externalId = payload.external_id ?? payload.externalId ?? payload.message_id ?? payload.messageId ?? payload.key?.id ?? null;
     const metadata = payload.metadata ?? payload.meta ?? null;
     
-    // Inferir sender_type como 'contact' para mensagens recebidas se não especificado
-    const senderType = payload.sender_type ?? (payload.messageTimestamp ? "contact" : "agent");
+    // Melhor heurística para sender_type
+    const senderType = payload.sender_type ?? 
+      (payload.messageTimestamp || payload.messageTime || payload.received_at || payload.from_contact ? "contact" : "agent");
     const messageStatus = payload.status ?? (senderType === "contact" ? "received" : "sent");
 
   const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
@@ -250,23 +266,7 @@ serve(async (req) => {
       });
     }
 
-    // Inicializar Supabase com Service Role
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error(`❌ [${requestId}] Missing environment variables`);
-      return new Response(JSON.stringify({
-        code: 'CONFIGURATION_ERROR',
-        message: 'Missing required environment variables',
-        requestId
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    // Supabase client já inicializado no nível do módulo
 
     // Resolver workspace_id com estratégia robusta
     let workspaceId: string | null = directWorkspaceId; // Permitir override direto
@@ -394,19 +394,6 @@ serve(async (req) => {
           .maybeSingle();
         connection = result.data;
         connError = result.error;
-      }
-
-      if (connError) {
-        console.error(`❌ [${requestId}] Error querying instance:`, connError);
-        return new Response(JSON.stringify({
-          code: 'DATABASE_ERROR',
-          message: 'Error querying evolution instance',
-          details: connError.message,
-          requestId
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
       }
 
       if (connError) {
@@ -694,15 +681,28 @@ serve(async (req) => {
       });
     }
 
-    // Atualizar timestamps da conversa
-    await supabase
+    // Atualizar conversa com lógica correta de unread_count
+    const conversationUpdate: any = {
+      last_activity_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+    };
+
+    // Se mensagem é de contato, incrementar unread_count; se é de agente, resetar
+    if (senderType === "contact") {
+      conversationUpdate.unread_count = supabase.raw('unread_count + 1');
+    } else {
+      conversationUpdate.unread_count = 0;
+    }
+
+    const { error: updateError } = await supabase
       .from("conversations")
-      .update({
-        last_activity_at: new Date().toISOString(),
-        last_message_at: new Date().toISOString(),
-        unread_count: 0,
-      })
+      .update(conversationUpdate)
       .eq("id", finalConversationId);
+
+    if (updateError) {
+      console.error(`⚠️ [${requestId}] Error updating conversation:`, updateError);
+      // Não falha a operação, apenas loga o erro
+    }
 
     console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
 
