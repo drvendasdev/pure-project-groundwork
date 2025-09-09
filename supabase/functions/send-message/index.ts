@@ -87,6 +87,11 @@ serve(async (req) => {
 
   try {
     console.log(`🚀 [${requestId}] Send message request initiated`);
+    console.log(`🔍 [${requestId}] Headers received:`, {
+      'x-system-user-id': req.headers.get('x-system-user-id'),
+      'x-system-user-email': req.headers.get('x-system-user-email'),
+      'authorization': req.headers.get('authorization') ? 'present' : 'missing'
+    });
     
     // Parse e validação do body
     const body = await req.json();

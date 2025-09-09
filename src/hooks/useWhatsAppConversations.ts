@@ -48,8 +48,17 @@ export const useWhatsAppConversations = () => {
       setLoading(true);
       console.log('🔄 Carregando conversas do WhatsApp...');
 
-      if (!user?.id) {
-        console.log('No user ID available');
+      // Get current user from localStorage (custom auth system)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        console.log('No user data in localStorage');
+        toast({
+          title: "Erro de autenticação",
+          description: "Usuário não autenticado. Faça login novamente.",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -57,8 +66,8 @@ export const useWhatsAppConversations = () => {
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
         method: 'GET',
         headers: {
-          'x-system-user-id': user.id,
-          'x-system-user-email': user.email || ''
+          'x-system-user-id': currentUserData.id,
+          'x-system-user-email': currentUserData.email || ''
         }
       });
 
@@ -104,7 +113,11 @@ export const useWhatsAppConversations = () => {
   // Accept conversation function
   const acceptConversation = useCallback(async (conversationId: string) => {
     try {
-      if (!user?.id) {
+      // Get current user from localStorage (custom auth system)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
         toast({
           title: "Erro",
           description: "Usuário não autenticado",
@@ -115,7 +128,7 @@ export const useWhatsAppConversations = () => {
 
       const { error } = await supabase
         .from('conversations')
-        .update({ assigned_user_id: user.id })
+        .update({ assigned_user_id: currentUserData.id })
         .eq('id', conversationId);
 
       if (error) {
@@ -137,7 +150,7 @@ export const useWhatsAppConversations = () => {
       setConversations(prev => 
         prev.map(conv => 
           conv.id === conversationId 
-            ? { ...conv, assigned_user_id: user.id }
+            ? { ...conv, assigned_user_id: currentUserData.id }
             : conv
         )
       );
@@ -149,7 +162,7 @@ export const useWhatsAppConversations = () => {
         variant: "destructive",
       });
     }
-  }, [user?.id]);
+  }, []);
 
   // Função utilitária para obter tipo de arquivo
   const getFileType = (fileName: string): string => {
@@ -219,8 +232,8 @@ export const useWhatsAppConversations = () => {
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
         body: payload,
         headers: {
-          'x-system-user-id': currentUserData.id || user?.id,
-          'x-system-user-email': currentUserData.email || user?.email
+          'x-system-user-id': currentUserData.id,
+          'x-system-user-email': currentUserData.email || ''
         }
       });
 
@@ -396,7 +409,11 @@ export const useWhatsAppConversations = () => {
 
   // Real-time subscriptions
   useEffect(() => {
-    if (user?.id) {
+    // Get current user from localStorage
+    const userData = localStorage.getItem('currentUser');
+    const currentUserData = userData ? JSON.parse(userData) : null;
+    
+    if (currentUserData?.id) {
       fetchConversations();
     }
 
