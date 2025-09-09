@@ -97,16 +97,15 @@ serve(async (req) => {
       `)
       .eq('canal', 'whatsapp');
 
-    // SEMPRE aplicar filtro de workspace para Masters e Admins
+    // Para Masters e Admins, filtrar sempre por workspace
     if (isMasterOrAdmin) {
       if (!workspaceId) {
-        console.log('❌ Master/Admin must specify workspace');
+        console.log('⚠️ Master/Admin sem workspace especificado, retornando vazio');
         return new Response(JSON.stringify({ 
-          success: false,
-          error: 'Workspace required for master/admin users',
-          details: 'x-workspace-id header is required'
+          success: true,
+          data: [],
+          message: 'Selecione uma empresa para ver as conversas'
         }), {
-          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
