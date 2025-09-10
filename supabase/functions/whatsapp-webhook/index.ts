@@ -124,8 +124,7 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
       return;
     }
 
-    // CORRIGIDO: Para mensagens RECEBIDAS, o contato é quem ENVIOU (remoteJid é o remetente)
-    // NUNCA usar o número da instância como contato
+    // Get or create contact - CORRIGIDO: usar número de quem ENVIOU a mensagem
     const senderPhone = key.remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || senderPhone;
 
