@@ -131,9 +131,9 @@ serve(async (req) => {
 
     // Se temos uma mensagem de entrada (do contato)
     if (finalPhoneNumber && finalInstance && finalMessage) {
-      console.log(`💬 [${requestId}] Processando mensagem de entrada`);
+      console.log(`💬 [${requestId}] Processando mensagem de entrada - APENAS ENVIO PARA N8N`);
 
-      // 1. Buscar conexão e BLOQUEAR número da instância
+      // 1. Buscar conexão para validação básica
       const { data: connection } = await supabase
         .from('connections')
         .select('id, workspace_id, phone_number')
@@ -167,106 +167,17 @@ serve(async (req) => {
         });
       }
 
-      // 2. Buscar ou criar contato
-      let { data: contact } = await supabase
-        .from('contacts')
-        .select('id')
-        .eq('phone', finalPhoneNumber)
-        .eq('workspace_id', connection.workspace_id)
-        .single();
-
-      if (!contact) {
-        console.log(`🏗️ [${requestId}] CRIANDO NOVO CONTATO:`, {
-          phone: finalPhoneNumber,
-          name: finalPhoneNumber,
-          workspace_id: connection.workspace_id,
-          is_instance_phone: finalPhoneNumber === instancePhoneClean
-        });
-        
-        const { data: newContact } = await supabase
-          .from('contacts')
-          .insert({
-            phone: finalPhoneNumber,
-            name: finalPhoneNumber, // SEM PREFIXO - apenas o número
-            workspace_id: connection.workspace_id
-          })
-          .select('id')
-          .single();
-        contact = newContact;
-        console.log(`✅ [${requestId}] Contato criado:`, contact?.id);
-      }
-
-      // 3. Buscar ou criar conversa
-      let { data: conversation } = await supabase
-        .from('conversations')
-        .select('id, agente_ativo')
-        .eq('contact_id', contact?.id)
-        .eq('connection_id', connection.id)
-        .single();
-
-      if (!conversation) {
-        const { data: newConversation } = await supabase
-          .from('conversations')
-          .insert({
-            contact_id: contact?.id,
-            connection_id: connection.id,
-            workspace_id: connection.workspace_id,
-            evolution_instance: finalInstance,
-            status: 'open'
-          })
-          .select('id, agente_ativo')
-          .single();
-        conversation = newConversation;
-        console.log(`✅ [${requestId}] Conversa criada:`, conversation?.id);
-      }
-
-      // 4. Salvar mensagem
-      const { data: savedMessage } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversation?.id,
-          workspace_id: connection.workspace_id,
-          content: finalMessage,
-          sender_type: 'contact',
-          message_type: 'text',
-          external_id: external_id || null,
-          status: 'delivered'
-        })
-        .select('id')
-        .single();
-
-      console.log(`✅ [${requestId}] Mensagem salva:`, savedMessage?.id);
-
-      // 5. Trigger AI response se agente ativo
-      if (conversation?.agente_ativo) {
-        try {
-          console.log(`🤖 [${requestId}] Disparando resposta IA`);
-          await supabase.functions.invoke('ai-chat-response', {
-            body: {
-              message: finalMessage,
-              conversationId: conversation.id,
-              phoneNumber: finalPhoneNumber
-            }
-          });
-        } catch (aiError) {
-          console.error(`❌ [${requestId}] Erro na IA:`, aiError);
-        }
-      }
-
-      // 6. Enviar para N8N se configurado
+      // 2. APENAS ENVIAR PARA N8N - SEM SALVAR NO BANCO
       if (N8N_WEBHOOK_URL) {
         try {
-          console.log(`📤 [${requestId}] Enviando para N8N`);
+          console.log(`📤 [${requestId}] Enviando APENAS para N8N - sem bypass`);
           
           const n8nPayload = {
             ...body,
-            conversation_id: conversation?.id,
-            contact_id: contact?.id,
-            connection_id: connection.id,
             workspace_id: connection.workspace_id,
-            message_id: savedMessage?.id,
+            connection_id: connection.id,
             processed_at: new Date().toISOString(),
-            source: 'tezeus-crm'
+            source: 'tezeus-webhook-direct'
           };
 
           const response = await fetch(N8N_WEBHOOK_URL, {
@@ -278,13 +189,15 @@ serve(async (req) => {
           });
 
           if (response.ok) {
-            console.log(`✅ [${requestId}] N8N enviado com sucesso`);
+            console.log(`✅ [${requestId}] N8N enviado com sucesso - sem bypass`);
           } else {
             console.error(`❌ [${requestId}] N8N falhou:`, response.status);
           }
         } catch (n8nError) {
           console.error(`❌ [${requestId}] Erro N8N:`, n8nError);
         }
+      } else {
+        console.error(`❌ [${requestId}] N8N_WEBHOOK_URL não configurado`);
       }
     }
 
