@@ -816,14 +816,42 @@ serve(async (req) => {
       console.log(`📤 [${requestId}] Using workspace webhook: ${webhookUrl.hostname}${webhookUrl.pathname}`);
     }
     
-    // TEMPORÁRIO: Permitir funcionamento sem webhook N8N para restaurar funcionalidade
+    // Sistema de fallback: se N8N não configurado, enviar direto pelo sistema
     if (!workspaceWebhookUrl) {
-      console.log(`⚠️ [${requestId}] No webhook URL configured for workspace ${workspaceId} - proceeding anyway`);
+      console.log(`⚠️ [${requestId}] No webhook URL configured for workspace ${workspaceId} - Using direct send fallback`);
+      
+      // Fallback para envio direto se for mensagem de agente com conteúdo
+      if (senderType === "agent" && finalContent) {
+        console.log(`🔄 [${requestId}] Executing fallback: sending message directly through system`);
+        
+        try {
+          const { data: directSendResult, error: directSendError } = await supabase.functions.invoke('send-evolution-message', {
+            body: {
+              workspace_id: workspaceId,
+              phone_number: phoneNumber,
+              message: finalContent,
+              message_type: finalMessageType || "text",
+              file_url: fileUrl,
+              base64_data: base64Data,
+              conversation_id: finalConversationId
+            }
+          });
+
+          if (directSendError) {
+            console.error(`❌ [${requestId}] Direct send fallback failed:`, directSendError);
+          } else {
+            console.log(`✅ [${requestId}] Direct send fallback successful`);
+          }
+        } catch (fallbackError) {
+          console.error(`❌ [${requestId}] Direct send fallback error:`, fallbackError);
+        }
+      }
       
       return new Response(JSON.stringify({
         success: true,
-        message: 'Message processed but no N8N webhook configured',
+        message: 'Message processed - no N8N webhook configured, used direct send',
         conversation_id: finalConversationId,
+        fallback_used: senderType === "agent" && finalContent,
         requestId
       }), {
         status: 200,
@@ -864,14 +892,41 @@ serve(async (req) => {
       
       if (!n8nResponse.ok) {
         const errorText = await n8nResponse.text();
-        console.error(`❌ [${requestId}] N8N webhook failed (${n8nResponse.status}) - ALLOWING processing to continue:`, errorText);
+        console.error(`❌ [${requestId}] N8N webhook failed (${n8nResponse.status}) - Will fallback to direct send: ${errorText}`);
         
-        // TEMPORÁRIO: permitir continuar mesmo com erro do N8N para restaurar funcionalidade
+        // Fallback para envio direto quando N8N falha
+        if (senderType === "agent" && finalContent) {
+          console.log(`🔄 [${requestId}] Executing fallback: sending message directly through system`);
+          
+          try {
+            const { data: directSendResult, error: directSendError } = await supabase.functions.invoke('send-evolution-message', {
+              body: {
+                workspace_id: workspaceId,
+                phone_number: phoneNumber,
+                message: finalContent,
+                message_type: finalMessageType || "text",
+                file_url: fileUrl,
+                base64_data: base64Data,
+                conversation_id: finalConversationId
+              }
+            });
+
+            if (directSendError) {
+              console.error(`❌ [${requestId}] Direct send fallback failed:`, directSendError);
+            } else {
+              console.log(`✅ [${requestId}] Direct send fallback successful`);
+            }
+          } catch (fallbackError) {
+            console.error(`❌ [${requestId}] Direct send fallback error:`, fallbackError);
+          }
+        }
+        
         return new Response(JSON.stringify({
           success: true,
-          message: `Message processed despite N8N error (${n8nResponse.status})`,
+          message: `Message processed despite N8N error (${n8nResponse.status}) - fallback executed`,
           conversation_id: finalConversationId,
           n8n_error: errorText,
+          fallback_used: senderType === "agent" && finalContent,
           requestId
         }), {
           status: 200,
@@ -881,14 +936,41 @@ serve(async (req) => {
         console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
       }
     } catch (n8nError) {
-      console.error(`❌ [${requestId}] Error calling N8N webhook - ALLOWING processing to continue:`, n8nError);
+      console.error(`❌ [${requestId}] Error calling N8N webhook - Will fallback to direct send:`, n8nError);
       
-      // TEMPORÁRIO: permitir continuar mesmo com erro do N8N para restaurar funcionalidade
+      // Fallback para envio direto quando N8N tem erro de conexão
+      if (senderType === "agent" && finalContent) {
+        console.log(`🔄 [${requestId}] Executing fallback: sending message directly through system`);
+        
+        try {
+          const { data: directSendResult, error: directSendError } = await supabase.functions.invoke('send-evolution-message', {
+            body: {
+              workspace_id: workspaceId,
+              phone_number: phoneNumber,
+              message: finalContent,
+              message_type: finalMessageType || "text",
+              file_url: fileUrl,
+              base64_data: base64Data,
+              conversation_id: finalConversationId
+            }
+          });
+
+          if (directSendError) {
+            console.error(`❌ [${requestId}] Direct send fallback failed:`, directSendError);
+          } else {
+            console.log(`✅ [${requestId}] Direct send fallback successful`);
+          }
+        } catch (fallbackError) {
+          console.error(`❌ [${requestId}] Direct send fallback error:`, fallbackError);
+        }
+      }
+      
       return new Response(JSON.stringify({
         success: true,
-        message: 'Message processed despite N8N connection error',
+        message: 'Message processed despite N8N connection error - fallback executed',
         conversation_id: finalConversationId,
         n8n_error: String(n8nError?.message ?? n8nError),
+        fallback_used: senderType === "agent" && finalContent,
         requestId
       }), {
         status: 200,
