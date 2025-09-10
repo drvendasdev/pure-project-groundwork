@@ -25,19 +25,27 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    console.log('📨 Received body:', JSON.stringify(body));
+    console.log('📨 Received body (FULL DEBUG):', JSON.stringify(body, null, 2));
     
-    const { conversation_id, content, message_type = 'text', sender_id, sender_type = 'agent', file_url, file_name } = body;
+    const { conversation_id, content, message_type = 'text', sender_id, sender_type, file_url, file_name } = body;
 
-    if (!conversation_id || !content || !sender_id) {
+    if (!conversation_id || !content) {
       console.log('❌ Missing fields');
       return new Response(JSON.stringify({
-        error: 'Missing required fields: conversation_id, content, sender_id'
+        error: 'Missing required fields: conversation_id, content'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    // Se sender_type não for especificado, inferir baseado na presença de sender_id
+    let finalSenderType = sender_type;
+    if (!finalSenderType) {
+      finalSenderType = sender_id ? 'agent' : 'contact';
+    }
+
+    console.log(`📋 Message details: sender_type="${finalSenderType}", conversation_id="${conversation_id}", content="${content.substring(0, 50)}..."`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -119,22 +127,27 @@ serve(async (req) => {
 
     // Inserir mensagem no banco
     console.log('💾 Inserting message...');
-    const { data: message, error: messageError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id,
-        workspace_id: conversation.workspace_id,
-        sender_id,
-        sender_type,
-        content,
-        message_type,
-        file_url,
-        file_name,
-        status: 'sent',
-        origem_resposta: 'manual'
-      })
-      .select()
-      .single();
+     const { data: message, error: messageError } = await supabase
+       .from('messages')
+       .insert({
+         conversation_id,
+         workspace_id: conversation.workspace_id,
+         sender_id: finalSenderType === 'agent' ? sender_id : null,
+         sender_type: finalSenderType,
+         content,
+         message_type,
+         file_url,
+         file_name,
+         status: 'sent',
+         origem_resposta: finalSenderType === 'agent' ? 'manual' : 'automatica',
+         metadata: {
+           source: 'test-send-msg',
+           original_sender_type: sender_type,
+           final_sender_type: finalSenderType
+         }
+       })
+       .select()
+       .single();
 
     if (messageError) {
       console.error('❌ Message insert error:', messageError);
