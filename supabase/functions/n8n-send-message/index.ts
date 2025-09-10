@@ -158,25 +158,27 @@ serve(async (req) => {
       }
     }
     
-    // Prioridade 5: org default (instância padrão da organização)
+    // Prioridade 5: workspace default (instância padrão do workspace)
     if (!resolvedEvolutionInstance && conversationId) {
       const { data: convData } = await supabase
         .from('conversations')
-        .select('org_id')
+        .select('workspace_id')
         .eq('id', conversationId)
         .maybeSingle();
       
-      if (convData?.org_id) {
+      if (convData?.workspace_id) {
         const { data: orgSettings } = await supabase
-          .from('org_messaging_settings')
-          .select('default_instance')
-          .eq('org_id', convData.org_id)
+          .from('workspace_webhook_settings')
+          .select('webhook_url')
+          .eq('workspace_id', convData.workspace_id)
           .maybeSingle();
         
-        if (orgSettings?.default_instance) {
-          resolvedEvolutionInstance = orgSettings.default_instance;
-          instanceSource = 'orgDefault';
-        }
+        // Não temos default_instance no workspace, vamos pular essa lógica por enquanto
+        
+        // if (orgSettings?.default_instance) {
+        //   resolvedEvolutionInstance = orgSettings.default_instance;
+        //   instanceSource = 'orgDefault';
+        // }
       }
     }
     

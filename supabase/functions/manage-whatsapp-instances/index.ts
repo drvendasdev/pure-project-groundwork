@@ -119,7 +119,7 @@ async function handleCreate(supabase: any, evolutionUrl: string, evolutionApiKey
         .insert({
           instance_name: instanceName,
           token: result.hash,
-          org_id: orgId,
+          workspace_id: orgId,
           evolution_url: evolutionUrl,
         });
 
@@ -172,7 +172,7 @@ async function handleConnect(supabase: any, evolutionUrl: string, evolutionApiKe
       .from('evolution_instance_tokens')
       .select('token')
       .eq('instance_name', instanceName)
-      .eq('org_id', orgId)
+      .eq('workspace_id', orgId)
       .single();
 
     if (tokenError || !tokenData) {
@@ -237,7 +237,7 @@ async function handleRemove(supabase: any, evolutionUrl: string, evolutionApiKey
       .from('evolution_instance_tokens')
       .select('token')
       .eq('instance_name', instanceName)
-      .eq('org_id', orgId)
+      .eq('workspace_id', orgId)
       .single();
 
     // Try to delete from Evolution API using instance token first
@@ -279,7 +279,7 @@ async function handleRemove(supabase: any, evolutionUrl: string, evolutionApiKey
       .from('evolution_instance_tokens')
       .delete()
       .eq('instance_name', instanceName)
-      .eq('org_id', orgId);
+      .eq('workspace_id', orgId);
 
     const { error: connectionDeleteError } = await supabase
       .from('connections')
@@ -336,7 +336,7 @@ async function handleList(supabase: any, evolutionUrl: string, evolutionApiKey: 
             .from('evolution_instance_tokens')
             .select('token')
             .eq('instance_name', connection.instance_name)
-            .eq('org_id', orgId)
+            .eq('workspace_id', orgId)
             .single();
 
           if (tokenData?.token) {
