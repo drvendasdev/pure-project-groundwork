@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parsePhoneNumber } from 'libphonenumber-js';
@@ -60,6 +61,7 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     acceptConversation,
     fetchConversations
   } = useWhatsAppConversations();
+  const { selectedWorkspace } = useWorkspace();
   const { user } = useAuth();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
@@ -350,7 +352,37 @@ const stopRecording = () => {
         return;
       }
 
+      // PROTEÇÃO: Verificar se não é número de alguma conexão/instância
+      const formattedPhone = phoneNumber.format('E.164').replace('+', '');
+      const phoneDigits = formattedPhone.replace(/\D/g, '');
+      
+      // Verificar contra todas as conexões do workspace atual
+      const { data: connections } = await supabase
+        .from('connections')
+        .select('phone_number, instance_name')
+        .eq('workspace_id', selectedWorkspace?.workspace_id);
+        
+      const isInstanceNumber = connections?.some(conn => {
+        const connPhone = conn.phone_number?.replace(/\D/g, '');
+        return connPhone && phoneDigits === connPhone;
+      });
+      
+      if (isInstanceNumber) {
+        toast({
+          title: "Número inválido",
+          description: "Este número pertence a uma instância WhatsApp e não pode ser usado como contato.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Call Edge Function to create quick conversation
+      console.log('📞 Criando conversa rápida:', { 
+        original: quickPhoneNumber, 
+        formatted: phoneNumber.format('E.164'),
+        national: phoneNumber.format('NATIONAL') 
+      });
+      
       const { data, error } = await supabase.functions.invoke('create-quick-conversation', {
         body: { phoneNumber: phoneNumber.format('E.164') }
       });
