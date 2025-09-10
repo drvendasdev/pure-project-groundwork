@@ -254,6 +254,7 @@ export const useWhatsAppConversations = () => {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
       }
 
+      console.log('🚀 Chamando send-message-simple');
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message-simple', {
         body: payload,
         headers
