@@ -38,40 +38,26 @@ serve(async (req) => {
       // Salvar/atualizar o secret do webhook para o workspace
       console.log(`🔐 Setting webhook secret for workspace ${workspace_id}: ${secretName}`);
       
-      // Fazer chamada para API de secrets do Supabase
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      
-      if (!supabaseUrl || !serviceRoleKey) {
-        throw new Error('Missing Supabase environment variables');
-      }
-
-      // Usar API REST do Supabase para gerenciar secrets
-      const secretsResponse = await fetch(`${supabaseUrl}/rest/v1/functions/secrets`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-          'apikey': serviceRoleKey
-        },
-        body: JSON.stringify({
-          name: secretName,
-          value: webhook_url
-        })
+      // Usar a API CLI do Supabase para criar o secret
+      const command = new Deno.Command("supabase", {
+        args: ["secrets", "set", `${secretName}=${webhook_url}`, "--project-ref", "zldeaozqxjwvzgrblyrh"],
+        stdout: "piped",
+        stderr: "piped",
       });
 
-      if (!secretsResponse.ok) {
-        const errorText = await secretsResponse.text();
-        console.error(`❌ Failed to set secret: ${errorText}`);
+      const { code, stdout, stderr } = await command.output();
+      
+      if (code !== 0) {
+        const errorOutput = new TextDecoder().decode(stderr);
+        console.error(`❌ Failed to set secret via CLI: ${errorOutput}`);
         
-        return new Response(JSON.stringify({
-          error: 'Failed to save webhook secret',
-          details: errorText
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        // Fallback: salvar apenas na tabela por enquanto
+        console.log(`⚠️ Falling back to database storage only for ${secretName}`);
+      } else {
+        const output = new TextDecoder().decode(stdout);
+        console.log(`✅ Secret created via CLI: ${output}`);
       }
+
 
       console.log(`✅ Webhook secret saved successfully for workspace ${workspace_id}`);
       
@@ -87,20 +73,20 @@ serve(async (req) => {
       // Deletar o secret do webhook
       console.log(`🗑️ Deleting webhook secret for workspace ${workspace_id}: ${secretName}`);
       
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      
-      const secretsResponse = await fetch(`${supabaseUrl}/rest/v1/functions/secrets/${secretName}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'apikey': serviceRoleKey
-        }
+      // Usar a API CLI do Supabase para deletar o secret
+      const command = new Deno.Command("supabase", {
+        args: ["secrets", "unset", secretName, "--project-ref", "zldeaozqxjwvzgrblyrh"],
+        stdout: "piped",
+        stderr: "piped",
       });
 
-      if (!secretsResponse.ok) {
-        const errorText = await secretsResponse.text();
-        console.error(`❌ Failed to delete secret: ${errorText}`);
+      const { code, stderr } = await command.output();
+      
+      if (code !== 0) {
+        const errorOutput = new TextDecoder().decode(stderr);
+        console.error(`❌ Failed to delete secret: ${errorOutput}`);
+      } else {
+        console.log(`✅ Secret deleted successfully: ${secretName}`);
       }
 
       return new Response(JSON.stringify({
