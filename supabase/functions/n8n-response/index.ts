@@ -148,7 +148,7 @@ serve(async (req) => {
       fullPayload: JSON.stringify(payload).substring(0, 500)
     });
     
-    // Prioridade: 1) contact_phone 2) remoteJid 3) instance phone (último recurso)
+    // Prioridade: 1) contact_phone 2) remoteJid - NÃO usar phone_number da instância
     if (contactPhone) {
       phoneNumber = sanitizePhoneNumber(contactPhone);
       console.log(`📱 [${requestId}] Using contact_phone: ${contactPhone} -> ${phoneNumber}`);
@@ -156,13 +156,22 @@ serve(async (req) => {
       phoneNumber = sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
       console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${phoneNumber}`);
     } else {
-      phoneNumber = sanitizePhoneNumber(payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? '');
-      console.log(`⚠️ [${requestId}] FALLBACK: Using instance phone: ${phoneNumber} - ISSO DEVERIA SER EVITADO!`);
-    }
-    
-    // Adicionar validação extra para evitar número da instância
-    if (phoneNumber && payload.instance && phoneNumber.includes(payload.instance.replace(/\D/g, ''))) {
-      console.error(`❌ [${requestId}] DETECTADO: Phone number parece ser da instância! phoneNumber: ${phoneNumber}, instance: ${payload.instance}`);
+      // BLOQUEAR: NÃO usar números da instância como contato
+      const instancePhone = sanitizePhoneNumber(payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? '');
+      console.error(`❌ [${requestId}] REJEITADO: Tentativa de usar número da instância como contato: ${instancePhone}`);
+      console.error(`❌ [${requestId}] Payload deve conter 'contact_phone' ou 'remoteJid' válido para criar contato`);
+      
+      return new Response(
+        JSON.stringify({ 
+          error: 'Número da instância não pode ser usado como contato. Use contact_phone ou remoteJid.',
+          instance_phone: instancePhone,
+          payload_keys: Object.keys(payload)
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
   
   // Suporte para camelCase e base64 direto
