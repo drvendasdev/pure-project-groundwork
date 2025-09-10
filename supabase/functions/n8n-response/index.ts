@@ -149,20 +149,26 @@ serve(async (req) => {
       fullPayload: JSON.stringify(payload).substring(0, 800)
     });
     
-    // CORRIGIDO: APENAS usar remoteJid/sender - NUNCA contact_phone que pode ser da instância
-    if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
+    // Para mensagens de agente, usar contact_phone diretamente
+    if (payload.sender_type === 'agent' && contactPhone) {
+      phoneNumber = sanitizePhoneNumber(contactPhone);
+      console.log(`📱 [${requestId}] Using contact_phone for agent: ${contactPhone} -> ${phoneNumber}`);
+    }
+    // Para mensagens de contato, usar remoteJid/sender
+    else if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
       phoneNumber = sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
       console.log(`📱 [${requestId}] Using remoteJid (sender): ${remoteJid} -> ${phoneNumber}`);
     } else {
-      console.error(`❌ [${requestId}] FALHA: Não foi possível extrair número de contato válido do remoteJid/sender`);
-      console.error(`❌ [${requestId}] IGNORANDO contact_phone=${contactPhone} (pode ser da instância)`);
-      console.error(`❌ [${requestId}] Payload deve conter 'remoteJid' ou 'sender' válido para criar/atualizar contato`);
+      console.error(`❌ [${requestId}] FALHA: Não foi possível extrair número de contato válido`);
+      console.error(`❌ [${requestId}] sender_type=${payload.sender_type}, contactPhone=${contactPhone}, remoteJid=${remoteJid}`);
       
       return new Response(
         JSON.stringify({ 
-          error: 'Número de contato não encontrado no sender/remoteJid.',
-          available_fields: Object.keys(payload).filter(k => k.includes('jid') || k.includes('sender')),
-          payload_size: Object.keys(payload).length
+          error: 'Número de contato não encontrado.',
+          sender_type: payload.sender_type,
+          contact_phone: contactPhone,
+          remote_jid: remoteJid,
+          available_fields: Object.keys(payload)
         }),
         { 
           status: 400,
