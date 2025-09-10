@@ -12,10 +12,16 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
   // Fetch webhook configuration with fallback to secrets table
   const fetchWebhookConfig = async () => {
-    if (!workspaceId) return;
+    console.log('🔧 fetchWebhookConfig called with workspaceId:', workspaceId);
+    if (!workspaceId) {
+      console.log('🔧 No workspaceId provided, returning early');
+      return;
+    }
     
     setIsLoading(true);
     try {
+      console.log('🔧 Attempting to fetch webhook settings for workspace:', workspaceId);
+      
       // First try to get from workspace_webhook_settings
       let { data: settingsData, error: settingsError } = await supabase
         .from('workspace_webhook_settings')
@@ -23,7 +29,12 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
         .eq('workspace_id', workspaceId)
         .maybeSingle();
 
-      if (settingsError) throw settingsError;
+      console.log('🔧 Settings query result:', { settingsData, settingsError });
+      
+      if (settingsError) {
+        console.error('🔧 Error fetching settings:', settingsError);
+        throw settingsError;
+      }
       console.log('Settings data:', settingsData);
 
       // If no data in settings, try to get from secrets as fallback
@@ -65,8 +76,9 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
         }
       }
       
-      console.log('Final webhook config:', settingsData);
+      console.log('🔧 Final webhook config:', settingsData);
       setWebhookConfig(settingsData);
+      console.log('🔧 setWebhookConfig called with:', settingsData);
     } catch (error) {
       console.error('Error fetching webhook config:', error);
       toast({
@@ -396,10 +408,17 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
   };
 
   useEffect(() => {
+    console.log('🔧 useWorkspaceWebhooks useEffect - workspaceId:', workspaceId);
     if (workspaceId) {
+      console.log('🔧 Calling fetchWebhookConfig, fetchInstances, fetchWebhookLogs');
       fetchWebhookConfig();
       fetchInstances();
       fetchWebhookLogs();
+    } else {
+      console.log('🔧 No workspaceId, clearing states');
+      setWebhookConfig(null);
+      setInstances([]);
+      setLogs([]);
     }
   }, [workspaceId]);
 

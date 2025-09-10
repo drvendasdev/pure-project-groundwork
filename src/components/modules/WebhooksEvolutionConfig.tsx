@@ -33,6 +33,10 @@ import { ptBR } from "date-fns/locale";
 export function WebhooksEvolutionConfig() {
   const { selectedWorkspace } = useWorkspace();
   const workspaceId = selectedWorkspace?.workspace_id;
+  
+  console.log('🔧 WebhooksEvolutionConfig - selectedWorkspace:', selectedWorkspace);
+  console.log('🔧 WebhooksEvolutionConfig - workspaceId:', workspaceId);
+  
   const {
     webhookConfig,
     instances,
@@ -63,14 +67,18 @@ export function WebhooksEvolutionConfig() {
 
   // Sync webhookUrl with config when it loads
   useEffect(() => {
-    console.log('WebhookConfig changed:', webhookConfig); // Debug log
+    console.log('🔧 WebhookConfig effect - webhookConfig:', webhookConfig);
+    console.log('🔧 WebhookConfig effect - workspaceId:', workspaceId);
+    console.log('🔧 WebhookConfig effect - isLoading:', isLoading);
+    
     if (webhookConfig?.webhook_url) {
-      console.log('Setting webhookUrl to:', webhookConfig.webhook_url); // Debug log
+      console.log('🔧 Setting webhookUrl to:', webhookConfig.webhook_url);
       setWebhookUrl(webhookConfig.webhook_url);
     } else {
-      console.log('No webhook_url found in config'); // Debug log
+      console.log('🔧 No webhook_url found in config, clearing field');
+      setWebhookUrl('');
     }
-  }, [webhookConfig]);
+  }, [webhookConfig, workspaceId, isLoading]);
 
   const handleSaveConfig = async () => {
     if (!webhookUrl.trim()) return;
@@ -134,11 +142,25 @@ export function WebhooksEvolutionConfig() {
     );
   }
 
+  if (isLoading && !webhookConfig) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">Carregando configurações de webhook...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">Webhooks Evolution</h1>
         <p className="text-muted-foreground">Configure webhooks centralizados para todas as instâncias do workspace</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Workspace: {selectedWorkspace?.name} | ID: {workspaceId}
+        </p>
       </div>
 
       <Tabs defaultValue="config" className="w-full">
