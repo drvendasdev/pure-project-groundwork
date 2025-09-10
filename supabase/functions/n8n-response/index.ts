@@ -761,6 +761,10 @@ serve(async (req) => {
       }
 
       console.log(`💾 [${requestId}] Inserting message into conversation: ${finalConversationId}`);
+      
+      // Debug: verificar contexto de autenticação
+      const { data: debugAuth, error: debugError } = await supabase.rpc('debug_current_user');
+      console.log(`🔍 [${requestId}] Auth context:`, debugAuth, debugError);
 
       const { data: insertedMessage, error: msgError } = await supabase
         .from("messages")
