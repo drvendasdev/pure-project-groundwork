@@ -209,17 +209,6 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
     const remoteJid = key.remoteJid;
     const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || senderPhone;
-    
-    // Validação crítica: garantir que não estamos salvando o número da instância
-    const instancePhone = metadata.instance?.replace(/\D/g, '');
-    if (instancePhone && senderPhone === instancePhone) {
-      console.error('🚨 ERRO CRÍTICO: Tentativa de salvar número da instância como contato!', {
-        senderPhone,
-        instance: metadata.instance,
-        instancePhone
-      });
-      return; // Abortar processamento
-    }
 
     console.log('📞 Processing message for contact:', { 
       remoteJid, 

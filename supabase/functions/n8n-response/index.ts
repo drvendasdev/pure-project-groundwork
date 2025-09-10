@@ -139,16 +139,6 @@ serve(async (req) => {
     console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
   }
   
-  // IMPORTANTE: Nunca usar payload.to como phoneNumber pois pode ser o número da instância
-  // payload.to contém o destinatário, que em mensagens recebidas seria a instância
-  
-  // Validação adicional: se phoneNumber é igual ao evolutionInstance, é erro
-  const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
-  if (phoneNumber && evolutionInstance && phoneNumber === evolutionInstance.replace(/\D/g, '')) {
-    console.warn(`⚠️ [${requestId}] phoneNumber ${phoneNumber} matches evolutionInstance ${evolutionInstance}, this is incorrect!`);
-    phoneNumber = null; // Forçar erro para não criar contato com número da instância
-  }
-  
   // Suporte para camelCase e base64 direto
   let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? payload.conversation ?? payload.data?.message?.conversation ?? payload.data?.message?.extendedTextMessage?.text ?? null;
   const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? payload.messageType ?? "text").toString().toLowerCase();
