@@ -575,58 +575,59 @@ serve(async (req) => {
             .from('conversations')
             .select('id')
             .eq('contact_id', existingContact.id)
-          .eq('workspace_id', workspaceId)
-          .eq('status', 'open')
-          .maybeSingle();
+            .eq('workspace_id', workspaceId)
+            .eq('status', 'open')
+            .maybeSingle();
 
-        if (findConvError) {
-          console.error(`❌ [${requestId}] Error finding conversation:`, findConvError);
-          return new Response(JSON.stringify({
-            code: 'DATABASE_ERROR',
-            message: 'Error finding conversation',
-            details: findConvError.message,
-            requestId
-          }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-
-        if (!existingConv) {
-          console.log(`➕ [${requestId}] Creating new conversation for contact: ${existingContact.id}`);
-          const { data: newConv, error: createConvError } = await supabase
-            .from('conversations')
-            .insert({
-              contact_id: existingContact.id,
-              workspace_id: workspaceId,
-              connection_id: resolvedConnectionId,
-              status: 'open',
-              agente_ativo: false,
-              evolution_instance: evolutionInstance || null,
-              canal: 'whatsapp',
-              last_activity_at: new Date().toISOString(),
-              last_message_at: new Date().toISOString(),
-            })
-            .select('id')
-            .single();
-
-          if (createConvError) {
-            console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
+          if (findConvError) {
+            console.error(`❌ [${requestId}] Error finding conversation:`, findConvError);
             return new Response(JSON.stringify({
               code: 'DATABASE_ERROR',
-              message: 'Error creating conversation',
-              details: createConvError.message,
+              message: 'Error finding conversation',
+              details: findConvError.message,
               requestId
             }), {
               status: 500,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
           }
-          
-          finalConversationId = newConv.id;
-        } else {
-          finalConversationId = existingConv.id;
-        }
+
+          if (!existingConv) {
+            console.log(`➕ [${requestId}] Creating new conversation for contact: ${existingContact.id}`);
+            const { data: newConv, error: createConvError } = await supabase
+              .from('conversations')
+              .insert({
+                contact_id: existingContact.id,
+                workspace_id: workspaceId,
+                connection_id: resolvedConnectionId,
+                status: 'open',
+                agente_ativo: false,
+                evolution_instance: evolutionInstance || null,
+                canal: 'whatsapp',
+                last_activity_at: new Date().toISOString(),
+                last_message_at: new Date().toISOString(),
+              })
+              .select('id')
+              .single();
+
+            if (createConvError) {
+              console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
+              return new Response(JSON.stringify({
+                code: 'DATABASE_ERROR',
+                message: 'Error creating conversation',
+                details: createConvError.message,
+                requestId
+              }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+              });
+            }
+            
+            finalConversationId = newConv.id;
+          } else {
+            finalConversationId = existingConv.id;
+          }
+        } // ← ESTA CHAVE ESTAVA FALTANDO!
 
         console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
 
