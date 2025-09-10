@@ -6,15 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
 };
 
+function generateRequestId(): string {
+  return `send_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
 serve(async (req) => {
-  console.log('🚀 TEST SEND MESSAGE FUNCTION STARTED');
+  const requestId = generateRequestId();
+  console.log(`🚀 [${requestId}] SEND MESSAGE FUNCTION STARTED (N8N-ONLY)`);
   
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    console.log('❌ Wrong method:', req.method);
+    console.log(`❌ [${requestId}] Wrong method: ${req.method}`);
     return new Response(JSON.stringify({
       error: 'Only POST method is allowed'
     }), {
@@ -25,12 +30,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    console.log('📨 Received body (FULL DEBUG):', JSON.stringify(body, null, 2));
+    console.log(`📨 [${requestId}] Received body:`, JSON.stringify(body, null, 2));
     
     const { conversation_id, content, message_type = 'text', sender_id, sender_type, file_url, file_name } = body;
 
     if (!conversation_id || !content) {
-      console.log('❌ Missing fields');
+      console.log(`❌ [${requestId}] Missing required fields`);
       return new Response(JSON.stringify({
         error: 'Missing required fields: conversation_id, content'
       }), {
@@ -39,19 +44,11 @@ serve(async (req) => {
       });
     }
 
-    // Se sender_type não for especificado, inferir baseado na presença de sender_id
-    let finalSenderType = sender_type;
-    if (!finalSenderType) {
-      finalSenderType = sender_id ? 'agent' : 'contact';
-    }
-
-    console.log(`📋 Message details: sender_type="${finalSenderType}", conversation_id="${conversation_id}", content="${content.substring(0, 50)}..."`);
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !serviceKey) {
-      console.log('❌ Missing env vars');
+      console.log(`❌ [${requestId}] Missing env vars`);
       return new Response(JSON.stringify({
         error: 'Missing environment variables'
       }), {
@@ -61,10 +58,10 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceKey);
-    console.log('✅ Supabase client created');
+    console.log(`✅ [${requestId}] Supabase client created`);
 
-    // Buscar dados da conversa
-    console.log('🔍 Fetching conversation:', conversation_id);
+    // Fetch conversation details
+    console.log(`🔍 [${requestId}] Fetching conversation: ${conversation_id}`);
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
       .select('workspace_id, connection_id, contact_id')
@@ -72,7 +69,7 @@ serve(async (req) => {
       .single();
 
     if (convError || !conversation) {
-      console.log('❌ Conversation error:', convError);
+      console.log(`❌ [${requestId}] Conversation error:`, convError);
       return new Response(JSON.stringify({
         error: 'Conversation not found',
         details: convError?.message
@@ -82,10 +79,10 @@ serve(async (req) => {
       });
     }
 
-    console.log('✅ Conversation found:', conversation);
+    console.log(`✅ [${requestId}] Conversation found:`, conversation);
 
-    // Buscar dados do contato
-    console.log('🔍 Fetching contact:', conversation.contact_id);
+    // Fetch contact details
+    console.log(`🔍 [${requestId}] Fetching contact: ${conversation.contact_id}`);
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .select('phone')
@@ -93,7 +90,7 @@ serve(async (req) => {
       .single();
 
     if (contactError || !contact) {
-      console.log('❌ Contact error:', contactError);
+      console.log(`❌ [${requestId}] Contact error:`, contactError);
       return new Response(JSON.stringify({
         error: 'Contact not found',
         details: contactError?.message
@@ -103,142 +100,49 @@ serve(async (req) => {
       });
     }
 
-    console.log('✅ Contact found:', { phone: contact.phone });
+    console.log(`✅ [${requestId}] Contact found: ${contact.phone}`);
 
-    // Buscar dados da conexão para pegar a instância
-    let instance = null;
-    if (conversation.connection_id) {
-      console.log('🔍 Fetching connection:', conversation.connection_id);
-      const { data: connection, error: connectionError } = await supabase
-        .from('connections')
-        .select('instance_name')
-        .eq('id', conversation.connection_id)
-        .single();
-      
-      if (connection && !connectionError) {
-        instance = connection.instance_name;
-        console.log('✅ Instance found:', instance);
-      } else {
-        console.log('⚠️ Connection error:', connectionError);
-      }
-    }
+    // Get N8N outbound webhook URL
+    const n8nWebhookUrl = Deno.env.get('N8N_OUTBOUND_WEBHOOK_URL');
     
-    console.log('📋 Dados para N8N - Phone:', contact.phone, 'Instance:', instance);
-
-    // Inserir mensagem no banco
-    console.log('💾 Inserting message...');
-     const { data: message, error: messageError } = await supabase
-       .from('messages')
-       .insert({
-         conversation_id,
-         workspace_id: conversation.workspace_id,
-         sender_id: finalSenderType === 'agent' ? sender_id : null,
-         sender_type: finalSenderType,
-         content,
-         message_type,
-         file_url,
-         file_name,
-         status: 'sent',
-         origem_resposta: finalSenderType === 'agent' ? 'manual' : 'automatica',
-         metadata: {
-           source: 'test-send-msg',
-           original_sender_type: sender_type,
-           final_sender_type: finalSenderType
-         }
-       })
-       .select()
-       .single();
-
-    if (messageError) {
-      console.error('❌ Message insert error:', messageError);
+    if (!n8nWebhookUrl) {
+      console.error(`❌ [${requestId}] N8N_OUTBOUND_WEBHOOK_URL not configured`);
       return new Response(JSON.stringify({
-        error: 'Failed to save message',
-        details: messageError.message
+        error: 'N8N outbound webhook not configured'
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log('✅ Message inserted:', message.id);
-
-    // Atualizar timestamp da conversa
-    console.log('🔄 Updating conversation timestamp...');
-    const { error: updateError } = await supabase
-      .from('conversations')
-      .update({ 
-        updated_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString()
-      })
-      .eq('id', conversation_id);
-
-    if (updateError) {
-      console.log('⚠️ Update conversation error:', updateError);
-    } else {
-      console.log('✅ Conversation updated');
-    }
-
-    // Integração com N8N
-    console.log('🔗 Checking N8N webhook for workspace:', conversation.workspace_id);
-    const { data: webhookData, error: webhookError } = await supabase
-      .from('workspace_webhook_secrets')
-      .select('webhook_url')
-      .eq('workspace_id', conversation.workspace_id)
-      .maybeSingle();
-
-    if (!webhookData?.webhook_url) {
-      console.error('❌ N8N webhook not configured for workspace:', conversation.workspace_id);
-      return new Response(JSON.stringify({
-        error: 'N8N webhook not configured for this workspace',
-        workspace_id: conversation.workspace_id
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    console.log('📤 Sending to N8N webhook ONLY:', webhookData.webhook_url);
+    // Generate external_id for tracking
+    const external_id = crypto.randomUUID();
     
-    // Criar payload no padrão do Evolution (igual quando chega pelo celular)
-    const destinatarioPhone = contact.phone;
-    const senderFormatted = `${destinatarioPhone}@s.whatsapp.net`;
-    
-    console.log('🎯 Preparando sender para N8N:', { 
-      destinatarioPhone, 
-      senderFormatted, 
-      instance 
-    });
-    
+    // Prepare N8N payload
     const n8nPayload = {
-      // Dados principais do Evolution format
-      instance: instance,
-      sender: senderFormatted,
-      message: content,
-      phoneNumber: destinatarioPhone,
-      status: 'sent',
-      external_id: message.id,
-      
-      // Dados adicionais do sistema
-      response_message: content,
+      direction: 'outbound',
+      external_id: external_id,
+      phone_number: contact.phone,
+      content: content,
+      message_type: message_type,
+      sender_type: sender_type || 'agent',
+      sender_id: sender_id,
+      file_url: file_url || null,
+      file_name: file_name || null,
       workspace_id: conversation.workspace_id,
       conversation_id: conversation_id,
       connection_id: conversation.connection_id,
       contact_id: conversation.contact_id,
-      message_id: message.id,
-      message_type: message_type,
-      sender_id: sender_id,
-      sender_type: sender_type,
+      source: 'test-send-msg',
       timestamp: new Date().toISOString(),
-      
-      // Metadados para identificar origem
-      source: 'agent_system',
-      processed_at: new Date().toISOString()
+      request_id: requestId
     };
     
-    console.log('📋 N8N Payload (formato Evolution):', JSON.stringify(n8nPayload));
+    console.log(`📤 [${requestId}] Sending to N8N ONLY: ${n8nWebhookUrl.substring(0, 50)}...`);
+    console.log(`📋 [${requestId}] N8N Payload:`, JSON.stringify(n8nPayload, null, 2));
 
     try {
-      const webhookResponse = await fetch(webhookData.webhook_url, {
+      const webhookResponse = await fetch(n8nWebhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -247,7 +151,7 @@ serve(async (req) => {
       });
 
       if (!webhookResponse.ok) {
-        console.error('❌ N8N webhook failed with status:', webhookResponse.status);
+        console.error(`❌ [${requestId}] N8N webhook failed with status: ${webhookResponse.status}`);
         const errorText = await webhookResponse.text();
         return new Response(JSON.stringify({
           error: 'N8N webhook failed',
@@ -259,9 +163,9 @@ serve(async (req) => {
         });
       }
 
-      console.log('✅ N8N webhook called successfully');
+      console.log(`✅ [${requestId}] N8N webhook called successfully`);
     } catch (webhookErr) {
-      console.error('❌ Error calling N8N webhook:', webhookErr);
+      console.error(`❌ [${requestId}] Error calling N8N webhook:`, webhookErr);
       return new Response(JSON.stringify({
         error: 'Failed to call N8N webhook',
         details: webhookErr.message
@@ -271,25 +175,23 @@ serve(async (req) => {
       });
     }
 
-    console.log('🎉 SUCCESS - Message sent:', message.id);
+    console.log(`🎉 [${requestId}] SUCCESS - Message sent to N8N with external_id: ${external_id}`);
 
+    // Return 202 Accepted with external_id for optimistic UI updates
     return new Response(JSON.stringify({
       success: true,
-      message: {
-        id: message.id,
-        conversation_id: message.conversation_id,
-        content: message.content,
-        message_type: message.message_type,
-        status: 'sent',
-        created_at: message.created_at
-      }
+      external_id: external_id,
+      status: 'sent_to_n8n',
+      message: 'Message sent to N8N for processing',
+      conversation_id: conversation_id,
+      phone_number: contact.phone
     }), {
-      status: 201,
+      status: 202, // Accepted - processing asynchronously
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('💥 Unexpected error:', error);
+    console.error(`💥 [${requestId}] Unexpected error:`, error);
     return new Response(JSON.stringify({
       error: 'An unexpected error occurred',
       details: error.message,

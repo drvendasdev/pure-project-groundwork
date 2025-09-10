@@ -1,388 +1,202 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Configuration function
-function getConfig() {
-  const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
-  const evolutionVerifyToken = Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'evolution-webhook-token';
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  
-  return {
-    evolutionWebhookSecret,
-    evolutionVerifyToken,
-    supabaseUrl,
-    supabaseServiceRoleKey
-  };
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('Missing required environment variables');
 }
 
-// Função para sanitizar dados removendo campos grandes que causam problemas de memória
-function sanitizeWebhookData(data: any) {
-  // Criar cópia dos dados sem os campos problemáticos
-  const sanitized = JSON.parse(JSON.stringify(data));
-  
-  // Remover campos base64 grandes que causam memory overflow
-  if (sanitized.data?.message) {
-    const msg = sanitized.data.message;
-    
-    // Remover base64 de todos os tipos de mídia
-    ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].forEach(type => {
-      if (msg[type]?.base64) {
-        delete msg[type].base64;
-      }
-      if (msg[type]?.jpegThumbnail) {
-        // Manter apenas info se é thumbnail pequeno
-        if (typeof msg[type].jpegThumbnail === 'string' && msg[type].jpegThumbnail.length > 1000) {
-          msg[type].jpegThumbnail = '[REMOVED_LARGE_THUMBNAIL]';
-        }
-      }
-    });
-  }
-  
-  return sanitized;
+const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+function generateRequestId(): string {
+  return `evo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Função para extrair metadados essenciais
-function extractMetadata(data: any) {
-  const metadata = {
-    event: data.event,
-    instance: data.instance || data.instanceName,
-    timestamp: new Date().toISOString(),
-    messageType: 'unknown',
-    hasMedia: false,
-    contactPhone: null,
-    messageId: null,
-    fromMe: false,
-    remoteJid: null,
-    phoneNumber: null
-  };
+function sanitizePhoneNumber(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
 
-  if (data.data) {
-    // Extrair info da chave
-    if (data.data.key) {
-      metadata.messageId = data.data.key.id;
-      metadata.fromMe = data.data.key.fromMe || false;
-      
-      if (data.data.key.remoteJid) {
-        metadata.remoteJid = data.data.key.remoteJid;
-        metadata.phoneNumber = data.data.key.remoteJid.replace('@s.whatsapp.net', '');
-        metadata.contactPhone = metadata.phoneNumber.substring(0, 8) + '***';
-      }
-    }
-
-    // Determinar tipo de mensagem
-    if (data.data.message) {
-      const msg = data.data.message;
-      
-      if (msg.conversation) {
-        metadata.messageType = 'text';
-      } else if (msg.imageMessage) {
-        metadata.messageType = 'image';
-        metadata.hasMedia = true;
-      } else if (msg.videoMessage) {
-        metadata.messageType = 'video';
-        metadata.hasMedia = true;
-      } else if (msg.audioMessage) {
-        metadata.messageType = 'audio';
-        metadata.hasMedia = true;
-      } else if (msg.documentMessage) {
-        metadata.messageType = 'document';
-        metadata.hasMedia = true;
-      } else if (msg.stickerMessage) {
-        metadata.messageType = 'sticker';
-        metadata.hasMedia = true;
-      } else if (msg.locationMessage) {
-        metadata.messageType = 'location';
-      } else if (msg.contactMessage) {
-        metadata.messageType = 'contact';
-      }
-    }
+function extractPhoneFromRemoteJid(remoteJid: string): string | null {
+  if (!remoteJid || !remoteJid.includes('@s.whatsapp.net')) {
+    return null;
   }
-
-  return metadata;
+  return sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
 }
 
 serve(async (req) => {
+  const requestId = generateRequestId();
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    console.log(`❌ [${requestId}] Method not allowed: ${req.method}`);
+    return new Response('Method not allowed', { 
+      status: 405, 
+      headers: corsHeaders 
+    });
   }
 
   try {
-    // Generate correlation ID for request tracking
-    const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
-    const config = getConfig();
+    console.log(`📨 [${requestId}] Evolution webhook received`);
     
-    // Initialize Supabase client
-    const supabaseClient = createClient(
-      config.supabaseUrl ?? '',
-      config.supabaseServiceRoleKey ?? ''
-    );
+    const data = await req.json();
+    console.log(`📋 [${requestId}] Payload keys:`, Object.keys(data));
+
+    // Extract instance name and validate
+    const instanceName = data.instance || data.instanceName || data.instanceId;
     
-    if (req.method === 'GET') {
-      const url = new URL(req.url);
-      const mode = url.searchParams.get('hub.mode');
-      const token = url.searchParams.get('hub.verify_token') || url.searchParams.get('token');
-      const challenge = url.searchParams.get('hub.challenge');
-      const test = url.searchParams.get('test');
-
-      // Test endpoint for troubleshooting
-      if (test === 'true') {
-        console.log('🧪 Test endpoint called', { correlationId });
-        return new Response(JSON.stringify({
-          status: 'webhook_active',
-          timestamp: new Date().toISOString(),
-          verify_token_configured: !!config.evolutionVerifyToken,
-          webhook_secret_configured: !!config.evolutionWebhookSecret,
-          correlationId
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Webhook verification for Evolution API or simple token validation
-      if (mode === 'subscribe' && token === config.evolutionVerifyToken) {
-        console.log('✅ Webhook verified', { correlationId });
-        return new Response(challenge, { status: 200 });
-      } else if (token && token === config.evolutionWebhookSecret) {
-        console.log('✅ Token validated', { correlationId });
-        return new Response('OK', { status: 200 });
-      } else {
-        console.log('❌ Webhook verification failed', { 
-          correlationId, 
-          mode, 
-          tokenProvided: !!token
-        });
-        return new Response('Forbidden', { status: 403 });
-      }
+    if (!instanceName) {
+      console.error(`❌ [${requestId}] Missing instance name in payload`);
+      return new Response('Missing instance name', { 
+        status: 400, 
+        headers: corsHeaders 
+      });
     }
 
-    if (req.method === 'POST') {
-      // Get token from URL or Authorization header
-      const url = new URL(req.url);
-      const urlToken = url.searchParams.get('token');
-      const authHeader = req.headers.get('authorization');
-      
-      let isAuthorized = false;
-      
-      // Check URL token
-      if (urlToken && urlToken === config.evolutionWebhookSecret) {
-        isAuthorized = true;
-      }
-      
-      // Check Authorization header
-      if (!isAuthorized && config.evolutionWebhookSecret) {
-        const expectedAuth = `Bearer ${config.evolutionWebhookSecret}`;
-        if (authHeader === expectedAuth) {
-          isAuthorized = true;
-        }
-      }
-      
-      if (config.evolutionWebhookSecret && !isAuthorized) {
-        console.log('❌ Webhook authorization failed', { 
-          correlationId, 
-          hasAuth: !!authHeader,
-          hasUrlToken: !!urlToken
-        });
-        return new Response(JSON.stringify({ 
-          error: 'Unauthorized',
-          correlationId 
-        }), { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        });
-      }
+    console.log(`🔍 [${requestId}] Processing for instance: ${instanceName}`);
 
-      const body = await req.json();
+    // Handle different event types for connection status updates
+    const eventType = data.event || data.type;
+    
+    if (eventType === 'qrcode.updated' || eventType === 'connection.update') {
+      console.log(`🔄 [${requestId}] Handling connection event: ${eventType}`);
       
-      // Extract metadata for logging
-      const metadata = extractMetadata(body);
-      console.log('📥 Webhook recebido:', {
-        correlationId,
-        event: metadata.event,
-        instance: metadata.instance,
-        messageType: metadata.messageType,
-        hasMedia: metadata.hasMedia,
-        remoteJid: metadata.remoteJid,
-        phoneNumber: metadata.phoneNumber,
-        contactPhone: metadata.contactPhone,
-        messageId: metadata.messageId,
-        fromMe: metadata.fromMe
-      });
-
-      const { event, instance, data } = body;
-
-      // Find connection and workspace by instance name
-      let workspaceId: string | null = null;
-      let connectionId: string | null = null;
-
-      if (instance) {
-        const { data: connection } = await supabaseClient
+      // Update connection status in database
+      if (eventType === 'qrcode.updated' && data.qrcode) {
+        const { error } = await supabase
           .from('connections')
-          .select('id, workspace_id')
-          .eq('instance_name', instance)
-          .single();
-
-        if (connection) {
-          workspaceId = connection.workspace_id;
-          connectionId = connection.id;
-          console.log(`🔗 [${correlationId}] Connection found: ${connection.id}, workspace: ${connection.workspace_id}`);
+          .update({ 
+            qr_code: data.qrcode,
+            status: 'qr',
+            last_activity_at: new Date().toISOString()
+          })
+          .eq('instance_name', instanceName);
           
-          // Handle connection status updates only
-          switch (event) {
-            case 'qrcode.updated':
-            case 'QRCODE_UPDATED':
-              await supabaseClient
-                .from('connections')
-                .update({ 
-                  status: 'qr',
-                  qr_code: data.qrcode,
-                  last_activity_at: new Date().toISOString()
-                })
-                .eq('id', connection.id);
-              console.log(`✅ [${correlationId}] QR code updated`);
-              break;
-
-            case 'connection.update':
-            case 'CONNECTION_UPDATE':
-              let status = 'disconnected';
-              let phoneNumber = null;
-
-              if (data.state === 'open') {
-                status = 'connected';
-                phoneNumber = data.user?.id?.replace('@s.whatsapp.net', '') || null;
-              } else if (data.state === 'connecting') {
-                status = 'connecting';
-              } else if (data.state === 'close') {
-                status = 'disconnected';
-              }
-
-              await supabaseClient
-                .from('connections')
-                .update({ 
-                  status,
-                  phone_number: phoneNumber,
-                  last_activity_at: new Date().toISOString()
-                })
-                .eq('id', connection.id);
-              console.log(`✅ [${correlationId}] Connection status updated: ${status}`);
-              break;
-          }
+        if (error) {
+          console.error(`❌ [${requestId}] Error updating QR code:`, error);
+        } else {
+          console.log(`✅ [${requestId}] QR code updated for ${instanceName}`);
         }
       }
-
-      if (!workspaceId) {
-        console.log(`⚠️ [${correlationId}] No workspace found for instance: ${metadata.instance}`);
-        return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: false, 
-          processed: false,
-          note: 'no workspace found',
-          metadata: metadata
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Get workspace-specific webhook URL instead of global
-      const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${workspaceId}`;
       
-      const { data: webhookData, error: webhookError } = await supabaseClient
-        .from('workspace_webhook_secrets')
-        .select('webhook_url')
-        .eq('workspace_id', workspaceId)
-        .eq('secret_name', workspaceWebhookSecretName)
-        .maybeSingle();
-
-      const workspaceWebhookUrl = webhookData?.webhook_url;
-
-      if (!workspaceWebhookUrl) {
-        console.log(`⚠️ [${correlationId}] No workspace webhook configured for ${workspaceId}`);
-        return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: false, 
-          processed: false,
-          note: 'no workspace webhook configured',
-          metadata: metadata
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // Forward to N8N workspace webhook ONLY - no direct database operations
-      try {
-        console.log(`📤 [${correlationId}] Forwarding to N8N workspace webhook ONLY: ${workspaceWebhookUrl.substring(0, 50)}...`);
-        
-        // Sanitizar dados antes de enviar
-        const sanitizedData = sanitizeWebhookData(body);
-        
-        const forwardPayload = { 
-          source: 'evolution-webhook',
-          metadata: metadata,
-          data: sanitizedData,
-          timestamp: metadata.timestamp,
-          workspaceId,
-          connectionId
+      if (eventType === 'connection.update') {
+        const updates: any = {
+          last_activity_at: new Date().toISOString()
         };
         
-        const fRes = await fetch(workspaceWebhookUrl, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(forwardPayload),
-        });
+        if (data.state === 'open') {
+          updates.status = 'connected';
+          updates.phone_number = data.instance?.number || null;
+        } else if (data.state === 'close') {
+          updates.status = 'disconnected';
+        }
         
-        const fText = await fRes.text();
-        console.log(`📨 [${correlationId}] N8N webhook response: ${fRes.status} ${fRes.ok ? 'SUCCESS' : fText}`);
-        console.log(`ℹ️ [${correlationId}] N8N will handle all message processing - no direct database operations`);
-        
-        return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: fRes.ok,
-          processed: true,
-          note: 'N8N handles final message processing',
-          metadata: metadata
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch (forwardErr) {
-        console.error(`❌ [${correlationId}] Error forwarding to N8N workspace webhook:`, forwardErr.message);
-        return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: false, 
-          processed: false,
-          error: forwardErr.message,
-          metadata: metadata
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        const { error } = await supabase
+          .from('connections')
+          .update(updates)
+          .eq('instance_name', instanceName);
+          
+        if (error) {
+          console.error(`❌ [${requestId}] Error updating connection status:`, error);
+        } else {
+          console.log(`✅ [${requestId}] Connection status updated for ${instanceName}: ${data.state}`);
+        }
       }
-    } else {
-      console.log(`⚠️ [${correlationId}] No workspace webhook configured - event will be lost`);
-      return new Response(JSON.stringify({ 
-        ok: true, 
-        forwarded: false, 
-        processed: false,
-        note: 'no workspace webhook configured',
-        metadata: metadata
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
-    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    // Handle message events - forward to N8N only
+    if (data.data?.key?.remoteJid || data.key?.remoteJid) {
+      console.log(`📱 [${requestId}] Message event detected, forwarding to N8N`);
+      
+      const phoneNumber = extractPhoneFromRemoteJid(
+        data.data?.key?.remoteJid || data.key?.remoteJid
+      );
+      
+      if (!phoneNumber) {
+        console.error(`❌ [${requestId}] Could not extract phone number from remoteJid`);
+        return new Response('Invalid phone number', { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+
+      // Get N8N inbound webhook URL
+      const n8nWebhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
+      
+      if (!n8nWebhookUrl) {
+        console.error(`❌ [${requestId}] N8N_INBOUND_WEBHOOK_URL not configured`);
+        return new Response('N8N webhook not configured', { 
+          status: 500, 
+          headers: corsHeaders 
+        });
+      }
+
+      // Determine sender type from fromMe field
+      const senderType = data.data?.key?.fromMe ? 'agent' : 'contact';
+      
+      // Extract message content
+      const messageData = data.data?.message || data.message || {};
+      const content = messageData.conversation || 
+                     messageData.extendedTextMessage?.text || 
+                     messageData.imageMessage?.caption ||
+                     messageData.videoMessage?.caption ||
+                     messageData.documentMessage?.caption ||
+                     '📱 Mensagem recebida';
+
+      // Prepare N8N payload
+      const n8nPayload = {
+        direction: 'inbound',
+        phone_number: phoneNumber,
+        content: content,
+        sender_type: senderType,
+        message_type: 'text', // Default, N8N can enhance this
+        instance_name: instanceName,
+        source: 'evolution-webhook',
+        raw_data: data, // Include original data for N8N processing
+        timestamp: new Date().toISOString(),
+        request_id: requestId
+      };
+
+      console.log(`📤 [${requestId}] Forwarding to N8N: ${n8nWebhookUrl.substring(0, 50)}...`);
+      
+      try {
+        const response = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        if (!response.ok) {
+          console.error(`❌ [${requestId}] N8N webhook failed: ${response.status}`);
+        } else {
+          console.log(`✅ [${requestId}] Successfully forwarded to N8N`);
+        }
+      } catch (error) {
+        console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
+      }
+    }
+
+    return new Response('OK', { 
+      status: 200, 
+      headers: corsHeaders 
+    });
+
   } catch (error) {
-    const correlationId = crypto.randomUUID();
-    console.error('❌ Error in webhook:', { correlationId, error: error.message });
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      correlationId 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    console.error(`❌ [${requestId}] Error processing webhook:`, error);
+    return new Response('Internal server error', { 
+      status: 500, 
+      headers: corsHeaders 
     });
   }
 });
