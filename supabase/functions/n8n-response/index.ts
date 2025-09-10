@@ -687,7 +687,45 @@ serve(async (req) => {
       });
     }
 
-    // Para mensagens de agente sem conversa, vamos continuar o processamento
+    // Para mensagens de agente sem conversa, tentar encontrar a última conversa ativa
+    if (!finalConversationId && senderType === "agent" && phoneNumber && workspaceId) {
+      console.log(`🔍 [${requestId}] Trying to find active conversation for agent message`);
+      
+      try {
+        // Primeiro encontrar o contato
+        const { data: contact, error: contactError } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('phone', sanitizePhoneNumber(phoneNumber))
+          .eq('workspace_id', workspaceId)
+          .maybeSingle();
+        
+        if (!contactError && contact) {
+          // Buscar conversa ativa do contato
+          const { data: activeConversation, error: findError } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('workspace_id', workspaceId)
+            .eq('contact_id', contact.id)
+            .order('last_activity_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!findError && activeConversation) {
+            finalConversationId = activeConversation.id;
+            console.log(`✅ [${requestId}] Found active conversation for agent message: ${finalConversationId}`);
+          } else {
+            console.warn(`⚠️ [${requestId}] No active conversation found for agent message`);
+          }
+        } else {
+          console.warn(`⚠️ [${requestId}] Contact not found for phone: ${phoneNumber}`);
+        }
+      } catch (error) {
+        console.error(`❌ [${requestId}] Error finding conversation for agent message:`, error);
+      }
+    }
+
+    // Se ainda não tem conversation_id para agente, permitir processamento sem inserção
     if (!finalConversationId && senderType === "agent") {
       console.warn(`⚠️ [${requestId}] Agent message without conversation - will skip message creation but allow N8N processing`);
     }
@@ -698,6 +736,9 @@ serve(async (req) => {
     
     // CORRIGIDO: Recalcular hasValidContent após possível placeholder
     const hasContentNow = !!(finalContent || fileUrl || base64Data);
+    
+    console.log(`📊 [${requestId}] Message insertion check - hasContentNow: ${hasContentNow}, finalConversationId: ${finalConversationId}`);
+    console.log(`📊 [${requestId}] Content details - finalContent: "${finalContent?.substring(0, 50)}", fileUrl: ${!!fileUrl}, base64Data: ${!!base64Data}`);
 
     // Insert message if we have content and conversation_id
     if (hasContentNow && finalConversationId) {
@@ -781,7 +822,13 @@ serve(async (req) => {
         console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
       }
     } else {
-      console.log(`⚠️ [${requestId}] Skipping message insertion - no valid content found`);
+      console.log(`⚠️ [${requestId}] Skipping message insertion - hasContentNow: ${hasContentNow}, finalConversationId: ${finalConversationId}`);
+      if (!hasContentNow) {
+        console.log(`⚠️ [${requestId}] No valid content found: finalContent="${finalContent}", fileUrl="${fileUrl}", base64Data="${!!base64Data}"`);
+      }
+      if (!finalConversationId) {
+        console.log(`⚠️ [${requestId}] No conversation_id found for phone: ${phoneNumber} in workspace: ${workspaceId}`);
+      }
     }
 
     // Encaminhar para N8N usando webhook específico do workspace
