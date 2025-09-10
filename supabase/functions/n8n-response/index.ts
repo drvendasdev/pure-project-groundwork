@@ -735,7 +735,8 @@ serve(async (req) => {
         console.log(`📤 [${requestId}] Using fallback global webhook`);
       }
     }
-      
+    
+    if (workspaceWebhookUrl) {
       try {
         const n8nPayload = {
           workspace_id: workspaceId,
