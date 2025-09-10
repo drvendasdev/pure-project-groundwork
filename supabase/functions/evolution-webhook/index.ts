@@ -10,14 +10,12 @@ const corsHeaders = {
 function getConfig() {
   const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
   const evolutionVerifyToken = Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'evolution-webhook-token';
-  const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   
   return {
     evolutionWebhookSecret,
     evolutionVerifyToken,
-    n8nWebhookUrl,
     supabaseUrl,
     supabaseServiceRoleKey
   };
@@ -109,239 +107,6 @@ function extractMetadata(data: any) {
   return metadata;
 }
 
-// Map Evolution API states to internal status
-function mapEvolutionStateToStatus(state: string): string {
-  switch (state?.toLowerCase()) {
-    case 'open':
-      return 'connected';
-    case 'connecting':
-    case 'close':
-      return 'connecting';
-    case 'CONNECTING':
-      return 'connecting';
-    default:
-      return 'disconnected';
-  }
-}
-
-// Update channel status in database
-async function updateChannelStatus(supabaseClient: any, instanceName: string, status: string, number?: string) {
-  try {
-    const updateData: any = {
-      status,
-      last_state_at: new Date().toISOString()
-    };
-
-    if (number) {
-      updateData.number = number;
-    }
-
-    const { error } = await supabaseClient
-      .from('channels')
-      .update(updateData)
-      .eq('instance', instanceName);
-
-    if (error) {
-      console.error('Error updating channel status:', error);
-    } else {
-      console.log(`📊 Channel status updated: ${instanceName} -> ${status}`);
-    }
-  } catch (error) {
-    console.error('Error in updateChannelStatus:', error);
-  }
-}
-
-async function logEvent(
-  supabase: any, 
-  connectionId: string | null, 
-  correlationId: string, 
-  eventType: string, 
-  level: string, 
-  message: string, 
-  metadata: any = {}
-) {
-  try {
-    await supabase.from('provider_logs').insert({
-      connection_id: connectionId,
-      correlation_id: correlationId,
-      event_type: eventType,
-      level,
-      message,
-      metadata
-    });
-  } catch (error) {
-    console.error('Failed to log event:', error);
-  }
-}
-
-// RESTAURADO: função para processar mensagens com foco em contatos corretos
-async function processMessage(supabase: any, workspaceId: string, connectionId: string, messageData: any, correlationId: string) {
-  try {
-    const { key, message, messageTimestamp } = messageData;
-    
-    // VALIDAÇÃO: pular mensagens enviadas por nós ou sem remetente
-    if (!key?.remoteJid || key.fromMe) {
-      console.log(`⏭️ [${correlationId}] Skipping message: fromMe=${key.fromMe}, remoteJid=${key?.remoteJid}`);
-      return;
-    }
-
-    // CRÍTICO: usar SEMPRE o número de quem ENVIOU a mensagem (remoteJid)
-    // NUNCA usar o número da instância como contato
-    const remoteJid = key.remoteJid;
-    const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
-    const contactName = message.pushName || `Contato ${senderPhone}`;
-
-    console.log(`📞 [${correlationId}] Processing message for contact:`, { 
-      remoteJid, 
-      senderPhone, 
-      contactName, 
-      workspaceId, 
-      fromMe: key.fromMe 
-    });
-
-    // Criar/atualizar contato usando o número do REMETENTE
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .upsert({
-        phone: senderPhone,
-        name: contactName,
-        workspace_id: workspaceId
-      }, {
-        onConflict: 'phone,workspace_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
-
-    if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
-      await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
-        'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
-      return;
-    }
-
-    console.log(`👤 [${correlationId}] Contact resolved: ${contact?.id} - ${contactName}`);
-
-    // Criar/atualizar conversa
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .upsert({
-        contact_id: contact?.id,
-        connection_id: connectionId,
-        workspace_id: workspaceId,
-        status: 'open',
-        canal: 'whatsapp'
-      }, {
-        onConflict: 'contact_id,connection_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
-
-    if (conversationError) {
-      await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
-        'Failed to upsert conversation', { error: conversationError, workspaceId });
-      return;
-    }
-
-    console.log(`💬 [${correlationId}] Conversation resolved: ${conversation?.id}`);
-
-    // Processar conteúdo da mensagem
-    let content = '';
-    let messageType = 'text';
-    let fileUrl = null;
-    let fileName = null;
-    let mimeType = null;
-
-    if (message.conversation) {
-      content = message.conversation;
-    } else if (message.extendedTextMessage?.text) {
-      content = message.extendedTextMessage.text;
-    } else if (message.imageMessage) {
-      messageType = 'image';
-      content = message.imageMessage.caption || '📷 Imagem';
-      mimeType = message.imageMessage.mimetype;
-      fileName = `image_${Date.now()}.jpg`;
-      fileUrl = message.imageMessage.url;
-    } else if (message.videoMessage) {
-      messageType = 'video';
-      content = message.videoMessage.caption || '🎥 Vídeo';
-      mimeType = message.videoMessage.mimetype;
-      fileName = `video_${Date.now()}.mp4`;
-      fileUrl = message.videoMessage.url;
-    } else if (message.audioMessage) {
-      messageType = 'audio';
-      content = '🎵 Áudio';
-      mimeType = message.audioMessage.mimetype;
-      fileName = `audio_${Date.now()}.ogg`;
-      fileUrl = message.audioMessage.url;
-    } else if (message.documentMessage) {
-      messageType = 'document';
-      content = message.documentMessage.caption || `📄 ${message.documentMessage.fileName || 'Documento'}`;
-      mimeType = message.documentMessage.mimetype;
-      fileName = message.documentMessage.fileName || `document_${Date.now()}`;
-      fileUrl = message.documentMessage.url;
-    }
-
-    // Verificar duplicatas usando external_id
-    const { data: existingMessage } = await supabase
-      .from('messages')
-      .select('id')
-      .eq('external_id', key.id)
-      .single();
-
-    if (existingMessage) {
-      console.log(`⏭️ [${correlationId}] Message already exists: ${key.id}`);
-      return;
-    }
-
-    // Inserir mensagem
-    console.log(`💾 [${correlationId}] Inserting message:`, { 
-      conversationId: conversation.id, 
-      content: content.substring(0, 50), 
-      messageType, 
-      senderPhone 
-    });
-    
-    const { data: insertedMessage, error: messageError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversation.id,
-        workspace_id: workspaceId,
-        content,
-        message_type: messageType,
-        sender_type: 'contact',
-        file_url: fileUrl,
-        file_name: fileName,
-        mime_type: mimeType,
-        external_id: key.id,
-        status: 'received',
-        metadata: {
-          remote_jid: key.remoteJid,
-          participant: key.participant,
-          timestamp: messageTimestamp,
-          correlation_id: correlationId
-        }
-      })
-      .select()
-      .single();
-
-    if (messageError) {
-      console.error(`❌ [${correlationId}] Failed to insert message:`, messageError);
-      await logEvent(supabase, connectionId, correlationId, 'MESSAGE_INSERT_ERROR', 'error', 
-        'Failed to insert message', { error: messageError, workspaceId });
-    } else {
-      console.log(`✅ [${correlationId}] Message inserted successfully: ${insertedMessage?.id}`);
-      await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSED', 'info', 
-        'Message processed successfully', { messageType, senderPhone, workspaceId });
-    }
-
-  } catch (error) {
-    console.error(`❌ [${correlationId}] Error processing message:`, error);
-    await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSING_ERROR', 'error', 
-      'Error processing message', { error: error.message });
-  }
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -371,7 +136,6 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           status: 'webhook_active',
           timestamp: new Date().toISOString(),
-          n8n_configured: !!config.n8nWebhookUrl,
           verify_token_configured: !!config.evolutionVerifyToken,
           webhook_secret_configured: !!config.evolutionWebhookSecret,
           correlationId
@@ -453,151 +217,147 @@ serve(async (req) => {
       const { event, instance, data } = body;
 
       // Find connection and workspace by instance name
-      const { data: connection } = await supabaseClient
-        .from('connections')
-        .select('id, workspace_id')
-        .eq('instance_name', instance)
-        .single();
+      let workspaceId: string | null = null;
+      let connectionId: string | null = null;
 
-      if (connection) {
-        console.log(`🔗 [${correlationId}] Connection found: ${connection.id}, workspace: ${connection.workspace_id}`);
-        await logEvent(supabaseClient, connection.id, correlationId, 'WEBHOOK_RECEIVED', 'info', 
-          'Webhook received for connection', { event, instance, workspaceId: connection.workspace_id });
+      if (instance) {
+        const { data: connection } = await supabaseClient
+          .from('connections')
+          .select('id, workspace_id')
+          .eq('instance_name', instance)
+          .single();
 
-        switch (event) {
-          case 'qrcode.updated':
-          case 'QRCODE_UPDATED':
-            await supabaseClient
-              .from('connections')
-              .update({ 
-                status: 'qr',
-                qr_code: data.qrcode,
-                last_activity_at: new Date().toISOString()
-              })
-              .eq('id', connection.id);
+        if (connection) {
+          workspaceId = connection.workspace_id;
+          connectionId = connection.id;
+          console.log(`🔗 [${correlationId}] Connection found: ${connection.id}, workspace: ${connection.workspace_id}`);
+          
+          // Handle connection status updates only
+          switch (event) {
+            case 'qrcode.updated':
+            case 'QRCODE_UPDATED':
+              await supabaseClient
+                .from('connections')
+                .update({ 
+                  status: 'qr',
+                  qr_code: data.qrcode,
+                  last_activity_at: new Date().toISOString()
+                })
+                .eq('id', connection.id);
+              console.log(`✅ [${correlationId}] QR code updated`);
+              break;
 
-            await logEvent(supabaseClient, connection.id, correlationId, 'QR_CODE_UPDATED', 'info', 
-              'QR code updated');
-            break;
+            case 'connection.update':
+            case 'CONNECTION_UPDATE':
+              let status = 'disconnected';
+              let phoneNumber = null;
 
-          case 'connection.update':
-          case 'CONNECTION_UPDATE':
-            let status = 'disconnected';
-            let phoneNumber = null;
-
-            if (data.state === 'open') {
-              status = 'connected';
-              phoneNumber = data.user?.id?.replace('@s.whatsapp.net', '') || null;
-            } else if (data.state === 'connecting') {
-              status = 'connecting';
-            } else if (data.state === 'close') {
-              status = 'disconnected';
-            }
-
-            await supabaseClient
-              .from('connections')
-              .update({ 
-                status,
-                phone_number: phoneNumber,
-                last_activity_at: new Date().toISOString(),
-                qr_code: status === 'connected' ? null : undefined
-              })
-              .eq('id', connection.id);
-
-            await logEvent(supabaseClient, connection.id, correlationId, 'CONNECTION_STATUS_UPDATED', 'info', 
-              'Connection status updated', { status, phoneNumber });
-            break;
-
-          case 'messages.upsert':
-          case 'MESSAGES_UPSERT':
-            // RESTAURADO: processar mensagens localmente para garantir funcionamento
-            if (data.messages && Array.isArray(data.messages)) {
-              for (const messageData of data.messages) {
-                await processMessage(supabaseClient, connection.workspace_id, connection.id, messageData, correlationId);
+              if (data.state === 'open') {
+                status = 'connected';
+                phoneNumber = data.user?.id?.replace('@s.whatsapp.net', '') || null;
+              } else if (data.state === 'connecting') {
+                status = 'connecting';
+              } else if (data.state === 'close') {
+                status = 'disconnected';
               }
-            } else if (data.message) {
-              await processMessage(supabaseClient, connection.workspace_id, connection.id, data, correlationId);
-            }
-            break;
 
-          case 'send.message':
-          case 'SEND_MESSAGE':
-            await logEvent(supabaseClient, connection.id, correlationId, 'MESSAGE_SENT', 'info', 
-              'Message sent event received', { messageId: data.key?.id });
-            break;
-
-          default:
-            await logEvent(supabaseClient, connection.id, correlationId, 'UNKNOWN_EVENT', 'warn', 
-              'Unknown webhook event received', { event, data });
-        }
-      } else {
-        console.log(`⚠️ [${correlationId}] No connection found for instance: ${instance}`);
-        await logEvent(supabaseClient, null, correlationId, 'CONNECTION_NOT_FOUND', 'warn', 
-          'No connection found for instance', { instance });
-      }
-
-      // Handle legacy channel updates for backwards compatibility
-      if (body.event && body.instance) {
-        if (body.event === 'connection.update' || body.event === 'CONNECTION_UPDATE') {
-          const state = body.data?.state || body.state;
-          if (state) {
-            const channelStatus = mapEvolutionStateToStatus(state);
-            await updateChannelStatus(supabaseClient, body.instance, channelStatus);
+              await supabaseClient
+                .from('connections')
+                .update({ 
+                  status,
+                  phone_number: phoneNumber,
+                  last_activity_at: new Date().toISOString()
+                })
+                .eq('id', connection.id);
+              console.log(`✅ [${correlationId}] Connection status updated: ${status}`);
+              break;
           }
-        } else if (body.event === 'qrcode.updated' || body.event === 'QRCODE_UPDATED') {
-          await updateChannelStatus(supabaseClient, body.instance, 'connecting');
-        } else if (body.event === 'logout.instance') {
-          await updateChannelStatus(supabaseClient, body.instance, 'disconnected');
         }
       }
 
-      // Forward to n8n se configurado (não obrigatório)
-      if (config.n8nWebhookUrl) {
-        try {
-          const sanitizedData = sanitizeWebhookData(body);
-          
-          const forwardPayload = { 
-            source: 'evolution-webhook',
-            metadata: { ...metadata, correlationId },
-            data: sanitizedData,
-            timestamp: metadata.timestamp
-          };
-          
-          console.log(`🔄 [${correlationId}] Sending to n8n:`, {
-            url: config.n8nWebhookUrl.substring(0, 50) + '...',
-            event: metadata.event,
-            instance: metadata.instance
-          });
-          
-          const fRes = await fetch(config.n8nWebhookUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(forwardPayload),
-          });
-          
-          const fText = await fRes.text();
-          const success = fRes.ok;
-          
-          console.log(`➡️ [${correlationId}] n8n Response:`, {
-            status: fRes.status,
-            ok: success,
-            response: success ? 'SUCCESS' : fText.substring(0, 200)
-          });
-          
-        } catch (forwardErr) {
-          console.error(`❌ [${correlationId}] Error forwarding to n8n:`, {
-            error: forwardErr.message,
-            url: config.n8nWebhookUrl.substring(0, 50) + '...'
-          });
-        }
+      if (!workspaceId) {
+        console.log(`⚠️ [${correlationId}] No workspace found for instance: ${metadata.instance}`);
+        return new Response(JSON.stringify({ 
+          ok: true, 
+          forwarded: false, 
+          processed: false,
+          note: 'no workspace found',
+          metadata: metadata
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      return new Response(JSON.stringify({ 
-        success: true,
-        correlationId 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // Get workspace-specific webhook URL instead of global
+      const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${workspaceId}`;
+      
+      const { data: webhookData, error: webhookError } = await supabaseClient
+        .from('workspace_webhook_secrets')
+        .select('webhook_url')
+        .eq('workspace_id', workspaceId)
+        .eq('secret_name', workspaceWebhookSecretName)
+        .maybeSingle();
+
+      const workspaceWebhookUrl = webhookData?.webhook_url;
+
+      if (!workspaceWebhookUrl) {
+        console.log(`⚠️ [${correlationId}] No workspace webhook configured for ${workspaceId}`);
+        return new Response(JSON.stringify({ 
+          ok: true, 
+          forwarded: false, 
+          processed: false,
+          note: 'no workspace webhook configured',
+          metadata: metadata
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Forward to workspace-specific N8N webhook only (no local processing)
+      try {
+        console.log(`📤 [${correlationId}] Forwarding to workspace webhook: ${workspaceWebhookUrl.substring(0, 50)}...`);
+        
+        // Sanitizar dados antes de enviar
+        const sanitizedData = sanitizeWebhookData(body);
+        
+        const forwardPayload = { 
+          source: 'evolution-webhook',
+          metadata: metadata,
+          data: sanitizedData,
+          timestamp: metadata.timestamp,
+          workspaceId,
+          connectionId
+        };
+        
+        const fRes = await fetch(workspaceWebhookUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(forwardPayload),
+        });
+        
+        const fText = await fRes.text();
+        console.log(`📨 [${correlationId}] Workspace webhook response: ${fRes.status} ${fRes.ok ? 'SUCCESS' : fText}`);
+        
+        return new Response(JSON.stringify({ 
+          ok: true, 
+          forwarded: fRes.ok,
+          processed: true,
+          metadata: metadata
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (forwardErr) {
+        console.error(`❌ [${correlationId}] Error forwarding to workspace webhook:`, forwardErr.message);
+        return new Response(JSON.stringify({ 
+          ok: true, 
+          forwarded: false, 
+          processed: false,
+          error: forwardErr.message,
+          metadata: metadata
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });

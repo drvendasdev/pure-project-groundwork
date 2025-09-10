@@ -4,316 +4,235 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-// Configuration function
-function getConfig() {
-  const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
-  const evolutionVerifyToken = Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'evolution-webhook-token';
-  const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  
-  return {
-    evolutionWebhookSecret,
-    evolutionVerifyToken,
-    n8nWebhookUrl,
-    supabaseUrl,
-    supabaseServiceRoleKey
-  };
-}
-
-// Função para sanitizar dados removendo campos grandes que causam problemas de memória
-function sanitizeWebhookData(data: any) {
-  // Criar cópia dos dados sem os campos problemáticos
-  const sanitized = JSON.parse(JSON.stringify(data));
-  
-  // Remover campos base64 grandes que causam memory overflow
-  if (sanitized.data?.message) {
-    const msg = sanitized.data.message;
-    
-    // Remover base64 de todos os tipos de mídia
-    ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].forEach(type => {
-      if (msg[type]?.base64) {
-        delete msg[type].base64;
-      }
-      if (msg[type]?.jpegThumbnail) {
-        // Manter apenas info se é thumbnail pequeno
-        if (typeof msg[type].jpegThumbnail === 'string' && msg[type].jpegThumbnail.length > 1000) {
-          msg[type].jpegThumbnail = '[REMOVED_LARGE_THUMBNAIL]';
-        }
-      }
-    });
-  }
-  
-  return sanitized;
-}
-
-// Função para extrair metadados essenciais
-function extractMetadata(data: any) {
-  const metadata = {
-    event: data.event,
-    instance: data.instance || data.instanceName,
-    timestamp: new Date().toISOString(),
-    messageType: 'unknown',
-    hasMedia: false,
-    contactPhone: null,
-    messageId: null,
-    fromMe: false,
-    remoteJid: null,
-    phoneNumber: null
-  };
-
-  if (data.data) {
-    // Extrair info da chave
-    if (data.data.key) {
-      metadata.messageId = data.data.key.id;
-      metadata.fromMe = data.data.key.fromMe || false;
-      
-      if (data.data.key.remoteJid) {
-        metadata.remoteJid = data.data.key.remoteJid;
-        metadata.phoneNumber = data.data.key.remoteJid.replace('@s.whatsapp.net', '');
-        metadata.contactPhone = metadata.phoneNumber.substring(0, 8) + '***';
-      }
-    }
-
-    // Determinar tipo de mensagem
-    if (data.data.message) {
-      const msg = data.data.message;
-      
-      if (msg.conversation) {
-        metadata.messageType = 'text';
-      } else if (msg.imageMessage) {
-        metadata.messageType = 'image';
-        metadata.hasMedia = true;
-      } else if (msg.videoMessage) {
-        metadata.messageType = 'video';
-        metadata.hasMedia = true;
-      } else if (msg.audioMessage) {
-        metadata.messageType = 'audio';
-        metadata.hasMedia = true;
-      } else if (msg.documentMessage) {
-        metadata.messageType = 'document';
-        metadata.hasMedia = true;
-      } else if (msg.stickerMessage) {
-        metadata.messageType = 'sticker';
-        metadata.hasMedia = true;
-      } else if (msg.locationMessage) {
-        metadata.messageType = 'location';
-      } else if (msg.contactMessage) {
-        metadata.messageType = 'contact';
-      }
-    }
-  }
-
-  return metadata;
-}
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const requestId = `webhook_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  
   try {
-    // Generate correlation ID for request tracking
-    const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID();
-    const config = getConfig();
+    console.log(`🎣 [${requestId}] WhatsApp Webhook recebido`);
     
-    // Initialize Supabase client
-    const supabase = createClient(
-      config.supabaseUrl ?? '',
-      config.supabaseServiceRoleKey ?? ''
-    );
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    if (req.method === 'GET') {
-      const url = new URL(req.url);
-      const mode = url.searchParams.get('hub.mode');
-      const token = url.searchParams.get('hub.verify_token') || url.searchParams.get('token');
-      const challenge = url.searchParams.get('hub.challenge');
-      const test = url.searchParams.get('test');
-
-      // Test endpoint for troubleshooting
-      if (test === 'true') {
-        console.log('🧪 Test endpoint called', { correlationId });
-        return new Response(JSON.stringify({
-          status: 'webhook_active',
-          timestamp: new Date().toISOString(),
-          n8n_configured: !!config.n8nWebhookUrl,
-          verify_token_configured: !!config.evolutionVerifyToken,
-          webhook_secret_configured: !!config.evolutionWebhookSecret,
-          correlationId
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    // Parse request body
+    let body = {};
+    const contentLength = req.headers.get('content-length');
+    
+    if (contentLength && contentLength !== '0') {
+      const rawBody = await req.text();
+      console.log(`📋 [${requestId}] Raw body:`, rawBody);
+      
+      try {
+        body = JSON.parse(rawBody);
+      } catch (parseError) {
+        console.log(`⚠️ [${requestId}] Falha ao parsear JSON, usando objeto vazio`);
+        body = {};
       }
-
-      // Webhook verification for Evolution API or simple token validation
-      if (mode === 'subscribe' && token === config.evolutionVerifyToken) {
-        console.log('✅ Webhook verified', { correlationId });
-        return new Response(challenge, { status: 200 });
-      } else if (token && token === config.evolutionWebhookSecret) {
-        console.log('✅ Token validated', { correlationId });
-        return new Response('OK', { status: 200 });
-      } else {
-        console.log('❌ Webhook verification failed', { 
-          correlationId, 
-          mode, 
-          tokenProvided: !!token
-        });
-        return new Response('Forbidden', { status: 403 });
-      }
+    } else {
+      console.log(`📭 [${requestId}] Request vazio - usando objeto vazio`);
     }
 
-    if (req.method === 'POST') {
-      // Get token from URL or Authorization header
-      const url = new URL(req.url);
-      const urlToken = url.searchParams.get('token');
-      const authHeader = req.headers.get('authorization');
-      
-      let isAuthorized = false;
-      
-      // Check URL token
-      if (urlToken && urlToken === config.evolutionWebhookSecret) {
-        isAuthorized = true;
-      }
-      
-      // Check Authorization header
-      if (!isAuthorized && config.evolutionWebhookSecret) {
-        const expectedAuth = `Bearer ${config.evolutionWebhookSecret}`;
-        if (authHeader === expectedAuth) {
-          isAuthorized = true;
-        }
-      }
-      
-      if (config.evolutionWebhookSecret && !isAuthorized) {
-        console.log('❌ Webhook authorization failed', { 
-          correlationId, 
-          hasAuth: !!authHeader,
-          hasUrlToken: !!urlToken
-        });
-        return new Response(JSON.stringify({ 
-          error: 'Unauthorized',
-          correlationId 
-        }), { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        });
-      }
+    console.log(`📨 [${requestId}] Payload:`, JSON.stringify(body, null, 2));
 
-      const body = await req.json();
-      
-      // Extract metadata for logging
-      const metadata = extractMetadata(body);
-      console.log('📥 Webhook recebido:', {
-        correlationId,
-        event: metadata.event,
-        instance: metadata.instance,
-        messageType: metadata.messageType,
-        hasMedia: metadata.hasMedia,
-        remoteJid: metadata.remoteJid,
-        phoneNumber: metadata.phoneNumber,
-        contactPhone: metadata.contactPhone,
-        messageId: metadata.messageId,
-        fromMe: metadata.fromMe
+    // Extrair dados básicos do payload
+    const { instance, status, sender, message, phoneNumber, external_id, data } = body as any;
+    
+    console.log(`🔍 [${requestId}] Full payload structure:`, {
+      instance,
+      sender,
+      phoneNumber,
+      data: data ? Object.keys(data) : null,
+      messageExists: !!message
+    });
+
+    // Extrair remoteJid do payload corretamente
+    let remoteJid = null;
+    let messageContent = null;
+    
+    // Tentar extrair do data.key.remoteJid (formato padrão Evolution)
+    if (data && data.key && data.key.remoteJid) {
+      remoteJid = data.key.remoteJid;
+      messageContent = data.message?.conversation || message;
+      console.log(`📱 [${requestId}] Extraído do data.key.remoteJid: ${remoteJid}`);
+    }
+    // Fallback para sender se vier formatado como WhatsApp ID
+    else if (sender && sender.includes('@s.whatsapp.net')) {
+      remoteJid = sender;
+      messageContent = message;
+      console.log(`📱 [${requestId}] Usando sender como remoteJid: ${remoteJid}`);
+    }
+    
+    // Se não temos dados mínimos, retornar ok mas logar
+    if (!instance || !remoteJid || !messageContent) {
+      console.log(`⚠️ [${requestId}] Payload vazio ou incompleto - retornando OK`);
+      console.log(`⚠️ [${requestId}] Debug: instance=${instance}, remoteJid=${remoteJid}, messageContent=${messageContent}`);
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Webhook received but no actionable data',
+        requestId,
+        debug: { instance, remoteJid, messageContent, sender, data: data ? Object.keys(data) : null }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
 
-      const { event, instance, data } = body;
+    // Extrair número do contato do remoteJid
+    let finalPhoneNumber = null;
+    
+    console.log(`🔍 [${requestId}] Processing remoteJid:`, {
+      remoteJid,
+      messageContent,
+      instance,
+      isWhatsAppFormat: remoteJid.includes('@s.whatsapp.net')
+    });
+    
+    // CRÍTICO: Extrair número apenas do remoteJid (contato real)
+    if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
+      finalPhoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+      console.log(`📱 [${requestId}] Extracted contact number: ${remoteJid} -> ${finalPhoneNumber}`);
+    } else {
+      console.error(`❌ [${requestId}] REJEITADO: remoteJid inválido: ${remoteJid}`);
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Ignored - invalid remoteJid format',
+        requestId,
+        debug: { remoteJid, sender, instance }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    const finalInstance = instance;
+    const finalMessage = messageContent;
 
-      // Find connection and workspace by instance name
-      let workspaceId: string | null = null;
-      let connectionId: string | null = null;
+    console.log(`📱 [${requestId}] Dados extraídos:`, {
+      phoneNumber: finalPhoneNumber,
+      instance: finalInstance,
+      message: finalMessage,
+      status
+    });
 
-      if (instance) {
-        const { data: connection } = await supabase
-          .from('connections')
-          .select('id, workspace_id')
-          .eq('instance_name', instance)
-          .single();
+    // Se temos uma mensagem de entrada (do contato)
+    if (finalPhoneNumber && finalInstance && finalMessage) {
+      console.log(`💬 [${requestId}] Processando mensagem de entrada - APENAS ENVIO PARA WORKSPACE WEBHOOK`);
 
-        if (connection) {
-          workspaceId = connection.workspace_id;
-          connectionId = connection.id;
-        }
-      }
+      // 1. Buscar conexão para validação básica
+      const { data: connection } = await supabase
+        .from('connections')
+        .select('id, workspace_id, phone_number')
+        .eq('instance_name', finalInstance)
+        .single();
 
-      if (!workspaceId) {
-        console.log('⚠️ No workspace found for instance:', metadata.instance);
-      } else {
-        console.log('🏢 Workspace resolved:', { workspaceId, connectionId, instance: metadata.instance });
-
-        // REMOVIDO: não processar mensagens localmente - deixar apenas para o N8N
-        console.log(`📱 [${correlationId}] Message event received - will be forwarded to N8N only`);
-        if (body.data && (body.event === 'messages.upsert' || body.event === 'MESSAGES_UPSERT')) {
-          console.log(`📊 [${correlationId}] Message count: ${body.data.messages?.length || (body.data.message ? 1 : 0)}`);
-        }
-      }
-
-      // Forward to n8n (mantém funcionalidade existente)
-      const n8nUrl = config.n8nWebhookUrl;
-      if (n8nUrl) {
-        try {
-          // Sanitizar dados antes de enviar
-          const sanitizedData = sanitizeWebhookData(body);
-          
-          const forwardPayload = { 
-            source: 'whatsapp-webhook',
-            metadata: metadata,
-            data: sanitizedData,
-            timestamp: metadata.timestamp,
-            workspaceId,
-            connectionId
-          };
-          
-          const fRes = await fetch(n8nUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(forwardPayload),
-          });
-          
-          const fText = await fRes.text();
-          console.log('➡️ Forwarded to n8n:', fRes.status, fRes.ok ? 'SUCCESS' : fText);
-          
-          return new Response(JSON.stringify({ 
-            ok: true, 
-            forwarded: fRes.ok,
-            processed: !!workspaceId,
-            metadata: metadata
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } catch (forwardErr) {
-          console.error('❌ Error forwarding to n8n:', forwardErr.message);
-          return new Response(JSON.stringify({ 
-            ok: true, 
-            forwarded: false, 
-            processed: !!workspaceId,
-            error: forwardErr.message,
-            metadata: metadata
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-      } else {
-        console.log('⚠️ N8N_WEBHOOK_URL not configured');
+      if (!connection) {
+        console.error(`❌ [${requestId}] Conexão não encontrada para instância: ${finalInstance}`);
         return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: false, 
-          processed: !!workspaceId,
-          note: 'n8n not configured',
-          metadata: metadata
+          error: 'Connection not found',
+          instance: finalInstance 
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`✅ [${requestId}] Conexão encontrada:`, connection.id);
+
+      // PROTEÇÃO: Verificar se o número do contato não é o número da instância
+      const instancePhoneClean = connection.phone_number?.replace(/\D/g, '');
+      if (instancePhoneClean && finalPhoneNumber === instancePhoneClean) {
+        console.error(`❌ [${requestId}] BLOQUEADO: Tentativa de usar número da instância (${instancePhoneClean}) como contato`);
+        return new Response(JSON.stringify({ 
+          error: 'Instance phone number cannot be used as contact',
+          instance_phone: instancePhoneClean,
+          received_phone: finalPhoneNumber
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 2. Get workspace-specific webhook URL
+      const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${connection.workspace_id}`;
+      
+      const { data: webhookData, error: webhookError } = await supabase
+        .from('workspace_webhook_secrets')
+        .select('webhook_url')
+        .eq('workspace_id', connection.workspace_id)
+        .eq('secret_name', workspaceWebhookSecretName)
+        .maybeSingle();
+
+      const workspaceWebhookUrl = webhookData?.webhook_url;
+
+      if (!workspaceWebhookUrl) {
+        console.log(`⚠️ [${requestId}] No workspace webhook configured for ${connection.workspace_id}`);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'No workspace webhook configured',
+          requestId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      // 3. APENAS ENVIAR PARA WEBHOOK DO WORKSPACE - SEM SALVAR NO BANCO
+      try {
+        console.log(`📤 [${requestId}] Enviando para workspace webhook: ${workspaceWebhookUrl.substring(0, 50)}...`);
+        
+        const n8nPayload = {
+          ...body,
+          workspace_id: connection.workspace_id,
+          connection_id: connection.id,
+          processed_at: new Date().toISOString(),
+          source: 'whatsapp-webhook'
+        };
+
+        const response = await fetch(workspaceWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        if (response.ok) {
+          console.log(`✅ [${requestId}] Workspace webhook success - no local processing`);
+        } else {
+          console.error(`❌ [${requestId}] Workspace webhook failed:`, response.status);
+        }
+      } catch (n8nError) {
+        console.error(`❌ [${requestId}] Workspace webhook error:`, n8nError);
+      }
     }
 
-    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
-  } catch (error) {
-    const correlationId = crypto.randomUUID();
-    console.error('❌ Error in webhook:', { correlationId, error: error.message });
     return new Response(JSON.stringify({ 
-      error: error.message,
-      correlationId 
+      success: true,
+      message: 'Webhook processed successfully',
+      requestId
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error(`❌ [${requestId}] Erro geral:`, error);
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error',
+      requestId,
+      details: error.message 
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
