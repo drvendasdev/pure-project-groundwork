@@ -155,7 +155,8 @@ serve(async (req) => {
   
   // VALIDAÇÃO CRÍTICA: Verificar se phoneNumber não é o número da instância
   if (phoneNumber && evolutionInstance && phoneNumber === evolutionInstance) {
-    console.error(`❌ [${requestId}] ERRO CRÍTICO: Tentativa de usar número da instância (${evolutionInstance}) como contato! Ignorando.`);
+    console.warn(`⚠️ [${requestId}] Detectado número da instância (${evolutionInstance}) como contato. Mensagem será enviada ao N8N mas contato não será criado.`);
+    // Definir phoneNumber como null para evitar criação de contato incorreto, mas continuar processamento
     phoneNumber = null;
   }
   
@@ -276,12 +277,13 @@ serve(async (req) => {
     base64Data: !!base64Data
   });
 
-    // Validações mínimas
-    if (!conversationId && !phoneNumber) {
-      console.error(`❌ [${requestId}] Missing required identifiers`);
+    // CORRIGIDO: Permitir processamento N8N mesmo sem phoneNumber válido
+    // Validações mínimas - não bloquear N8N se só falta phoneNumber
+    if (!conversationId && !phoneNumber && !isEvolutionEvent) {
+      console.error(`❌ [${requestId}] Missing required identifiers for non-Evolution event`);
       return new Response(JSON.stringify({
         code: 'MISSING_IDENTIFIERS',
-        message: 'Either conversation_id or phone_number is required',
+        message: 'Either conversation_id or phone_number is required for non-Evolution events',
         requestId
       }), {
         status: 400,
@@ -755,8 +757,9 @@ serve(async (req) => {
       console.log(`⚠️ [${requestId}] Skipping message insertion - no valid content found`);
     }
 
-    // Encaminhar para N8N usando webhook específico do workspace
-    console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
+    // SEMPRE enviar para N8N, mesmo se não conseguirmos criar mensagem/contato
+    console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId} (hasContent: ${hasContentNow}, phoneNumber: ${phoneNumber || 'null'})`);
+    
     
     // Buscar webhook URL específico do workspace na tabela
     const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${workspaceId}`;
