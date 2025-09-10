@@ -985,7 +985,6 @@ serve(async (req) => {
       method: 'database_only',
       messageId: newMessage?.id,
       conversationId: finalConversationId,
-      contactId: contactResult?.id,
       workspaceId: workspaceId,
       requestId
     }), {
