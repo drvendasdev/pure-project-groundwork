@@ -637,6 +637,25 @@ serve(async (req) => {
 
           finalConversationId = existingConv.id;
           console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
+        } else if (senderType === "agent") {
+          // Para mensagens de agente, tentar encontrar qualquer conversa ativa no workspace
+          console.log(`🔍 [${requestId}] Trying to find active conversation for agent message`);
+          
+          const { data: lastConv, error: findLastConvError } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('workspace_id', workspaceId)
+            .eq('status', 'open')
+            .order('last_activity_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!findLastConvError && lastConv) {
+            finalConversationId = lastConv.id;
+            console.log(`✅ [${requestId}] Using last active conversation for agent: ${finalConversationId}`);
+          } else {
+            console.warn(`⚠️ [${requestId}] No active conversation found for agent message`);
+          }
         } else {
           console.log(`⚠️ [${requestId}] No contact available - proceeding without conversation creation`);
         }
@@ -655,16 +674,22 @@ serve(async (req) => {
       }
     }
 
-    if (!finalConversationId) {
-      console.error(`❌ [${requestId}] Could not resolve conversation_id`);
+    // Validação final de conversation_id apenas para mensagens de contato
+    if (!finalConversationId && senderType === "contact") {
+      console.error(`❌ [${requestId}] Could not resolve conversation_id for contact message`);
       return new Response(JSON.stringify({
         code: 'CONVERSATION_RESOLUTION_FAILED',
-        message: 'Could not create or find conversation',
+        message: 'Could not create or find conversation for contact',
         requestId
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    }
+
+    // Para mensagens de agente sem conversa, vamos continuar o processamento
+    if (!finalConversationId && senderType === "agent") {
+      console.warn(`⚠️ [${requestId}] Agent message without conversation - will skip message creation but allow N8N processing`);
     }
 
     // Preparar conteúdo final e payload para N8N
@@ -674,8 +699,8 @@ serve(async (req) => {
     // CORRIGIDO: Recalcular hasValidContent após possível placeholder
     const hasContentNow = !!(finalContent || fileUrl || base64Data);
 
-    // Insert message if we have content (including placeholder content)
-    if (hasContentNow) {
+    // Insert message if we have content and conversation_id
+    if (hasContentNow && finalConversationId) {
       // Inserir mensagem com idempotência (usando external_id se fornecido)
       const messagePayload: any = {
         conversation_id: finalConversationId,
