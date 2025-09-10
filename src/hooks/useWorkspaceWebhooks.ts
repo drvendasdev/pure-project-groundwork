@@ -75,11 +75,8 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
       if (secretError) {
         console.error('Error saving webhook secret:', secretError);
-        toast({
-          title: "Aviso",
-          description: "Configuração salva, mas houve problema ao criar o secret automático",
-          variant: "destructive",
-        });
+        // Secret error is not critical - main config is saved
+        console.warn('Webhook URL saved but automatic secret creation failed');
       }
 
       setWebhookConfig(data);
