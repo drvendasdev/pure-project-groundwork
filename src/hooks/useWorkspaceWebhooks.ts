@@ -24,6 +24,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
       if (error) throw error;
       
+      console.log('Webhook config fetched:', data); // Debug log
       setWebhookConfig(data);
     } catch (error) {
       console.error('Error fetching webhook config:', error);
@@ -381,6 +382,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     fetchWebhookLogs,
     getAppliedCount,
     getFilteredInstances,
-    refetch: fetchWebhookConfig
+    refetch: fetchWebhookConfig,
+    refreshConfig: fetchWebhookConfig // Added this for explicit refresh
   };
 };

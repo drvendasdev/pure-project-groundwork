@@ -45,10 +45,11 @@ export function WebhooksEvolutionConfig() {
     testWebhook,
     fetchWebhookLogs,
     getAppliedCount,
-    getFilteredInstances
+    getFilteredInstances,
+    refreshConfig
   } = useWorkspaceWebhooks(workspaceId);
 
-  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState(webhookConfig?.webhook_url || "");
   const [showSecret, setShowSecret] = useState(false);
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -62,8 +63,12 @@ export function WebhooksEvolutionConfig() {
 
   // Sync webhookUrl with config when it loads
   useEffect(() => {
+    console.log('WebhookConfig changed:', webhookConfig); // Debug log
     if (webhookConfig?.webhook_url) {
+      console.log('Setting webhookUrl to:', webhookConfig.webhook_url); // Debug log
       setWebhookUrl(webhookConfig.webhook_url);
+    } else {
+      console.log('No webhook_url found in config'); // Debug log
     }
   }, [webhookConfig]);
 
@@ -206,6 +211,15 @@ export function WebhooksEvolutionConfig() {
                 >
                   {isLoading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
                   Salvar Padrão
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  onClick={refreshConfig}
+                  disabled={isLoading}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  Recarregar
                 </Button>
                 
                 <Button 
