@@ -51,53 +51,76 @@ serve(async (req) => {
     console.log(`📨 [${requestId}] Payload:`, JSON.stringify(body, null, 2));
 
     // Extrair dados básicos do payload
-    const { instance, status, sender, message, phoneNumber, external_id } = body as any;
+    const { instance, status, sender, message, phoneNumber, external_id, data } = body as any;
+    
+    console.log(`🔍 [${requestId}] Full payload structure:`, {
+      instance,
+      sender,
+      phoneNumber,
+      data: data ? Object.keys(data) : null,
+      messageExists: !!message
+    });
+
+    // Extrair remoteJid do payload corretamente
+    let remoteJid = null;
+    let messageContent = null;
+    
+    // Tentar extrair do data.key.remoteJid (formato padrão Evolution)
+    if (data && data.key && data.key.remoteJid) {
+      remoteJid = data.key.remoteJid;
+      messageContent = data.message?.conversation || message;
+      console.log(`📱 [${requestId}] Extraído do data.key.remoteJid: ${remoteJid}`);
+    }
+    // Fallback para sender se vier formatado como WhatsApp ID
+    else if (sender && sender.includes('@s.whatsapp.net')) {
+      remoteJid = sender;
+      messageContent = message;
+      console.log(`📱 [${requestId}] Usando sender como remoteJid: ${remoteJid}`);
+    }
     
     // Se não temos dados mínimos, retornar ok mas logar
-    if (!instance && !phoneNumber && !sender && !message) {
+    if (!instance || !remoteJid || !messageContent) {
       console.log(`⚠️ [${requestId}] Payload vazio ou incompleto - retornando OK`);
+      console.log(`⚠️ [${requestId}] Debug: instance=${instance}, remoteJid=${remoteJid}, messageContent=${messageContent}`);
       return new Response(JSON.stringify({ 
         success: true, 
         message: 'Webhook received but no actionable data',
-        requestId 
+        requestId,
+        debug: { instance, remoteJid, messageContent, sender, data: data ? Object.keys(data) : null }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // CORRIGIDO: APENAS usar sender (remoteJid) - NUNCA phoneNumber do payload
+    // Extrair número do contato do remoteJid
     let finalPhoneNumber = null;
     
-    console.log(`🔍 [${requestId}] Raw payload fields:`, {
-      sender,
-      message,
+    console.log(`🔍 [${requestId}] Processing remoteJid:`, {
+      remoteJid,
+      messageContent,
       instance,
-      phoneNumber_IGNORADO: phoneNumber, // Mostrar mas ignorar
-      hasSender: !!sender,
-      senderType: typeof sender
+      isWhatsAppFormat: remoteJid.includes('@s.whatsapp.net')
     });
     
-    // CRÍTICO: APENAS sender (remoteJid) - é o contato real
-    if (sender && sender.includes('@s.whatsapp.net')) {
-      finalPhoneNumber = sender.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-      console.log(`📱 [${requestId}] Using sender (contact): ${sender} -> ${finalPhoneNumber}`);
+    // CRÍTICO: Extrair número apenas do remoteJid (contato real)
+    if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
+      finalPhoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+      console.log(`📱 [${requestId}] Extracted contact number: ${remoteJid} -> ${finalPhoneNumber}`);
     } else {
-      console.error(`❌ [${requestId}] REJEITADO: Não há sender válido de contato`);
-      console.error(`❌ [${requestId}] IGNORANDO phoneNumber=${phoneNumber} (pode ser da instância)`);
+      console.error(`❌ [${requestId}] REJEITADO: remoteJid inválido: ${remoteJid}`);
       
-      // Não processar se não temos sender válido
       return new Response(JSON.stringify({ 
         success: true, 
-        message: 'Ignored - no valid contact sender found',
+        message: 'Ignored - invalid remoteJid format',
         requestId,
-        debug: { phoneNumber_ignored: phoneNumber, sender, instance }
+        debug: { remoteJid, sender, instance }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
     
     const finalInstance = instance;
-    const finalMessage = message;
+    const finalMessage = messageContent;
 
     console.log(`📱 [${requestId}] Dados extraídos:`, {
       phoneNumber: finalPhoneNumber,
