@@ -229,9 +229,8 @@ export const useWhatsAppConversations = () => {
       let workspaceId = selectedWorkspace?.workspace_id;
       
       if (!workspaceId) {
-        // Fallback para workspace padrão se não há selecionado
-        workspaceId = "00000000-0000-0000-0000-000000000000";
-        console.warn('⚠️ Nenhum workspace selecionado, usando workspace padrão');
+        console.warn('⚠️ Nenhum workspace selecionado');
+        return;
       }
 
       // Montar payload conforme novo contrato da função (workspace_id é opcional)

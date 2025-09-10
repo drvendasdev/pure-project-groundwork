@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface Cliente {
   id: string;
@@ -48,6 +49,7 @@ interface Cliente {
 export function ParceirosClientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedWorkspace } = useWorkspace();
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -129,7 +131,7 @@ export function ParceirosClientes() {
         email: formData.email,
         telefone: formData.telefone,
         status: formData.status,
-        workspace_id: '00000000-0000-0000-0000-000000000000' // Default workspace_id
+        workspace_id: selectedWorkspace?.workspace_id
       };
 
       const { error } = await supabase

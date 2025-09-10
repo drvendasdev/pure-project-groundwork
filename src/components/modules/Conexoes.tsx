@@ -5,11 +5,15 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 export function Conexoes() {
   const { selectedWorkspace } = useWorkspace();
   
-  // Use selected workspace or fallback to default for backward compatibility
-  const workspaceId = selectedWorkspace?.workspace_id || '00000000-0000-0000-0000-000000000000';
+  // Only proceed if a workspace is selected
+  const workspaceId = selectedWorkspace?.workspace_id;
   
   console.log('🏢 Conexoes component - selectedWorkspace:', selectedWorkspace);
   console.log('🔑 Conexoes component - using workspaceId:', workspaceId);
+  
+  if (!workspaceId) {
+    return <div className="p-4 text-center text-muted-foreground">Selecione um workspace para continuar</div>;
+  }
   
   return <ConexoesNova workspaceId={workspaceId} />;
 }

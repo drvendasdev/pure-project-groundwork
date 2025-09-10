@@ -96,7 +96,11 @@ serve(async (req) => {
       } else {
         console.log('⚠️ MentorMaster sem workspace, acesso limitado');
         // Sem workspace selecionado, não vê nada
-        conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        // Return empty result if no workspace provided
+        return new Response(
+          JSON.stringify({ conversations: [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     } else if (userProfile.profile === 'admin') {
       // Admin: vê tudo do seu workspace
@@ -116,7 +120,11 @@ serve(async (req) => {
           conversationsQuery = conversationsQuery.eq('workspace_id', userWorkspace.workspace_id);
         } else {
           // Se não encontrar workspace, não vê nada
-          conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+          // Return empty result if no workspace provided
+          return new Response(
+            JSON.stringify({ conversations: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
       }
     } else {
@@ -143,7 +151,11 @@ serve(async (req) => {
           conversationsQuery = conversationsQuery.eq('workspace_id', userWorkspace.workspace_id);
         } else {
           // Se não encontrar workspace, não vê nada
-          conversationsQuery = conversationsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+          // Return empty result if no workspace provided
+          return new Response(
+            JSON.stringify({ conversations: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
       }
     }

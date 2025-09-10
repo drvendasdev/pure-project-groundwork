@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useTags } from "@/hooks/useTags";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface AdicionarTagModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
   const [isLoading, setIsLoading] = useState(false);
   const { tags } = useTags();
   const { toast } = useToast();
+  const { selectedWorkspace } = useWorkspace();
 
   // Buscar sugestões baseadas no input
   useEffect(() => {
@@ -64,7 +66,7 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
             .from('tags')
             .insert({ 
               name: tagName, 
-              workspace_id: '00000000-0000-0000-0000-000000000000' // Workspace fixo
+              workspace_id: selectedWorkspace?.workspace_id
             })
             .select()
             .single();

@@ -6,36 +6,28 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export function AdministracaoConfiguracoes() {
   const [connectionLimit, setConnectionLimit] = useState("1");
-  const [defaultOrgId, setDefaultOrgId] = useState("");
   const [loading, setLoading] = useState(false);
+  const { selectedWorkspace } = useWorkspace();
 
-  // Load default org ID and settings
+  // Load current settings for selected workspace
   useEffect(() => {
     const loadData = async () => {
+      if (!selectedWorkspace?.workspace_id) return;
+      
       try {
-        // Get the first available workspace as default
-        const { data: workspaceData } = await supabase
-          .from('workspaces')
-          .select('id')
-          .limit(1)
-          .maybeSingle();
-        
-        const orgId = workspaceData?.id || null;
-        setDefaultOrgId(orgId);
+        // Get workspace limits
+        const { data: limitsData } = await supabase
+          .from('workspace_limits')
+          .select('connection_limit')
+          .eq('workspace_id', selectedWorkspace.workspace_id)
+          .single();
 
-        // Get current settings
-        const { data } = await supabase.functions.invoke('manage-evolution-connections', {
-          body: {
-            action: 'get_settings',
-            orgId
-          }
-        });
-
-        if (data?.success && data.settings) {
-          setConnectionLimit(data.settings.connection_limit.toString());
+        if (limitsData) {
+          setConnectionLimit(limitsData.connection_limit.toString());
         }
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -43,26 +35,23 @@ export function AdministracaoConfiguracoes() {
     };
     
     loadData();
-  }, []);
+  }, [selectedWorkspace?.workspace_id]);
 
   const handleConnectionLimitChange = async (value: string) => {
-    if (!defaultOrgId) return;
+    if (!selectedWorkspace?.workspace_id) return;
 
     setLoading(true);
     try {
       const numericValue = value === "unlimited" ? 999 : parseInt(value);
       
-      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'set_connection_limit',
-          orgId: defaultOrgId,
-          connectionLimit: numericValue
-        }
-      });
+      const { error } = await supabase
+        .from('workspace_limits')
+        .upsert({
+          workspace_id: selectedWorkspace.workspace_id,
+          connection_limit: numericValue
+        });
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Erro ao atualizar limite');
-      }
+      if (error) throw error;
 
       setConnectionLimit(value);
       toast({
