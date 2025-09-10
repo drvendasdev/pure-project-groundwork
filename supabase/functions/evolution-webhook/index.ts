@@ -204,13 +204,20 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
+    // IMPORTANTE: Apenas processar mensagens recebidas (fromMe: false)
+    // Mensagens enviadas (fromMe: true) não devem criar contatos
+    if (!key?.remoteJid || key.fromMe) {
+      console.log('⏭️ Skipping message: no remoteJid or fromMe is true (sent message)');
+      return;
+    }
+    
     // CRÍTICO: usar SEMPRE o número de quem ENVIOU a mensagem (remoteJid)
     // NUNCA usar o número da instância como contato
     const remoteJid = key.remoteJid;
     const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || senderPhone;
 
-    console.log('📞 Processing message for contact:', { 
+    console.log('📞 Processing received message for contact:', { 
       remoteJid, 
       senderPhone, 
       contactName, 
