@@ -254,8 +254,11 @@ serve(async (req) => {
       });
     }
 
-    if (!hasValidContent) {
-      console.error(`❌ [${requestId}] Missing content`);
+    // Check if this is an Evolution webhook event (skip strict content validation for Evolution payloads)
+    const isEvolutionEvent = !!(payload.event || payload.instance || payload.data?.key?.remoteJid);
+    
+    if (!hasValidContent && !isEvolutionEvent) {
+      console.error(`❌ [${requestId}] Missing content for non-Evolution event`);
       return new Response(JSON.stringify({
         code: 'MISSING_CONTENT',
         message: 'Either response_message or valid file_url is required',
@@ -264,6 +267,11 @@ serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    }
+    
+    // For Evolution events without extractable content, log but continue processing
+    if (!hasValidContent && isEvolutionEvent) {
+      console.log(`⚠️ [${requestId}] Evolution event without extractable content - will forward to n8n but skip message recording`);
     }
 
     // Supabase client já inicializado no nível do módulo
@@ -618,93 +626,94 @@ serve(async (req) => {
       });
     }
 
-    // Preparar conteúdo final
+    // Preparar conteúdo final e payload para N8N
     const finalContent = responseMessage || generateContentForMedia(finalMessageType, fileName);
+    let newMessage = null;
 
-    // Inserir mensagem com idempotência (usando external_id se fornecido)
-    const messagePayload: any = {
-      conversation_id: finalConversationId,
-      workspace_id: workspaceId,
-      content: finalContent,
-      sender_type: senderType,
-      message_type: finalMessageType,
-      file_url: fileUrl,
-      file_name: fileName,
-      status: messageStatus,
-      origem_resposta: "automatica",
-      metadata: metadata ? { n8n_data: metadata, source: "n8n", requestId } : { source: "n8n", requestId },
-    };
+    // Only insert message if we have extractable content or if it's not an Evolution event
+    if (hasValidContent) {
+      // Inserir mensagem com idempotência (usando external_id se fornecido)
+      const messagePayload: any = {
+        conversation_id: finalConversationId,
+        workspace_id: workspaceId,
+        content: finalContent,
+        sender_type: senderType,
+        message_type: finalMessageType,
+        file_url: fileUrl,
+        file_name: fileName,
+        status: messageStatus,
+        origem_resposta: "automatica",
+        metadata: metadata ? { n8n_data: metadata, source: "n8n", requestId } : { source: "n8n", requestId },
+      };
 
-    if (externalId) {
-      messagePayload.external_id = externalId;
-    }
-
-    console.log(`💾 [${requestId}] Inserting message into conversation: ${finalConversationId}`);
-
-    const { data: newMessage, error: msgError } = await supabase
-      .from("messages")
-      .insert(messagePayload)
-      .select()
-      .single();
-
-    if (msgError) {
-      console.error(`❌ [${requestId}] Failed to insert message:`, {
-        error: msgError.message,
-        code: msgError.code,
-        hint: (msgError as any).hint,
-        details: (msgError as any).details,
-        payload: messagePayload
-      });
-      
-      // Se for erro de duplicata por external_id, retornar sucesso
-      if (msgError.code === '23505' && msgError.message.includes('external_id')) {
-        console.log(`ℹ️ [${requestId}] Duplicate message ignored (idempotent)`);
-        return new Response(JSON.stringify({
-          ok: true,
-          message: 'Message already processed (idempotent)',
-          requestId
-        }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+      if (externalId) {
+        messagePayload.external_id = externalId;
       }
-      
-      return new Response(JSON.stringify({
-        code: 'DATABASE_ERROR',
-        message: 'Failed to insert message',
-        details: msgError.message,
-        hint: (msgError as any).hint ?? (msgError as any).details ?? null,
-        requestId
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
 
-    // Atualizar conversa com lógica correta de unread_count
-    const conversationUpdate: any = {
-      last_activity_at: new Date().toISOString(),
-      last_message_at: new Date().toISOString(),
-    };
+      console.log(`💾 [${requestId}] Inserting message into conversation: ${finalConversationId}`);
 
-    // Se mensagem é de contato, incrementar unread_count; se é de agente, resetar
-    if (senderType === "contact") {
-      conversationUpdate.unread_count = supabase.raw('unread_count + 1');
+      const { data: insertedMessage, error: msgError } = await supabase
+        .from("messages")
+        .insert(messagePayload)
+        .select()
+        .single();
+
+      if (msgError) {
+        console.error(`❌ [${requestId}] Failed to insert message:`, {
+          error: msgError.message,
+          code: msgError.code,
+          hint: (msgError as any).hint,
+          details: (msgError as any).details,
+          payload: messagePayload
+        });
+        
+        // Se for erro de duplicata por external_id, retornar sucesso
+        if (msgError.code === '23505' && msgError.message.includes('external_id')) {
+          console.log(`ℹ️ [${requestId}] Duplicate message ignored (idempotent)`);
+          // Continue to N8N forwarding even with duplicate message
+        } else {
+          return new Response(JSON.stringify({
+            code: 'DATABASE_ERROR',
+            message: 'Failed to insert message',
+            details: msgError.message,
+            hint: (msgError as any).hint ?? (msgError as any).details ?? null,
+            requestId
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      } else {
+        newMessage = insertedMessage;
+        
+        // Atualizar conversa com lógica correta de unread_count
+        const conversationUpdate: any = {
+          last_activity_at: new Date().toISOString(),
+          last_message_at: new Date().toISOString(),
+        };
+
+        // Se mensagem é de contato, incrementar unread_count; se é de agente, resetar
+        if (senderType === "contact") {
+          conversationUpdate.unread_count = supabase.raw('unread_count + 1');
+        } else {
+          conversationUpdate.unread_count = 0;
+        }
+
+        const { error: updateError } = await supabase
+          .from("conversations")
+          .update(conversationUpdate)
+          .eq("id", finalConversationId);
+
+        if (updateError) {
+          console.error(`⚠️ [${requestId}] Error updating conversation:`, updateError);
+          // Não falha a operação, apenas loga o erro
+        }
+
+        console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
+      }
     } else {
-      conversationUpdate.unread_count = 0;
+      console.log(`⚠️ [${requestId}] Skipping message insertion for Evolution event without extractable content`);
     }
-
-    const { error: updateError } = await supabase
-      .from("conversations")
-      .update(conversationUpdate)
-      .eq("id", finalConversationId);
-
-    if (updateError) {
-      console.error(`⚠️ [${requestId}] Error updating conversation:`, updateError);
-      // Não falha a operação, apenas loga o erro
-    }
-
-    console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
 
     // Encaminhar para N8N usando webhook específico do workspace
     console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
@@ -741,7 +750,7 @@ serve(async (req) => {
         const n8nPayload = {
           workspace_id: workspaceId,
           conversation_id: finalConversationId,
-          message_id: newMessage.id,
+          message_id: newMessage?.id || null,
           phone_number: phoneNumber ? sanitizePhoneNumber(phoneNumber) : null,
           content: finalContent,
           message_type: finalMessageType,
@@ -752,7 +761,9 @@ serve(async (req) => {
           external_id: externalId,
           metadata: metadata,
           processed_at: new Date().toISOString(),
-          request_id: requestId
+          request_id: requestId,
+          // Include original Evolution payload for advanced n8n processing
+          evolution_payload: isEvolutionEvent ? payload : null
         };
 
         const n8nResponse = await fetch(workspaceWebhookUrl, {
@@ -781,12 +792,14 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true,
       data: {
-        message_id: newMessage.id,
+        message_id: newMessage?.id || null,
         conversation_id: finalConversationId,
         workspace_id: workspaceId,
-        registered_at: newMessage.created_at,
+        registered_at: newMessage?.created_at || new Date().toISOString(),
         sender_type: senderType,
         message_type: finalMessageType,
+        evolution_event: isEvolutionEvent,
+        content_extracted: hasValidContent
       },
       requestId
     }), {
