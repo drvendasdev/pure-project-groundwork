@@ -65,8 +65,16 @@ serve(async (req) => {
       });
     }
 
-    // Determinar telefone e instância
-    const finalPhoneNumber = phoneNumber || (sender ? sender.replace('@s.whatsapp.net', '') : null);
+    // CORRIGIDO: Extrair telefone corretamente, NUNCA usar número da instância como contato
+    let finalPhoneNumber = null;
+    
+    // Prioridade: 1) phoneNumber do payload 2) sender (remoteJid)
+    if (phoneNumber) {
+      finalPhoneNumber = phoneNumber.replace(/\D/g, ''); // Sanitizar
+    } else if (sender && sender.includes('@s.whatsapp.net')) {
+      finalPhoneNumber = sender.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    }
+    
     const finalInstance = instance;
     const finalMessage = message;
 
@@ -81,10 +89,10 @@ serve(async (req) => {
     if (finalPhoneNumber && finalInstance && finalMessage) {
       console.log(`💬 [${requestId}] Processando mensagem de entrada`);
 
-      // 1. Buscar conexão
+      // 1. Buscar conexão e BLOQUEAR número da instância
       const { data: connection } = await supabase
         .from('connections')
-        .select('id, workspace_id')
+        .select('id, workspace_id, phone_number')
         .eq('instance_name', finalInstance)
         .single();
 
@@ -100,6 +108,20 @@ serve(async (req) => {
       }
 
       console.log(`✅ [${requestId}] Conexão encontrada:`, connection.id);
+
+      // PROTEÇÃO: Verificar se o número do contato não é o número da instância
+      const instancePhoneClean = connection.phone_number?.replace(/\D/g, '');
+      if (instancePhoneClean && finalPhoneNumber === instancePhoneClean) {
+        console.error(`❌ [${requestId}] BLOQUEADO: Tentativa de usar número da instância (${instancePhoneClean}) como contato`);
+        return new Response(JSON.stringify({ 
+          error: 'Instance phone number cannot be used as contact',
+          instance_phone: instancePhoneClean,
+          received_phone: finalPhoneNumber
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       // 2. Buscar ou criar contato
       let { data: contact } = await supabase

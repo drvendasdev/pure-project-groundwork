@@ -148,7 +148,7 @@ serve(async (req) => {
       fullPayload: JSON.stringify(payload).substring(0, 500)
     });
     
-    // Prioridade: 1) contact_phone 2) remoteJid - NÃO usar phone_number da instância
+    // Prioridade: 1) contact_phone 2) remoteJid - NUNCA usar phone_number da instância
     if (contactPhone) {
       phoneNumber = sanitizePhoneNumber(contactPhone);
       console.log(`📱 [${requestId}] Using contact_phone: ${contactPhone} -> ${phoneNumber}`);
@@ -156,16 +156,14 @@ serve(async (req) => {
       phoneNumber = sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
       console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${phoneNumber}`);
     } else {
-      // BLOQUEAR: NÃO usar números da instância como contato
-      const instancePhone = sanitizePhoneNumber(payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? '');
-      console.error(`❌ [${requestId}] REJEITADO: Tentativa de usar número da instância como contato: ${instancePhone}`);
-      console.error(`❌ [${requestId}] Payload deve conter 'contact_phone' ou 'remoteJid' válido para criar contato`);
+      console.error(`❌ [${requestId}] FALHA: Não foi possível extrair número de contato válido`);
+      console.error(`❌ [${requestId}] Payload deve conter 'contact_phone' ou 'remoteJid' para criar/atualizar contato`);
       
       return new Response(
         JSON.stringify({ 
-          error: 'Número da instância não pode ser usado como contato. Use contact_phone ou remoteJid.',
-          instance_phone: instancePhone,
-          payload_keys: Object.keys(payload)
+          error: 'Número de contato não encontrado. Use contact_phone ou remoteJid.',
+          available_fields: Object.keys(payload).filter(k => k.includes('phone') || k.includes('jid') || k.includes('contact')),
+          payload_size: Object.keys(payload).length
         }),
         { 
           status: 400,
@@ -447,10 +445,10 @@ serve(async (req) => {
       let connError = null;
       
       if (evolutionInstance) {
-        // Buscar por instance_name primeiro
+        // Buscar por instance_name primeiro e incluir phone_number para proteção
         const result = await supabase
           .from('connections')
-          .select('id, workspace_id, instance_name')
+          .select('id, workspace_id, instance_name, phone_number')
           .eq('instance_name', evolutionInstance)
           .maybeSingle();
         connection = result.data;
@@ -490,6 +488,21 @@ serve(async (req) => {
           requestId
         }), {
           status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // PROTEÇÃO: Verificar se o número não é da instância antes de continuar
+      const instancePhoneClean = connection.phone_number?.replace(/\D/g, '');
+      if (instancePhoneClean && phoneNumber === instancePhoneClean) {
+        console.error(`❌ [${requestId}] BLOQUEADO: Tentativa de usar número da instância (${instancePhoneClean}) como contato`);
+        return new Response(JSON.stringify({
+          error: 'Instance phone number cannot be used as contact',
+          instance_phone: instancePhoneClean,
+          received_phone: phoneNumber,
+          instance_name: evolutionInstance || instanceId
+        }), {
+          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
