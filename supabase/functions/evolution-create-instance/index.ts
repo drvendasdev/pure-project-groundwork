@@ -181,9 +181,9 @@ serve(async (req) => {
       )
     }
 
-    // Fetch workspace webhook configuration
+    // Fetch workspace webhook configuration with fallback to secrets
     console.log('Fetching workspace webhook configuration...')
-    const { data: webhookConfig, error: webhookError } = await supabase
+    let { data: webhookConfig, error: webhookError } = await supabase
       .from('workspace_webhook_settings')
       .select('webhook_url, webhook_secret')
       .eq('workspace_id', workspaceId)
@@ -191,6 +191,25 @@ serve(async (req) => {
 
     if (webhookError) {
       console.error('Error fetching webhook config:', webhookError)
+    }
+
+    // Fallback to workspace_webhook_secrets if no settings found
+    if (!webhookConfig?.webhook_url) {
+      console.log('No webhook settings found, checking secrets...')
+      const { data: secretsData } = await supabase
+        .from('workspace_webhook_secrets')
+        .select('webhook_url')
+        .eq('workspace_id', workspaceId)
+        .eq('secret_name', 'default_webhook')
+        .maybeSingle()
+
+      if (secretsData?.webhook_url) {
+        console.log('Found webhook URL in secrets:', secretsData.webhook_url)
+        webhookConfig = {
+          webhook_url: secretsData.webhook_url,
+          webhook_secret: null
+        }
+      }
     }
 
     // Build Evolution payload

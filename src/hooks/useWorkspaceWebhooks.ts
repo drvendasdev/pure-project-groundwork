@@ -10,22 +10,63 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
 
-  // Fetch webhook configuration
+  // Fetch webhook configuration with fallback to secrets table
   const fetchWebhookConfig = async () => {
     if (!workspaceId) return;
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // First try to get from workspace_webhook_settings
+      let { data: settingsData, error: settingsError } = await supabase
         .from('workspace_webhook_settings')
         .select('*')
         .eq('workspace_id', workspaceId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (settingsError) throw settingsError;
+      console.log('Settings data:', settingsData);
+
+      // If no data in settings, try to get from secrets as fallback
+      if (!settingsData) {
+        console.log('No webhook settings found, checking secrets...');
+        const { data: secretsData, error: secretsError } = await supabase
+          .from('workspace_webhook_secrets')
+          .select('webhook_url')
+          .eq('workspace_id', workspaceId)
+          .eq('secret_name', 'default_webhook')
+          .maybeSingle();
+
+        console.log('Secrets data:', secretsData);
+
+        if (secretsError) {
+          console.error('Error fetching webhook secrets:', secretsError);
+        } else if (secretsData?.webhook_url) {
+          console.log('Found webhook URL in secrets, migrating to settings...');
+          // Generate a random secret for the migration
+          const newSecret = crypto.randomUUID();
+          
+          // Migrate from secrets to settings
+          const { data: migratedData, error: migrateError } = await supabase
+            .from('workspace_webhook_settings')
+            .upsert({
+              workspace_id: workspaceId,
+              webhook_url: secretsData.webhook_url,
+              webhook_secret: newSecret
+            })
+            .select()
+            .single();
+
+          if (migrateError) {
+            console.error('Error migrating webhook config:', migrateError);
+          } else {
+            settingsData = migratedData;
+            console.log('Successfully migrated webhook config:', settingsData);
+          }
+        }
+      }
       
-      console.log('Webhook config fetched:', data); // Debug log
-      setWebhookConfig(data);
+      console.log('Final webhook config:', settingsData);
+      setWebhookConfig(settingsData);
     } catch (error) {
       console.error('Error fetching webhook config:', error);
       toast({
@@ -38,7 +79,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     }
   };
 
-  // Save webhook configuration
+  // Save webhook configuration to both tables for consistency
   const saveWebhookConfig = async (url: string, secret: string) => {
     if (!workspaceId) {
       toast({
@@ -51,7 +92,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
-      // Salvar na tabela workspace_webhook_settings
+      // Save to workspace_webhook_settings (primary)
       const { data, error } = await supabase
         .from('workspace_webhook_settings')
         .upsert({
@@ -64,22 +105,16 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
         .single();
 
       if (error) throw error;
-      
-      // Salvar secret dinâmico no Supabase Edge Functions
-      const { error: secretError } = await supabase.functions.invoke('manage-workspace-webhook-secret', {
-        body: {
+
+      // Also save to workspace_webhook_secrets for backwards compatibility
+      await supabase
+        .from('workspace_webhook_secrets')
+        .upsert({
           workspace_id: workspaceId,
-          webhook_url: url,
-          action: 'save'
-        }
-      });
-
-      if (secretError) {
-        console.error('Error saving webhook secret:', secretError);
-        // Secret error is not critical - main config is saved
-        console.warn('Webhook URL saved but automatic secret creation failed');
-      }
-
+          secret_name: 'default_webhook',
+          webhook_url: url
+        });
+      
       setWebhookConfig(data);
       toast({
         title: "Sucesso",

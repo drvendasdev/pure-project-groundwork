@@ -166,6 +166,11 @@ export function WebhooksEvolutionConfig() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="webhook-url">Webhook URL</Label>
+                {webhookConfig?.webhook_url && (
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Valor em uso:</strong> {webhookConfig.webhook_url}
+                  </p>
+                )}
                 <Input
                   id="webhook-url"
                   placeholder="https://seu-servidor.com/webhook"
@@ -219,7 +224,7 @@ export function WebhooksEvolutionConfig() {
                   disabled={isLoading}
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                  Recarregar
+                  Sincronizar do Banco
                 </Button>
                 
                 <Button 
