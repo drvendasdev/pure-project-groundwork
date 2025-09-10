@@ -31,6 +31,22 @@ serve(async (req) => {
     const normalizedPhone = phoneNumber.replace(/\D/g, '')
 
     console.log(`Creating quick conversation for phone: ${normalizedPhone}`)
+    
+    // PROTEÇÃO: Bloquear uso de números da instância como contato
+    if (instance) {
+      const instanceDigits = instance.replace(/\D/g, '');
+      if (normalizedPhone.includes(instanceDigits) || instanceDigits.includes(normalizedPhone)) {
+        console.error(`❌ BLOQUEADO: Tentativa de criar conversa com número da instância: ${normalizedPhone} (instance: ${instance})`);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Número da instância não pode ser usado como contato',
+            instance_phone: normalizedPhone,
+            instance: instance
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Discover orgId if not provided
     let finalOrgId = orgId
