@@ -709,12 +709,32 @@ serve(async (req) => {
     // Encaminhar para N8N usando webhook específico do workspace
     console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
     
-    // Buscar webhook URL específico do workspace nos secrets
+    // Buscar webhook URL específico do workspace na tabela
     const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${workspaceId}`;
-    const workspaceWebhookUrl = Deno.env.get(workspaceWebhookSecretName);
     
-    if (workspaceWebhookUrl) {
-      console.log(`📤 [${requestId}] Using workspace-specific webhook: ${workspaceWebhookSecretName}`);
+    const { data: webhookData, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')
+      .select('webhook_url')
+      .eq('workspace_id', workspaceId)
+      .eq('secret_name', workspaceWebhookSecretName)
+      .maybeSingle();
+    
+    let workspaceWebhookUrl: string | null = null;
+    
+    if (webhookError) {
+      console.error(`❌ [${requestId}] Error fetching workspace webhook:`, webhookError);
+    } else if (webhookData) {
+      workspaceWebhookUrl = webhookData.webhook_url;
+      console.log(`📤 [${requestId}] Using workspace-specific webhook from table: ${workspaceWebhookSecretName}`);
+    }
+    
+    // Fallback para webhook global se não houver webhook específico do workspace
+    if (!workspaceWebhookUrl) {
+      workspaceWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
+      if (workspaceWebhookUrl) {
+        console.log(`📤 [${requestId}] Using fallback global webhook`);
+      }
+    }
       
       try {
         const n8nPayload = {
@@ -754,7 +774,7 @@ serve(async (req) => {
         console.error(`❌ [${requestId}] Error calling N8N webhook:`, n8nError);
       }
     } else {
-      console.log(`⚠️ [${requestId}] No workspace-specific webhook found (${workspaceWebhookSecretName}), skipping N8N forward`);
+      console.log(`⚠️ [${requestId}] No webhook configured for workspace ${workspaceId}, skipping N8N forward`);
     }
 
     return new Response(JSON.stringify({
