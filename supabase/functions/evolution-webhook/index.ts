@@ -204,86 +204,61 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    if (!key?.remoteJid) {
-      console.log('⏭️ Skipping message: no remoteJid');
-      return;
-    }
-    
-    // IMPORTANTE: Processar para N8N independente de fromMe
-    // Mas só criar contatos para mensagens RECEBIDAS (fromMe: false)
-    const shouldCreateContact = !key.fromMe;
-    
     // CRÍTICO: usar SEMPRE o número de quem ENVIOU a mensagem (remoteJid)
     // NUNCA usar o número da instância como contato
     const remoteJid = key.remoteJid;
     const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || senderPhone;
 
-    console.log('📞 Processing message:', { 
+    console.log('📞 Processing message for contact:', { 
       remoteJid, 
       senderPhone, 
       contactName, 
       workspaceId, 
-      fromMe: key.fromMe,
-      shouldCreateContact
+      fromMe: key.fromMe 
     });
 
-    let contact = null;
-    
-    // Só criar/atualizar contato para mensagens RECEBIDAS
-    if (shouldCreateContact) {
-      const { data: contactData, error: contactError } = await supabase
-        .from('contacts')
-        .upsert({
-          phone: senderPhone,
-          name: contactName,
-          workspace_id: workspaceId
-        }, {
-          onConflict: 'phone,workspace_id',
-          ignoreDuplicates: false
-        })
-        .select()
-        .single();
+    const { data: contact, error: contactError } = await supabase
+      .from('contacts')
+      .upsert({
+        phone: senderPhone,
+        name: contactName,
+        workspace_id: workspaceId
+      }, {
+        onConflict: 'phone,workspace_id',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
 
-      if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
-        await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
-          'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
-        return;
-      }
-      
-      contact = contactData;
-      console.log('👤 Contact created/updated:', { contactId: contact?.id, senderPhone });
-    } else {
-      console.log('⏭️ Skipping contact creation for sent message (fromMe: true)');
+    if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
+      await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
+        'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
+      return;
     }
 
-    let conversation = null;
+    console.log('👤 Contact resolved:', { contactId: contact?.id, senderPhone });
 
-    // Só criar conversa se temos um contato (mensagens recebidas)
-    if (contact) {
-      // Get or create conversation
-      const { data: conversationData, error: conversationError } = await supabase
-        .from('conversations')
-        .upsert({
-          contact_id: contact.id,
-          connection_id: connectionId,
-          workspace_id: workspaceId,
-          status: 'open',
-          canal: 'whatsapp'
-        }, {
-          onConflict: 'contact_id,connection_id',
-          ignoreDuplicates: false
-        })
-        .select()
-        .single();
+    // Get or create conversation
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .upsert({
+        contact_id: contact?.id,
+        connection_id: connectionId,
+        workspace_id: workspaceId,
+        status: 'open',
+        canal: 'whatsapp'
+      }, {
+        onConflict: 'contact_id,connection_id',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
 
-      if (conversationError) {
-        await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
-          'Failed to upsert conversation', { error: conversationError, workspaceId });
-        return;
-      }
-      
-      conversation = conversationData;
+    if (conversationError) {
+      await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
+        'Failed to upsert conversation', { error: conversationError, workspaceId });
+      return;
     }
 
     console.log('💬 Conversation resolved:', { conversationId: conversation?.id, contactId: contact?.id });
@@ -485,19 +460,12 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
       }
-      
-      console.log('🌍 POST request received from:', {
-        correlationId,
-        userAgent: req.headers.get('user-agent')?.substring(0, 50),
-        contentLength: req.headers.get('content-length'),
-        timestamp: new Date().toISOString()
-      });
 
       const body = await req.json();
       
       // Extract metadata for logging
       const metadata = extractMetadata(body);
-      console.log('📥 Webhook recebido:', {
+        console.log('📥 Webhook recebido:', {
         correlationId,
         event: metadata.event,
         instance: metadata.instance,
@@ -611,12 +579,6 @@ serve(async (req) => {
       }
 
       // Forward to n8n if configured
-      console.log('🔍 Checking N8N forwarding:', {
-        correlationId,
-        n8nConfigured: !!config.n8nWebhookUrl,
-        n8nUrl: config.n8nWebhookUrl ? config.n8nWebhookUrl.substring(0, 50) + '...' : 'NOT_SET'
-      });
-      
       if (config.n8nWebhookUrl) {
         try {
           const sanitizedData = sanitizeWebhookData(body);
@@ -658,8 +620,6 @@ serve(async (req) => {
             url: config.n8nWebhookUrl.substring(0, 50) + '...'
           });
         }
-      } else {
-        console.log('⚠️ N8N not configured - skipping forward:', { correlationId });
       }
 
       return new Response(JSON.stringify({ 

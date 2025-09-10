@@ -503,21 +503,16 @@ serve(async (req) => {
       const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
       
       try {
-        // IMPORTANTE: Apenas criar/atualizar contatos para mensagens de contatos (não de agentes)
-        // Se é uma mensagem de agente (sender_type = "agent"), não criar contato
-        if (senderType === "agent") {
-          console.log(`⏭️ [${requestId}] Skipping contact creation for agent message`);
-        } else {
-          // Executar upsert em transação simples para evitar problemas de concorrência
-          console.log(`🔄 [${requestId}] Starting contact/conversation upsert for phone: ${sanitizedPhone}`);
-          
-          // Buscar ou criar contato
-          let { data: existingContact, error: findContactError } = await supabase
-            .from('contacts')
-            .select('id, name')
-            .eq('phone', sanitizedPhone)
-            .eq('workspace_id', workspaceId)
-            .maybeSingle();
+        // Executar upsert em transação simples para evitar problemas de concorrência
+        console.log(`🔄 [${requestId}] Starting contact/conversation upsert for phone: ${sanitizedPhone}`);
+        
+        // Buscar ou criar contato
+        let { data: existingContact, error: findContactError } = await supabase
+          .from('contacts')
+          .select('id, name')
+          .eq('phone', sanitizedPhone)
+          .eq('workspace_id', workspaceId)
+          .maybeSingle();
 
         if (findContactError) {
           console.error(`❌ [${requestId}] Error finding contact:`, findContactError);
@@ -621,8 +616,6 @@ serve(async (req) => {
         }
 
         console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
-        
-        } // Fechamento do else que checa senderType
 
       } catch (error) {
         console.error(`❌ [${requestId}] Unexpected error during upsert:`, error);
