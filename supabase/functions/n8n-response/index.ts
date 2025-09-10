@@ -138,11 +138,14 @@ serve(async (req) => {
     let phoneNumber = null;
     let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
     
+    
     console.log(`🔍 [${requestId}] Phone resolution inputs:`, {
       contactPhone,
       remoteJid,
       instancePhone: payload.phone_number ?? payload.phoneNumber ?? payload.phone,
-      pushName
+      pushName,
+      senderType: payload.sender_type,
+      fullPayload: JSON.stringify(payload).substring(0, 500)
     });
     
     // Prioridade: 1) contact_phone 2) remoteJid 3) instance phone (último recurso)
@@ -154,7 +157,12 @@ serve(async (req) => {
       console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${phoneNumber}`);
     } else {
       phoneNumber = sanitizePhoneNumber(payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? '');
-      console.log(`⚠️ [${requestId}] Using instance phone as fallback: ${phoneNumber}`);
+      console.log(`⚠️ [${requestId}] FALLBACK: Using instance phone: ${phoneNumber} - ISSO DEVERIA SER EVITADO!`);
+    }
+    
+    // Adicionar validação extra para evitar número da instância
+    if (phoneNumber && payload.instance && phoneNumber.includes(payload.instance.replace(/\D/g, ''))) {
+      console.error(`❌ [${requestId}] DETECTADO: Phone number parece ser da instância! phoneNumber: ${phoneNumber}, instance: ${payload.instance}`);
     }
   
   // Suporte para camelCase e base64 direto
