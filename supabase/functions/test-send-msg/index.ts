@@ -173,66 +173,89 @@ serve(async (req) => {
       .eq('workspace_id', conversation.workspace_id)
       .maybeSingle();
 
-    if (webhookData?.webhook_url) {
-      console.log('📤 Sending to N8N webhook:', webhookData.webhook_url);
-      
-      // Criar payload no padrão do Evolution (igual quando chega pelo celular)
-      const destinatarioPhone = contact.phone;
-      const senderFormatted = `${destinatarioPhone}@s.whatsapp.net`;
-      
-      console.log('🎯 Preparando sender para N8N:', { 
-        destinatarioPhone, 
-        senderFormatted, 
-        instance 
+    if (!webhookData?.webhook_url) {
+      console.error('❌ N8N webhook not configured for workspace:', conversation.workspace_id);
+      return new Response(JSON.stringify({
+        error: 'N8N webhook not configured for this workspace',
+        workspace_id: conversation.workspace_id
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
-      
-      const n8nPayload = {
-        // Dados principais do Evolution format
-        instance: instance,
-        sender: senderFormatted,
-        message: content,
-        phoneNumber: destinatarioPhone,
-        status: 'sent',
-        external_id: message.id,
-        
-        // Dados adicionais do sistema
-        response_message: content,
-        workspace_id: conversation.workspace_id,
-        conversation_id: conversation_id,
-        connection_id: conversation.connection_id,
-        contact_id: conversation.contact_id,
-        message_id: message.id,
-        message_type: message_type,
-        sender_id: sender_id,
-        sender_type: sender_type,
-        timestamp: new Date().toISOString(),
-        
-        // Metadados para identificar origem
-        source: 'agent_system',
-        processed_at: new Date().toISOString()
-      };
-      
-      console.log('📋 N8N Payload (formato Evolution):', JSON.stringify(n8nPayload));
+    }
 
-      try {
-        const webhookResponse = await fetch(webhookData.webhook_url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(n8nPayload)
+    console.log('📤 Sending to N8N webhook ONLY:', webhookData.webhook_url);
+    
+    // Criar payload no padrão do Evolution (igual quando chega pelo celular)
+    const destinatarioPhone = contact.phone;
+    const senderFormatted = `${destinatarioPhone}@s.whatsapp.net`;
+    
+    console.log('🎯 Preparando sender para N8N:', { 
+      destinatarioPhone, 
+      senderFormatted, 
+      instance 
+    });
+    
+    const n8nPayload = {
+      // Dados principais do Evolution format
+      instance: instance,
+      sender: senderFormatted,
+      message: content,
+      phoneNumber: destinatarioPhone,
+      status: 'sent',
+      external_id: message.id,
+      
+      // Dados adicionais do sistema
+      response_message: content,
+      workspace_id: conversation.workspace_id,
+      conversation_id: conversation_id,
+      connection_id: conversation.connection_id,
+      contact_id: conversation.contact_id,
+      message_id: message.id,
+      message_type: message_type,
+      sender_id: sender_id,
+      sender_type: sender_type,
+      timestamp: new Date().toISOString(),
+      
+      // Metadados para identificar origem
+      source: 'agent_system',
+      processed_at: new Date().toISOString()
+    };
+    
+    console.log('📋 N8N Payload (formato Evolution):', JSON.stringify(n8nPayload));
+
+    try {
+      const webhookResponse = await fetch(webhookData.webhook_url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(n8nPayload)
+      });
+
+      if (!webhookResponse.ok) {
+        console.error('❌ N8N webhook failed with status:', webhookResponse.status);
+        const errorText = await webhookResponse.text();
+        return new Response(JSON.stringify({
+          error: 'N8N webhook failed',
+          status: webhookResponse.status,
+          response: errorText
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
-
-        if (webhookResponse.ok) {
-          console.log('✅ N8N webhook called successfully');
-        } else {
-          console.log('⚠️ N8N webhook returned status:', webhookResponse.status);
-        }
-      } catch (webhookErr) {
-        console.error('❌ Error calling N8N webhook:', webhookErr);
       }
-    } else {
-      console.log('⚠️ No N8N webhook configured for workspace');
+
+      console.log('✅ N8N webhook called successfully');
+    } catch (webhookErr) {
+      console.error('❌ Error calling N8N webhook:', webhookErr);
+      return new Response(JSON.stringify({
+        error: 'Failed to call N8N webhook',
+        details: webhookErr.message
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     console.log('🎉 SUCCESS - Message sent:', message.id);

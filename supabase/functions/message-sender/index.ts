@@ -83,51 +83,23 @@ serve(async (req) => {
       webhookUrl: hasWebhookConfigured ? webhookData.webhook_url.substring(0, 50) + '...' : 'none'
     });
 
-    // ETAPA 2: Tentar envio via N8N se configurado
-    if (hasWebhookConfigured) {
-      console.log(`🚀 [${requestId}] Attempting N8N send...`);
-      
-      try {
-        const { data: n8nResult, error: n8nError } = await supabase.functions.invoke('n8n-send-message', {
-          body: {
-            messageId,
-            phoneNumber,
-            content,
-            messageType,
-            fileUrl,
-            fileName,
-            evolutionInstance,
-            conversationId,
-            workspaceId: finalWorkspaceId
-          }
-        });
-
-        // Verificar se N8N funcionou corretamente
-        if (!n8nError && n8nResult?.success !== false) {
-          console.log(`✅ [${requestId}] N8N send successful`);
-          return new Response(JSON.stringify({
-            success: true,
-            method: 'n8n',
-            result: n8nResult,
-            requestId
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } else {
-          console.warn(`⚠️ [${requestId}] N8N send failed:`, { error: n8nError, result: n8nResult });
-          // Continua para fallback
-        }
-      } catch (n8nException) {
-        console.error(`❌ [${requestId}] N8N send exception:`, n8nException);
-        // Continua para fallback
-      }
+    // ETAPA 2: Envio APENAS via N8N
+    if (!hasWebhookConfigured) {
+      console.error(`❌ [${requestId}] N8N webhook not configured for workspace ${finalWorkspaceId}`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'N8N webhook not configured',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // ETAPA 3: Fallback - Envio direto pelo sistema
-    console.log(`🔄 [${requestId}] Using direct system fallback...`);
+    console.log(`🚀 [${requestId}] Sending via N8N only...`);
     
     try {
-      const { data: directResult, error: directError } = await supabase.functions.invoke('send-evolution-message', {
+      const { data: n8nResult, error: n8nError } = await supabase.functions.invoke('n8n-send-message', {
         body: {
           messageId,
           phoneNumber,
@@ -135,31 +107,31 @@ serve(async (req) => {
           messageType,
           fileUrl,
           fileName,
-          evolutionInstance
+          evolutionInstance,
+          conversationId,
+          workspaceId: finalWorkspaceId
         }
       });
 
-      if (!directError && directResult?.success !== false) {
-        console.log(`✅ [${requestId}] Direct send successful`);
+      if (!n8nError && n8nResult?.success !== false) {
+        console.log(`✅ [${requestId}] N8N send successful`);
         return new Response(JSON.stringify({
           success: true,
-          method: 'direct',
-          result: directResult,
-          fallback: hasWebhookConfigured ? 'n8n_failed' : 'no_webhook',
+          method: 'n8n',
+          result: n8nResult,
           requestId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } else {
-        console.error(`❌ [${requestId}] Direct send failed:`, { error: directError, result: directResult });
+        console.error(`❌ [${requestId}] N8N send failed:`, { error: n8nError, result: n8nResult });
         
         return new Response(JSON.stringify({
           success: false,
-          error: 'Both N8N and direct sending failed',
+          error: 'N8N sending failed',
           details: {
-            n8n_configured: hasWebhookConfigured,
-            direct_error: directError,
-            direct_result: directResult
+            error: n8nError,
+            result: n8nResult
           },
           requestId
         }), {
@@ -167,15 +139,14 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-    } catch (directException) {
-      console.error(`❌ [${requestId}] Direct send exception:`, directException);
+    } catch (n8nException) {
+      console.error(`❌ [${requestId}] N8N send exception:`, n8nException);
       
       return new Response(JSON.stringify({
         success: false,
-        error: 'Critical failure: both N8N and direct sending failed',
+        error: 'N8N sending exception',
         details: {
-          n8n_configured: hasWebhookConfigured,
-          direct_exception: directException.message
+          exception: n8nException.message
         },
         requestId
       }), {

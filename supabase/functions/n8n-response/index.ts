@@ -134,15 +134,17 @@ serve(async (req) => {
     const pushName = payload.pushName ?? payload.push_name ?? payload.contactName ?? payload.from_name ?? null;
     const profilePicUrl = payload.profilePicUrl ?? payload.profile_pic_url ?? payload.profilePictureUrl ?? payload.avatar_url ?? null;
     
-    // CRÍTICO: Resolução de telefone com prioridade para contato real
+    // CRÍTICO: Resolução de telefone com prioridade para data.key.remoteJid
     let phoneNumber = null;
-    let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
     
+    // PRIORIDADE 1: data.key.remoteJid (correto para mensagens recebidas)
+    let remoteJid = payload.data?.key?.remoteJid ?? payload.remoteJid ?? payload.remote_jid ?? null;
     
     console.log(`🔍 [${requestId}] Phone resolution inputs:`, {
       contactPhone,
       remoteJid,
-      instancePhone: payload.phone_number ?? payload.phoneNumber ?? payload.phone,
+      dataKeyRemoteJid: payload.data?.key?.remoteJid,
+      senderField: payload.sender,
       pushName,
       senderType: payload.sender_type,
       payloadKeys: Object.keys(payload),
@@ -154,21 +156,20 @@ serve(async (req) => {
       phoneNumber = sanitizePhoneNumber(contactPhone);
       console.log(`📱 [${requestId}] Using contact_phone for agent: ${contactPhone} -> ${phoneNumber}`);
     }
-    // Para mensagens de contato, usar remoteJid/sender
+    // Para mensagens de contato, SEMPRE usar data.key.remoteJid (não sender!)
     else if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
       phoneNumber = sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
-      console.log(`📱 [${requestId}] Using remoteJid (sender): ${remoteJid} -> ${phoneNumber}`);
+      console.log(`📱 [${requestId}] Using data.key.remoteJid: ${remoteJid} -> ${phoneNumber}`);
     } else {
       console.error(`❌ [${requestId}] FALHA: Não foi possível extrair número de contato válido`);
       console.error(`❌ [${requestId}] sender_type=${payload.sender_type}, contactPhone=${contactPhone}, remoteJid=${remoteJid}`);
+      console.error(`❌ [${requestId}] data.key.remoteJid=${payload.data?.key?.remoteJid}, sender=${payload.sender}`);
       
       return new Response(
         JSON.stringify({ 
-          error: 'Número de contato não encontrado.',
-          sender_type: payload.sender_type,
-          contact_phone: contactPhone,
-          remote_jid: remoteJid,
-          available_fields: Object.keys(payload)
+          error: 'Número de contato não encontrado no sender/remoteJid.',
+          available_fields: Object.keys(payload).filter(k => k.includes('sender') || k.includes('phone') || k.includes('jid')),
+          payload_size: Object.keys(payload).length
         }),
         { 
           status: 400,
