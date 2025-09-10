@@ -97,6 +97,24 @@ serve(async (req) => {
 
     console.log('✅ Contact found:', contact);
 
+    // Buscar dados da conexão para pegar a instância
+    let instance = null;
+    if (conversation.connection_id) {
+      console.log('🔍 Fetching connection:', conversation.connection_id);
+      const { data: connection, error: connectionError } = await supabase
+        .from('connections')
+        .select('instance_name')
+        .eq('id', conversation.connection_id)
+        .single();
+      
+      if (connection && !connectionError) {
+        instance = connection.instance_name;
+        console.log('✅ Instance found:', instance);
+      } else {
+        console.log('⚠️ Connection error:', connectionError);
+      }
+    }
+
     // Inserir mensagem no banco
     console.log('💾 Inserting message...');
     const { data: message, error: messageError } = await supabase
@@ -159,12 +177,19 @@ serve(async (req) => {
       const n8nPayload = {
         phone_number: contact.phone,
         response_message: content,
+        instance: instance,
         workspace_id: conversation.workspace_id,
         conversation_id: conversation_id,
+        connection_id: conversation.connection_id,
+        contact_id: conversation.contact_id,
         message_id: message.id,
         message_type: message_type,
+        sender_id: sender_id,
+        sender_type: sender_type,
         timestamp: new Date().toISOString()
       };
+      
+      console.log('📋 N8N Payload:', JSON.stringify(n8nPayload));
 
       try {
         const webhookResponse = await fetch(webhookData.webhook_url, {
