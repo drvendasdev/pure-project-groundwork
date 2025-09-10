@@ -1503,6 +1503,10 @@ export type Database = {
         Args: { p_connection_id: string }
         Returns: undefined
       }
+      delete_workspace_cascade: {
+        Args: { p_workspace_id: string }
+        Returns: undefined
+      }
       get_current_user_profile: {
         Args: Record<PropertyKey, never>
         Returns: string
