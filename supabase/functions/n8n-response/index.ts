@@ -687,41 +687,82 @@ serve(async (req) => {
       });
     }
 
-    // Para mensagens de agente sem conversa, tentar encontrar a última conversa ativa
+    // Para mensagens de agente sem conversa, tentar encontrar ou criar conversa
     if (!finalConversationId && senderType === "agent" && phoneNumber && workspaceId) {
-      console.log(`🔍 [${requestId}] Trying to find active conversation for agent message`);
+      console.log(`🔍 [${requestId}] Trying to find or create conversation for agent message`);
       
       try {
-        // Primeiro encontrar o contato
-        const { data: contact, error: contactError } = await supabase
+        // Primeiro encontrar ou criar o contato
+        let contactId = null;
+        const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
+        
+        const { data: existingContact, error: contactError } = await supabase
           .from('contacts')
           .select('id')
-          .eq('phone', sanitizePhoneNumber(phoneNumber))
+          .eq('phone', sanitizedPhone)
           .eq('workspace_id', workspaceId)
           .maybeSingle();
         
-        if (!contactError && contact) {
-          // Buscar conversa ativa do contato
+        if (!contactError && existingContact) {
+          contactId = existingContact.id;
+          console.log(`✅ [${requestId}] Found existing contact: ${contactId}`);
+        } else {
+          // Criar novo contato
+          const { data: newContact, error: createContactError } = await supabase
+            .from('contacts')
+            .insert({
+              name: `Contato ${sanitizedPhone}`,
+              phone: sanitizedPhone,
+              workspace_id: workspaceId
+            })
+            .select('id')
+            .single();
+          
+          if (!createContactError && newContact) {
+            contactId = newContact.id;
+            console.log(`✅ [${requestId}] Created new contact: ${contactId}`);
+          } else {
+            console.error(`❌ [${requestId}] Error creating contact:`, createContactError);
+          }
+        }
+        
+        if (contactId) {
+          // Buscar conversa ativa ou criar nova
           const { data: activeConversation, error: findError } = await supabase
             .from('conversations')
             .select('id')
             .eq('workspace_id', workspaceId)
-            .eq('contact_id', contact.id)
+            .eq('contact_id', contactId)
             .order('last_activity_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
           if (!findError && activeConversation) {
             finalConversationId = activeConversation.id;
-            console.log(`✅ [${requestId}] Found active conversation for agent message: ${finalConversationId}`);
+            console.log(`✅ [${requestId}] Found active conversation: ${finalConversationId}`);
           } else {
-            console.warn(`⚠️ [${requestId}] No active conversation found for agent message`);
+            // Criar nova conversa
+            const { data: newConversation, error: createConvError } = await supabase
+              .from('conversations')
+              .insert({
+                contact_id: contactId,
+                workspace_id: workspaceId,
+                status: 'open',
+                canal: 'whatsapp'
+              })
+              .select('id')
+              .single();
+            
+            if (!createConvError && newConversation) {
+              finalConversationId = newConversation.id;
+              console.log(`✅ [${requestId}] Created new conversation: ${finalConversationId}`);
+            } else {
+              console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
+            }
           }
-        } else {
-          console.warn(`⚠️ [${requestId}] Contact not found for phone: ${phoneNumber}`);
         }
       } catch (error) {
-        console.error(`❌ [${requestId}] Error finding conversation for agent message:`, error);
+        console.error(`❌ [${requestId}] Error in contact/conversation creation:`, error);
       }
     }
 
