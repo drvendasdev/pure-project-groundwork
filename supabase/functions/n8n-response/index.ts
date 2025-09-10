@@ -129,15 +129,22 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-  // CORRIGIDO: Normalizar phone_number garantindo que NUNCA seja o número da instância
-  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
-  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
-  
-  // Se temos remoteJid, usar ele como fonte primária (é sempre o outro lado da conversa)
-  if (remoteJid) {
-    phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-    console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
-  }
+    // CORRIGIDO: Normalizar phone_number garantindo que NUNCA seja o número da instância
+    let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
+    let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
+    
+    // CRÍTICO: Se temos remoteJid, usar ele como fonte primária (é sempre o outro lado da conversa)
+    // MAS verificar se não é fromMe (mensagem enviada pela instância)
+    const fromMe = payload.fromMe ?? payload.data?.key?.fromMe ?? false;
+    
+    if (remoteJid && !fromMe) {
+      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+      console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
+    } else if (fromMe) {
+      console.log(`⏭️ [${requestId}] Skipping fromMe message - não criar contato para instância`);
+      // Para mensagens fromMe, usar apenas o conversationId existente
+      phoneNumber = null;
+    }
   
   // Suporte para camelCase e base64 direto
   let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? payload.conversation ?? payload.data?.message?.conversation ?? payload.data?.message?.extendedTextMessage?.text ?? null;
@@ -496,9 +503,9 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);
 
-    // Se ainda não temos conversation_id, precisar resolver via phoneNumber
-    if (!finalConversationId && phoneNumber && workspaceId) {
-      console.log(`🔍 [${requestId}] Creating/finding conversation for phone: ${phoneNumber} in workspace: ${workspaceId}`);
+    // CRÍTICO: Só criar contatos/conversas para mensagens de contatos reais (não de agentes)
+    if (!finalConversationId && phoneNumber && workspaceId && senderType === "contact") {
+      console.log(`🔍 [${requestId}] Creating/finding conversation for contact phone: ${phoneNumber} in workspace: ${workspaceId}`);
       
       const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
       
@@ -528,12 +535,13 @@ serve(async (req) => {
         }
 
         if (!existingContact) {
-          console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone}`);
+          console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone} (sender_type: ${senderType})`);
+          const personName = payload.person_name ?? payload.personName ?? payload.contact_name ?? payload.pushName ?? `Contato ${sanitizedPhone}`;
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
             .insert({
               phone: sanitizedPhone,
-              name: `Contato ${sanitizedPhone}`,
+              name: personName,
               workspace_id: workspaceId,
             })
             .select('id, name')
@@ -629,6 +637,8 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+    } else if (!finalConversationId && phoneNumber && senderType !== "contact") {
+      console.log(`⏭️ [${requestId}] Skipping contact/conversation creation for non-contact sender (sender_type: ${senderType})`);
     }
 
     if (!finalConversationId) {
