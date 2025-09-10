@@ -372,7 +372,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    }
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
   } catch (error) {
