@@ -570,13 +570,13 @@ serve(async (req) => {
     console.log('Mensagem registrada no CRM. N8N deve processar a resposta.');
 
     // 6.5. Trigger AI response if agent is active
-    if (newConversation?.agente_ativo) {
+    if (conversation?.agente_ativo) {
       try {
-        console.log('🤖 Triggering AI response for conversation:', newConversation.id);
+        console.log('🤖 Triggering AI response for conversation:', conversation.id);
         await supabase.functions.invoke('ai-chat-response', {
           body: {
-            message: messageContent,
-            conversationId: newConversation.id,
+            message: finalContent,
+            conversationId: conversation.id,
             phoneNumber: phoneNumber
           }
         });
