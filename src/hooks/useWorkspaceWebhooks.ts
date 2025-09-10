@@ -124,24 +124,24 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
       // Use the correct secret name format: N8N_WEBHOOK_URL_{workspace_id}
       const secretName = `N8N_WEBHOOK_URL_${workspaceId}`;
       
-      // Check if record exists in workspace_webhook_secrets
+      // Check if ANY record exists for this workspace (regardless of secret_name)
       const { data: existingSecret, error: checkError } = await supabase
         .from('workspace_webhook_secrets')
-        .select('id')
+        .select('id, secret_name')
         .eq('workspace_id', workspaceId)
-        .eq('secret_name', secretName)
         .maybeSingle();
 
       if (checkError) {
         console.error('Error checking existing secret:', checkError);
       }
 
-      // Update or insert based on existence
+      // Update existing record or insert new one
       if (existingSecret) {
-        // Update existing record
+        // Update existing record and also update the secret_name to the new format
         const { error: updateError } = await supabase
           .from('workspace_webhook_secrets')
           .update({
+            secret_name: secretName, // Update to new format
             webhook_url: url,
             updated_at: new Date().toISOString()
           })
@@ -149,9 +149,11 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
         if (updateError) {
           console.error('Error updating webhook secrets:', updateError);
+        } else {
+          console.log(`Updated existing webhook secret from "${existingSecret.secret_name}" to "${secretName}"`);
         }
       } else {
-        // Insert new record
+        // Insert new record only if none exists
         const { error: insertError } = await supabase
           .from('workspace_webhook_secrets')
           .insert({
@@ -162,6 +164,8 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
         if (insertError) {
           console.error('Error inserting webhook secrets:', insertError);
+        } else {
+          console.log(`Created new webhook secret with name "${secretName}"`);
         }
       }
       
