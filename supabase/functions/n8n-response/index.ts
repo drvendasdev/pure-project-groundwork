@@ -1,12 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Initialize Supabase client once at module level
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 if (!supabaseUrl || !serviceRoleKey) {
-  throw new Error('Missing required environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+  throw new Error('Missing required environment variables');
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -16,17 +15,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Gerar ID único para cada request
 function generateRequestId(): string {
   return `webhook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Sanitizar número de telefone
 function sanitizePhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
-// Inferir tipo de mensagem baseado na URL
 function inferMessageType(url?: string): string {
   if (!url) return "text";
   const ext = url.split(".").pop()?.toLowerCase();
@@ -39,17 +35,6 @@ function inferMessageType(url?: string): string {
   }
 }
 
-// Gerar conteúdo placeholder para mídia
-function generateContentForMedia(type: string, name?: string): string {
-  switch (type) {
-    case "image": return `📷 Imagem${name ? `: ${name}` : ""}`;
-    case "video": return `🎥 Vídeo${name ? `: ${name}` : ""}`;
-    case "audio": return `🎵 Áudio${name ? `: ${name}` : ""}`;
-    case "document": return `📄 Documento${name ? `: ${name}` : ""}`;
-    default: return name || "Arquivo";
-  }
-}
-
 serve(async (req) => {
   const requestId = generateRequestId();
   
@@ -57,103 +42,55 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  if (!['POST', 'GET'].includes(req.method)) {
-    return new Response(JSON.stringify({
-      code: 'METHOD_NOT_ALLOWED',
-      message: 'Only POST and GET methods are allowed',
-      requestId
-    }), {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Only POST allowed' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 
   try {
-    const url = new URL(req.url);
-    const isGet = req.method === 'GET';
-    const dataSource = isGet ? 'query' : 'body';
+    console.log(`🎣 [${requestId}] N8N Response webhook received (POST) from body`);
     
-    console.log(`🎣 [${requestId}] N8N Response webhook received (${req.method}) from ${dataSource}`);
-    
-    // Parse robusto do payload
+    // Parse do payload
     let payload: any = {};
-    
-    if (isGet) {
-      payload = Object.fromEntries(url.searchParams.entries());
-      console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
-    } else {
-      try {
-        const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
-        
-        if (contentType.includes("application/json")) {
-          payload = await req.json();
-        } else if (contentType.includes("application/x-www-form-urlencoded")) {
-          const form = await req.formData();
-          payload = Object.fromEntries(form.entries());
-        } else {
-          const text = await req.text();
-          if (text.trim()) {
-            payload = JSON.parse(text);
-          }
+    try {
+      const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+      
+      if (contentType.includes("application/json")) {
+        payload = await req.json();
+      } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        const form = await req.formData();
+        payload = Object.fromEntries(form.entries());
+      } else {
+        const text = await req.text();
+        if (text.trim()) {
+          payload = JSON.parse(text);
         }
-        
-        console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
-      } catch (parseError) {
-        console.error(`❌ [${requestId}] Payload parsing error:`, parseError);
-        return new Response(JSON.stringify({
-          code: 'INVALID_PAYLOAD',
-          message: 'Could not parse request payload',
-          requestId
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
       }
+      
+      console.log(`📋 [${requestId}] Payload parsed, keys: ${Object.keys(payload).join(', ')}`);
+    } catch (parseError) {
+      console.log(`📭 [${requestId}] Request vazio - usando objeto vazio`);
     }
 
-    // Extrair dados básicos do payload
-    const phoneNumberRaw = payload.phoneNumber ?? payload.phone_number ?? payload.contact_phone ?? payload.phone;
-    const contactPhone = payload.contact_phone;
-    const responseMessage = payload.response_message ?? payload.message ?? payload.content ?? payload.text;
-    const messageTypeRaw = payload.message_type ?? payload.messageType ?? payload.type;
-    const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url;
-    const fileName = payload.file_name ?? payload.fileName ?? payload.filename;
-    const pushName = payload.pushName ?? payload.push_name ?? payload.contact_name;
-    const profilePicUrl = payload.profilePicUrl ?? payload.profile_pic_url;
-    
-    // Suporte para Evolution API
-    const evolutionInstance = payload.instance ?? payload.evolution_instance;
-    const remoteJid = payload.data?.key?.remoteJid ?? payload.remoteJid ?? payload.sender;
-    
-    // ID/referência de workspace e conversação
-    const directWorkspaceId = payload.workspace_id ?? payload.workspaceId;
-    const conversationId = payload.conversation_id ?? payload.conversationId;
-
-    // Normalizar phoneNumber
-    let phoneNumber = phoneNumberRaw;
-    if (!phoneNumber && remoteJid) {
-      phoneNumber = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
-    }
-    if (phoneNumber) {
-      phoneNumber = sanitizePhoneNumber(phoneNumber);
+    // Se payload vazio, retornar OK
+    if (!payload || Object.keys(payload).length === 0) {
+      console.log(`⚠️ [${requestId}] Payload vazio ou incompleto - retornando OK`);
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    // Determinar sender_type
-    const senderType = payload.sender_type ?? "contact";
+    console.log(`📨 [${requestId}] Payload:`, JSON.stringify(payload));
 
-    console.log(`🔍 [${requestId}] Phone resolution inputs: {
-  contactPhone: ${contactPhone || null},
-  remoteJid: ${remoteJid || null},
-  phoneNumber: ${phoneNumber || null},
-  senderType: ${senderType}
-}`);
-
-    // ANTI-LOOP SIMPLIFICADO: Bloquear apenas se for echo direto
+    // ANTI-LOOP: Bloquear apenas se for echo direto do nosso sistema
     if (payload.source === 'agent_system' && payload.external_id) {
-      console.log(`🔄 [${requestId}] ECHO DETECTED: System message echo, updating status only`);
+      console.log(`🔄 [${requestId}] ECHO detectado - atualizando status apenas`);
       
       try {
-        const { error: updateError } = await supabase
+        await supabase
           .from('messages')
           .update({ 
             status: 'delivered',
@@ -161,11 +98,9 @@ serve(async (req) => {
           })
           .eq('id', payload.external_id);
           
-        if (!updateError) {
-          console.log(`✅ [${requestId}] Message status updated: ${payload.external_id}`);
-        }
+        console.log(`✅ [${requestId}] Status da mensagem atualizado: ${payload.external_id}`);
       } catch (updateErr) {
-        console.error(`❌ [${requestId}] Status update failed:`, updateErr);
+        console.error(`❌ [${requestId}] Erro ao atualizar status:`, updateErr);
       }
       
       return new Response(JSON.stringify({
@@ -177,25 +112,48 @@ serve(async (req) => {
       });
     }
 
-    // Usar finalContactPhone como phoneNumber principal
-    let finalContactPhone = null;
+    // Extrair dados básicos
+    const phoneNumberRaw = payload.phoneNumber ?? payload.phone_number ?? payload.contact_phone ?? payload.phone;
+    const contactPhone = payload.contact_phone;
+    const responseMessage = payload.response_message ?? payload.message ?? payload.content ?? payload.text;
+    const messageTypeRaw = payload.message_type ?? payload.messageType ?? payload.type;
+    const fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url;
+    const fileName = payload.file_name ?? payload.fileName ?? payload.filename;
+    const pushName = payload.pushName ?? payload.push_name ?? payload.contact_name;
+    const profilePicUrl = payload.profilePicUrl ?? payload.profile_pic_url;
+    
+    // Evolution API
+    const evolutionInstance = payload.instance ?? payload.evolution_instance;
+    const remoteJid = payload.data?.key?.remoteJid ?? payload.remoteJid ?? payload.sender;
+    
+    // Workspace
+    const directWorkspaceId = payload.workspace_id ?? payload.workspaceId;
+    const conversationId = payload.conversation_id ?? payload.conversationId;
+
+    // Normalizar phoneNumber - PRIORIZAR contact_phone ou remoteJid
+    let phoneNumber = null;
     if (contactPhone) {
-      finalContactPhone = sanitizePhoneNumber(contactPhone);
-      console.log(`📱 [${requestId}] Using contact_phone: ${contactPhone} -> ${finalContactPhone}`);
+      phoneNumber = sanitizePhoneNumber(contactPhone);
+      console.log(`📱 [${requestId}] Using contact_phone: ${contactPhone} -> ${phoneNumber}`);
     } else if (remoteJid) {
       const extractedPhone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      finalContactPhone = sanitizePhoneNumber(extractedPhone);
-      console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${finalContactPhone}`);
-    } else if (phoneNumber) {
-      finalContactPhone = sanitizePhoneNumber(phoneNumber);
-      console.log(`📱 [${requestId}] Using phoneNumber: ${phoneNumber} -> ${finalContactPhone}`);
+      phoneNumber = sanitizePhoneNumber(extractedPhone);
+      console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${phoneNumber}`);
+    } else if (phoneNumberRaw) {
+      phoneNumber = sanitizePhoneNumber(phoneNumberRaw);
+      console.log(`📱 [${requestId}] Using phoneNumber: ${phoneNumberRaw} -> ${phoneNumber}`);
     }
 
-    if (finalContactPhone) {
-      phoneNumber = finalContactPhone;
-    }
+    console.log(`🔍 [${requestId}] Phone resolution inputs: {
+  contactPhone: ${contactPhone || null},
+  remoteJid: ${remoteJid || null},
+  instancePhone: undefined,
+  pushName: ${pushName || null},
+  senderType: undefined,
+  fullPayload: '${JSON.stringify(payload).substring(0, 250)}'
+}`);
 
-    // PROTEÇÃO CRÍTICA: Evitar números de instância
+    // PROTEÇÃO: Não permitir números de instância como contatos
     if (evolutionInstance && phoneNumber) {
       const { data: evolutionInstanceResult } = await supabase
         .from('connections')
@@ -206,9 +164,9 @@ serve(async (req) => {
       if (evolutionInstanceResult?.phone_number) {
         const instanceDigits = sanitizePhoneNumber(evolutionInstanceResult.phone_number);
         if (phoneNumber.includes(instanceDigits) || instanceDigits.includes(phoneNumber)) {
-          console.error(`❌ [${requestId}] BLOCKED: Instance phone used as contact: ${phoneNumber} (instance: ${instanceDigits})`);
+          console.error(`❌ [${requestId}] BLOQUEADO: Número da instância usado como contato: ${phoneNumber} (instance: ${instanceDigits})`);
           return new Response(JSON.stringify({ 
-            error: 'Instance phone number cannot be used as contact',
+            error: 'Instance phone cannot be used as contact',
             blocked_phone: phoneNumber,
             instance_phone: instanceDigits
           }), {
@@ -219,21 +177,12 @@ serve(async (req) => {
       }
     }
 
-    const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
-    const hasValidContent = !!(responseMessage || fileUrl);
-    
-    console.log(`📝 [${requestId}] Content analysis: {
-  responseMessage: "${responseMessage}",
-  hasValidContent: ${hasValidContent},
-  finalMessageType: "${finalMessageType}"
-}`);
-
-    // Validações básicas
-    if (!conversationId && !phoneNumber) {
-      console.log(`⚠️ [${requestId}] Payload vazio ou incompleto - retornando OK`);
+    // Validação básica
+    if (!phoneNumber || !responseMessage) {
+      console.log(`⚠️ [${requestId}] Dados insuficientes - phoneNumber: ${phoneNumber}, message: ${responseMessage}`);
       return new Response(JSON.stringify({
         success: true,
-        message: 'No action needed'
+        message: 'Insufficient data for processing'
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -241,29 +190,10 @@ serve(async (req) => {
     }
 
     // Resolver workspace_id
-    let workspaceId: string | null = directWorkspaceId;
-    let finalConversationId: string | null = conversationId;
+    let workspaceId = directWorkspaceId;
 
-    console.log(`🔍 [${requestId}] Starting workspace resolution with data: {
-  directWorkspaceId: ${directWorkspaceId || null},
-  conversationId: ${conversationId || null},
-  evolutionInstance: ${evolutionInstance || null},
-  phoneNumber: ${phoneNumber || null}
-}`);
-
-    if (!workspaceId && conversationId) {
-      const { data: conversation, error: convError } = await supabase
-        .from('conversations')
-        .select('workspace_id, connection_id')
-        .eq('id', conversationId)
-        .maybeSingle();
-
-      if (!convError && conversation) {
-        workspaceId = conversation.workspace_id;
-        console.log(`✅ [${requestId}] Workspace resolved from conversation: ${workspaceId}`);
-      }
-    }
-
+    console.log(`🔍 [${requestId}] Resolving workspace from evolution_instance: ${evolutionInstance}`);
+    
     if (!workspaceId && evolutionInstance) {
       const { data: connection, error: connError } = await supabase
         .from('connections')
@@ -277,54 +207,75 @@ serve(async (req) => {
       }
     }
 
-    console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId}`);
+    console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${workspaceId === directWorkspaceId ? 'direct_override' : 'evolution_instance'})`);
 
     if (!workspaceId) {
-      console.log(`⚠️ [${requestId}] Could not resolve workspace_id - continuing anyway`);
+      console.error(`❌ [${requestId}] Could not resolve workspace_id`);
       return new Response(JSON.stringify({
-        success: true,
-        message: 'Could not resolve workspace but processed'
+        success: false,
+        error: 'Could not resolve workspace_id'
       }), {
-        status: 200,
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Buscar ou criar contato se necessário
+    // BUSCAR OU CRIAR CONTATO
+    console.log(`🔍 [${requestId}] Resolving conversation for phone: ${phoneNumber} in workspace: ${workspaceId} (sender_type: agent)`);
+
     let contactResult = null;
-    if (phoneNumber && senderType === 'contact') {
-      const { data: existingContact, error: contactQueryError } = await supabase
+    const { data: existingContact, error: contactQueryError } = await supabase
+      .from('contacts')
+      .select('id, name, profile_image_url')
+      .eq('phone', phoneNumber)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (!contactQueryError && existingContact) {
+      contactResult = existingContact;
+      console.log(`👤 [${requestId}] Contact resolved: ${contactResult.id} - ${contactResult.name}`);
+    } else if (!contactQueryError) {
+      // Criar novo contato
+      const contactName = pushName || `Contato ${phoneNumber}`;
+      const { data: newContact, error: contactCreateError } = await supabase
         .from('contacts')
+        .insert({
+          phone: phoneNumber,
+          name: contactName,
+          workspace_id: workspaceId,
+          profile_image_url: profilePicUrl || null
+        })
         .select('id, name, profile_image_url')
-        .eq('phone', phoneNumber)
-        .eq('workspace_id', workspaceId)
-        .maybeSingle();
+        .single();
 
-      if (!contactQueryError && existingContact) {
-        contactResult = existingContact;
-        console.log(`👤 [${requestId}] Contact resolved: ${contactResult.id} - ${contactResult.name}`);
-      } else if (!contactQueryError) {
-        const contactName = pushName || `Contato ${phoneNumber}`;
-        const { data: newContact, error: contactCreateError } = await supabase
-          .from('contacts')
-          .insert({
-            phone: phoneNumber,
-            name: contactName,
-            workspace_id: workspaceId,
-            profile_image_url: profilePicUrl || null
-          })
-          .select('id, name, profile_image_url')
-          .single();
-
-        if (!contactCreateError && newContact) {
-          contactResult = newContact;
-          console.log(`👤 [${requestId}] Contact created: ${contactResult.id} - ${contactResult.name}`);
-        }
+      if (!contactCreateError && newContact) {
+        contactResult = newContact;
+        console.log(`👤 [${requestId}] Contact created: ${contactResult.id} - ${contactResult.name}`);
+      } else {
+        console.error(`❌ [${requestId}] Error creating contact:`, contactCreateError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Failed to create contact'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
+    } else {
+      console.error(`❌ [${requestId}] Error querying contact:`, contactQueryError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to query contact'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    // Buscar conversa existente ou criar nova se necessário
-    if (contactResult && !finalConversationId) {
+    // BUSCAR OU CRIAR CONVERSA
+    let finalConversationId = conversationId;
+    
+    if (!finalConversationId) {
       const { data: existingConversation, error: convQueryError } = await supabase
         .from('conversations')
         .select('id')
@@ -336,7 +287,8 @@ serve(async (req) => {
       if (!convQueryError && existingConversation) {
         finalConversationId = existingConversation.id;
         console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
-      } else if (!convQueryError && senderType === 'contact') {
+      } else if (!convQueryError) {
+        // Criar nova conversa
         const { data: newConversation, error: convCreateError } = await supabase
           .from('conversations')
           .insert({
@@ -351,196 +303,180 @@ serve(async (req) => {
         if (!convCreateError && newConversation) {
           finalConversationId = newConversation.id;
           console.log(`✅ [${requestId}] Conversation created: ${finalConversationId}`);
-        }
-      }
-    }
-
-    // Resolver sender_id
-    let finalSenderId = null;
-    let finalSenderType = senderType;
-
-    if (senderType === 'contact') {
-      finalSenderId = contactResult?.id || null;
-    } else if (senderType === 'agent') {
-      finalSenderId = payload.sender_id || null;
-    }
-
-    // Finalizar conteúdo
-    let finalContent = responseMessage;
-    if (!finalContent && fileUrl) {
-      finalContent = generateContentForMedia(finalMessageType, fileName);
-    }
-
-    const hasContentNow = !!finalContent;
-
-    console.log(`📊 [${requestId}] Content details - finalContent: "${finalContent}", fileUrl: ${!!fileUrl}`);
-
-    // INSERIR MENSAGEM se tiver conteúdo e conversa
-    if (hasContentNow && finalConversationId) {
-      console.log(`💾 [${requestId}] Inserting message into conversation: ${finalConversationId}`);
-      
-      const messageExternalId = payload.external_id || `n8n_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      const { data: newMessage, error: messageError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: finalConversationId,
-          workspace_id: workspaceId,
-          sender_id: finalSenderId,
-          sender_type: finalSenderType,
-          content: finalContent,
-          message_type: finalMessageType,
-          file_url: fileUrl || null,
-          file_name: fileName || null,
-          status: 'sent',
-          external_id: messageExternalId,
-          origem_resposta: 'whatsapp'
-        })
-        .select('id')
-        .single();
-
-      if (messageError) {
-        // Se for erro de duplicata, ignorar
-        if (messageError.code === '23505' && messageError.message.includes('idx_messages_external_id_unique')) {
-          console.log(`⚠️ [${requestId}] Message already exists (external_id: ${messageExternalId}) - skipping duplicate`);
+        } else {
+          console.error(`❌ [${requestId}] Error creating conversation:`, convCreateError);
           return new Response(JSON.stringify({
-            success: true,
-            action: 'duplicate_skipped',
-            external_id: messageExternalId
+            success: false,
+            error: 'Failed to create conversation'
           }), {
-            status: 200,
+            status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         }
-        
-        console.error(`❌ [${requestId}] Message insert error:`, messageError);
+      } else {
+        console.error(`❌ [${requestId}] Error querying conversation:`, convQueryError);
         return new Response(JSON.stringify({
           success: false,
-          error: 'Failed to insert message',
-          details: messageError.message
+          error: 'Failed to query conversation'
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+    }
 
-      const messageId = newMessage.id;
-      console.log(`✅ [${requestId}] Message registered successfully: ${messageId} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
+    console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
 
-      // ENCAMINHAR PARA N8N se configurado
-      console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
-      
-      const { data: webhookData, error: webhookError } = await supabase
-        .from('workspace_webhook_secrets')  
-        .select('webhook_url')
-        .eq('workspace_id', workspaceId)
-        .maybeSingle();
+    // SALVAR MENSAGEM
+    const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
+    const messageExternalId = payload.external_id || `n8n_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      if (webhookData?.webhook_url) {
-        console.log(`📤 [${requestId}] Using workspace webhook: ${webhookData.webhook_url}`);
-        
-        const forwardPayload = {
-          ...payload,
-          messageId,
-          conversationId: finalConversationId,
-          contactId: contactResult?.id,
-          workspaceId,
-          phoneNumber,
-          finalContent,
-          messageType: finalMessageType,
-          senderType: finalSenderType,
-          senderId: finalSenderId,
-          timestamp: new Date().toISOString(),
-          requestId
-        };
+    console.log(`📝 [${requestId}] Content analysis: {
+  responseMessage: "${responseMessage}",
+  hasValidContent: true,
+  finalMessageType: "${finalMessageType}",
+  fileUrl: ${!!fileUrl},
+  base64Data: false
+}`);
 
-        try {
-          const webhookResponse = await fetch(webhookData.webhook_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(forwardPayload)
-          });
+    console.log(`📊 [${requestId}] Message insertion check - hasContentNow: true, finalConversationId: ${finalConversationId}`);
+    console.log(`💾 [${requestId}] Inserting message into conversation: ${finalConversationId}`);
 
-          const responseStatus = webhookResponse.status;
-          console.log(`📨 [${requestId}] N8N webhook response: ${responseStatus}`);
+    const { data: newMessage, error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: finalConversationId,
+        workspace_id: workspaceId,
+        sender_id: contactResult.id,
+        sender_type: 'contact',
+        content: responseMessage,
+        message_type: finalMessageType,
+        file_url: fileUrl || null,
+        file_name: fileName || null,
+        status: 'received',
+        external_id: messageExternalId,
+        origem_resposta: 'whatsapp'
+      })
+      .select('id')
+      .single();
 
-          if (webhookResponse.ok) {
-            console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
-            
-            return new Response(JSON.stringify({
-              success: true,
-              messageId,
-              conversationId: finalConversationId,
-              contactId: contactResult?.id,
-              workspaceId,
-              n8n_forwarded: true
-            }), {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-          } else {
-            const responseText = await webhookResponse.text();
-            console.error(`❌ [${requestId}] N8N webhook failed (${responseStatus}):`, responseText);
-            
-            return new Response(JSON.stringify({
-              success: true,
-              messageId,
-              conversationId: finalConversationId,
-              n8n_failed: true,
-              n8n_status: responseStatus
-            }), {
-              status: 200,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-          }
-        } catch (webhookException) {
-          console.error(`❌ [${requestId}] N8N webhook exception:`, webhookException);
-          
-          return new Response(JSON.stringify({
-            success: true,
-            messageId,
-            conversationId: finalConversationId,
-            n8n_exception: webhookException.message
-          }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-      } else {
-        console.log(`⚠️ [${requestId}] No N8N webhook configured for workspace ${workspaceId}`);
-        
+    if (messageError) {
+      // Se for erro de duplicata, ignorar
+      if (messageError.code === '23505' && messageError.message.includes('idx_messages_external_id_unique')) {
+        console.log(`⚠️ [${requestId}] Message already exists (external_id: ${messageExternalId}) - skipping duplicate`);
         return new Response(JSON.stringify({
           success: true,
-          messageId,
-          conversationId: finalConversationId,
-          contactId: contactResult?.id,
-          workspaceId,
-          n8n_configured: false
+          action: 'duplicate_skipped',
+          external_id: messageExternalId
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-    } else {
-      console.log(`⚠️ [${requestId}] Skipping message insertion - no valid content or conversation`);
       
+      console.error(`❌ [${requestId}] Message insert error:`, messageError);
       return new Response(JSON.stringify({
-        success: true,
-        action: 'skipped',
-        reason: hasContentNow ? 'no_conversation' : 'no_content'
+        success: false,
+        error: 'Failed to insert message',
+        details: messageError.message
       }), {
-        status: 200,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    const messageId = newMessage.id;
+    console.log(`✅ [${requestId}] Message registered successfully: ${messageId} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
+
+    // Debug do contexto de autenticação
+    const authContext = {
+      auth_uid: null,
+      jwt_email: null,
+      jwt_system_email: null,
+      current_system_user_id: null,
+      is_current_user_master: false
+    };
+
+    try {
+      const { data: debugData } = await supabase.rpc('debug_current_user');
+      if (debugData) {
+        Object.assign(authContext, debugData);
+      }
+    } catch (debugError) {
+      console.warn(`⚠️ [${requestId}] Debug context error:`, debugError);
+    }
+
+    console.log(`🔍 [${requestId}] Auth context: ${JSON.stringify(authContext)} ${payload.auth_context || null}`);
+
+    // ENCAMINHAR PARA N8N
+    console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
+    
+    const { data: webhookData, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')  
+      .select('webhook_url')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (webhookData?.webhook_url) {
+      console.log(`📤 [${requestId}] Using workspace webhook: ${webhookData.webhook_url}`);
+      
+      const forwardPayload = {
+        ...payload,
+        messageId,
+        conversationId: finalConversationId,
+        contactId: contactResult.id,
+        workspaceId,
+        phoneNumber,
+        finalContent: responseMessage,
+        messageType: finalMessageType,
+        senderType: 'contact',
+        senderId: contactResult.id,
+        timestamp: new Date().toISOString(),
+        processedAt: new Date().toISOString(),
+        requestId
+      };
+
+      try {
+        const webhookResponse = await fetch(webhookData.webhook_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(forwardPayload)
+        });
+
+        const responseStatus = webhookResponse.status;
+        console.log(`📨 [${requestId}] N8N webhook response: ${responseStatus}`);
+
+        if (webhookResponse.ok) {
+          console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
+        } else {
+          const responseText = await webhookResponse.text();
+          console.error(`❌ [${requestId}] N8N webhook failed (${responseStatus}):`, responseText);
+        }
+      } catch (webhookException) {
+        console.error(`❌ [${requestId}] N8N webhook exception:`, webhookException);
+      }
+    } else {
+      console.log(`⚠️ [${requestId}] No N8N webhook configured for workspace ${workspaceId}`);
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      messageId,
+      conversationId: finalConversationId,
+      contactId: contactResult.id,
+      workspaceId,
+      phoneNumber
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error(`💥 [${requestId}] N8N Response webhook error:`, error);
     return new Response(JSON.stringify({
       success: false,
       error: 'Internal server error',
-      details: error.message,
-      requestId
+      details: error.message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
