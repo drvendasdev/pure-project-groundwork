@@ -124,20 +124,45 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
       // Use the correct secret name format: N8N_WEBHOOK_URL_{workspace_id}
       const secretName = `N8N_WEBHOOK_URL_${workspaceId}`;
       
-      // Always upsert to workspace_webhook_secrets to avoid duplicates
-      const { error: secretsError } = await supabase
+      // Check if record exists in workspace_webhook_secrets
+      const { data: existingSecret, error: checkError } = await supabase
         .from('workspace_webhook_secrets')
-        .upsert({
-          workspace_id: workspaceId,
-          secret_name: secretName,
-          webhook_url: url
-        }, {
-          onConflict: 'workspace_id,secret_name'
-        });
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('secret_name', secretName)
+        .maybeSingle();
 
-      if (secretsError) {
-        console.error('Error saving to webhook secrets:', secretsError);
-        // Don't fail the entire operation if secrets save fails
+      if (checkError) {
+        console.error('Error checking existing secret:', checkError);
+      }
+
+      // Update or insert based on existence
+      if (existingSecret) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('workspace_webhook_secrets')
+          .update({
+            webhook_url: url,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSecret.id);
+
+        if (updateError) {
+          console.error('Error updating webhook secrets:', updateError);
+        }
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from('workspace_webhook_secrets')
+          .insert({
+            workspace_id: workspaceId,
+            secret_name: secretName,
+            webhook_url: url
+          });
+
+        if (insertError) {
+          console.error('Error inserting webhook secrets:', insertError);
+        }
       }
       
       setWebhookConfig(data);
