@@ -145,6 +145,48 @@ serve(async (req) => {
       console.log('✅ Conversation updated');
     }
 
+    // Integração com N8N
+    console.log('🔗 Checking N8N webhook for workspace:', conversation.workspace_id);
+    const { data: webhookData, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')
+      .select('webhook_url')
+      .eq('workspace_id', conversation.workspace_id)
+      .maybeSingle();
+
+    if (webhookData?.webhook_url) {
+      console.log('📤 Sending to N8N webhook:', webhookData.webhook_url);
+      
+      const n8nPayload = {
+        phone_number: contact.phone,
+        response_message: content,
+        workspace_id: conversation.workspace_id,
+        conversation_id: conversation_id,
+        message_id: message.id,
+        message_type: message_type,
+        timestamp: new Date().toISOString()
+      };
+
+      try {
+        const webhookResponse = await fetch(webhookData.webhook_url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        if (webhookResponse.ok) {
+          console.log('✅ N8N webhook called successfully');
+        } else {
+          console.log('⚠️ N8N webhook returned status:', webhookResponse.status);
+        }
+      } catch (webhookErr) {
+        console.error('❌ Error calling N8N webhook:', webhookErr);
+      }
+    } else {
+      console.log('⚠️ No N8N webhook configured for workspace');
+    }
+
     console.log('🎉 SUCCESS - Message sent:', message.id);
 
     return new Response(JSON.stringify({
