@@ -503,9 +503,10 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);
 
-    // CRÍTICO: Só criar contatos/conversas para mensagens de contatos reais (não de agentes)
+    // Se ainda não temos conversation_id, precisar resolver via phoneNumber
+    // CRÍTICO: Para mensagens de agentes, só resolver se já existe conversationId
     if (!finalConversationId && phoneNumber && workspaceId && senderType === "contact") {
-      console.log(`🔍 [${requestId}] Creating/finding conversation for contact phone: ${phoneNumber} in workspace: ${workspaceId}`);
+      console.log(`🔍 [${requestId}] Creating/finding conversation for CONTACT phone: ${phoneNumber} in workspace: ${workspaceId}`);
       
       const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
       
@@ -637,18 +638,32 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-    } else if (!finalConversationId && phoneNumber && senderType !== "contact") {
-      console.log(`⏭️ [${requestId}] Skipping contact/conversation creation for non-contact sender (sender_type: ${senderType})`);
+    } else if (!finalConversationId && senderType !== "contact") {
+      console.log(`⚠️ [${requestId}] No conversation_id for agent message - this should have been provided by N8N!`);
+      // Para mensagens de agentes, o conversation_id DEVE vir do payload
+      if (!conversationId) {
+        return new Response(JSON.stringify({
+          code: 'MISSING_CONVERSATION_ID',
+          message: 'Agent messages require conversation_id to be provided',
+          requestId,
+          senderType
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
+    // VALIDAÇÃO FINAL: Garantir que temos conversation_id para prosseguir
     if (!finalConversationId) {
-      console.error(`❌ [${requestId}] Could not resolve conversation_id`);
+      console.error(`❌ [${requestId}] No conversation_id resolved - cannot proceed`);
       return new Response(JSON.stringify({
-        code: 'CONVERSATION_RESOLUTION_FAILED',
-        message: 'Could not create or find conversation',
-        requestId
+        code: 'NO_CONVERSATION',
+        message: 'Unable to resolve conversation_id for message processing',
+        requestId,
+        provided: { conversationId, phoneNumber, senderType, workspaceId }
       }), {
-        status: 500,
+        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
