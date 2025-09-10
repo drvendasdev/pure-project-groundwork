@@ -249,13 +249,14 @@ export const useWhatsAppConversations = () => {
         'x-system-user-email': currentUserData.email || ''
       };
 
-      // Add workspace context if available (send-message derives workspace from conversation)
+      // Add workspace context if available (send-message-simple version)
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
       }
 
-      console.log('🚀 Chamando send-message-simple');
-      const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message-simple', {
+      console.log('🚀 Chamando send-message-simple com payload:', payload);
+      console.log('🚀 Headers enviados:', headers);
+      const { data: sendResult, error: apiError } = await supabase.functions.invoke('test-send-msg', {
         body: payload,
         headers
       });
