@@ -706,6 +706,57 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
 
+    // Encaminhar para N8N usando webhook específico do workspace
+    console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
+    
+    // Buscar webhook URL específico do workspace nos secrets
+    const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${workspaceId}`;
+    const workspaceWebhookUrl = Deno.env.get(workspaceWebhookSecretName);
+    
+    if (workspaceWebhookUrl) {
+      console.log(`📤 [${requestId}] Using workspace-specific webhook: ${workspaceWebhookSecretName}`);
+      
+      try {
+        const n8nPayload = {
+          workspace_id: workspaceId,
+          conversation_id: finalConversationId,
+          message_id: newMessage.id,
+          phone_number: phoneNumber ? sanitizePhoneNumber(phoneNumber) : null,
+          content: finalContent,
+          message_type: finalMessageType,
+          sender_type: senderType,
+          file_url: fileUrl,
+          file_name: fileName,
+          mime_type: mimeType,
+          external_id: externalId,
+          metadata: metadata,
+          processed_at: new Date().toISOString(),
+          request_id: requestId
+        };
+
+        const n8nResponse = await fetch(workspaceWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        console.log(`📨 [${requestId}] N8N webhook response: ${n8nResponse.status}`);
+        
+        if (!n8nResponse.ok) {
+          const errorText = await n8nResponse.text();
+          console.error(`❌ [${requestId}] N8N webhook failed:`, errorText);
+        } else {
+          console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
+        }
+      } catch (n8nError) {
+        console.error(`❌ [${requestId}] Error calling N8N webhook:`, n8nError);
+      }
+    } else {
+      console.log(`⚠️ [${requestId}] No workspace-specific webhook found (${workspaceWebhookSecretName}), skipping N8N forward`);
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       data: {

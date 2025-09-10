@@ -50,6 +50,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
+      // Salvar na tabela workspace_webhook_settings
       const { data, error } = await supabase
         .from('workspace_webhook_settings')
         .upsert({
@@ -63,6 +64,24 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
 
       if (error) throw error;
       
+      // Salvar secret dinâmico no Supabase Edge Functions
+      const { error: secretError } = await supabase.functions.invoke('manage-workspace-webhook-secret', {
+        body: {
+          workspace_id: workspaceId,
+          webhook_url: url,
+          action: 'save'
+        }
+      });
+
+      if (secretError) {
+        console.error('Error saving webhook secret:', secretError);
+        toast({
+          title: "Aviso",
+          description: "Configuração salva, mas houve problema ao criar o secret automático",
+          variant: "destructive",
+        });
+      }
+
       setWebhookConfig(data);
       toast({
         title: "Sucesso",
