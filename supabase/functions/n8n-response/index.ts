@@ -575,8 +575,21 @@ serve(async (req) => {
 
         existingContact = foundContact;
 
-        // CRIAR contato SOMENTE se sender_type = "contact" e não existe
+        // PROTEGIDO: CRIAR contato SOMENTE se sender_type = "contact" e não existe E NÃO É NÚMERO DA INSTÂNCIA
         if (!existingContact && senderType === "contact") {
+          // VALIDAÇÃO EXTRA: Verificar se não é número da instância
+          if (payload.instance && sanitizedPhone.includes(payload.instance.replace(/\D/g, ''))) {
+            console.error(`❌ [${requestId}] BLOQUEADO: Tentativa de criar contato com número da instância: ${sanitizedPhone} (instance: ${payload.instance})`);
+            return new Response(JSON.stringify({
+              error: 'Número da instância não pode ser usado como contato',
+              instance_phone: sanitizedPhone,
+              instance: payload.instance
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+          
           console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone} (sender_type: contact)`);
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
@@ -756,7 +769,19 @@ serve(async (req) => {
             }
           }
         } else {
-          // Criar novo contato com pushName
+          // PROTEGIDO: Criar novo contato com pushName MAS BLOQUEAR NÚMERO DA INSTÂNCIA
+          if (payload.instance && sanitizedPhone.includes(payload.instance.replace(/\D/g, ''))) {
+            console.error(`❌ [${requestId}] BLOQUEADO: Tentativa de criar contato com número da instância: ${sanitizedPhone} (instance: ${payload.instance})`);
+            return new Response(JSON.stringify({
+              error: 'Número da instância não pode ser usado como contato',
+              instance_phone: sanitizedPhone,
+              instance: payload.instance
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+          
           const contactName = pushName || `Contato ${sanitizedPhone}`;
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
