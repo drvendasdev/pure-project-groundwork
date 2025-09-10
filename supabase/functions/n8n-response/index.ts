@@ -641,26 +641,6 @@ serve(async (req) => {
           console.log(`⚠️ [${requestId}] No contact available - proceeding without conversation creation`);
         }
 
-          if (createConvError) {
-            console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
-            return new Response(JSON.stringify({
-              code: 'DATABASE_ERROR',
-              message: 'Error creating conversation',
-              details: createConvError.message,
-              requestId
-            }), {
-              status: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
-          }
-          
-          finalConversationId = newConv.id;
-        } else {
-          finalConversationId = existingConv.id;
-        }
-
-        console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
-
       } catch (error) {
         console.error(`❌ [${requestId}] Unexpected error during upsert:`, error);
         return new Response(JSON.stringify({
