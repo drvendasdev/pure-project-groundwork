@@ -129,22 +129,15 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-    // CORRIGIDO: Normalizar phone_number garantindo que NUNCA seja o número da instância
-    let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
-    let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
-    
-    // CRÍTICO: Se temos remoteJid, usar ele como fonte primária (é sempre o outro lado da conversa)
-    // MAS verificar se não é fromMe (mensagem enviada pela instância)
-    const fromMe = payload.fromMe ?? payload.data?.key?.fromMe ?? false;
-    
-    if (remoteJid && !fromMe) {
-      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-      console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
-    } else if (fromMe) {
-      console.log(`⏭️ [${requestId}] Skipping fromMe message - não criar contato para instância`);
-      // Para mensagens fromMe, usar apenas o conversationId existente
-      phoneNumber = null;
-    }
+  // CORRIGIDO: Normalizar phone_number garantindo que NUNCA seja o número da instância
+  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
+  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
+  
+  // Se temos remoteJid, usar ele como fonte primária (é sempre o outro lado da conversa)
+  if (remoteJid) {
+    phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+    console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
+  }
   
   // Suporte para camelCase e base64 direto
   let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? payload.conversation ?? payload.data?.message?.conversation ?? payload.data?.message?.extendedTextMessage?.text ?? null;
@@ -503,7 +496,7 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);
 
-    // Se ainda não temos conversation_id, tentar resolver via phoneNumber
+    // Se ainda não temos conversation_id, precisar resolver via phoneNumber
     if (!finalConversationId && phoneNumber && workspaceId) {
       console.log(`🔍 [${requestId}] Creating/finding conversation for phone: ${phoneNumber} in workspace: ${workspaceId}`);
       
@@ -513,7 +506,7 @@ serve(async (req) => {
         // Executar upsert em transação simples para evitar problemas de concorrência
         console.log(`🔄 [${requestId}] Starting contact/conversation upsert for phone: ${sanitizedPhone}`);
         
-        // Buscar ou criar contato APENAS se sender_type for "contact"
+        // Buscar ou criar contato
         let { data: existingContact, error: findContactError } = await supabase
           .from('contacts')
           .select('id, name')
@@ -534,15 +527,13 @@ serve(async (req) => {
           });
         }
 
-        // CRÍTICO: Só criar contato se for sender_type = "contact" E não existir
-        if (!existingContact && senderType === "contact") {
+        if (!existingContact) {
           console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone}`);
-          const personName = payload.person_name ?? payload.personName ?? payload.contact_name ?? payload.pushName ?? `Contato ${sanitizedPhone}`;
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
             .insert({
               phone: sanitizedPhone,
-              name: personName,
+              name: `Contato ${sanitizedPhone}`,
               workspace_id: workspaceId,
             })
             .select('id, name')
@@ -564,69 +555,67 @@ serve(async (req) => {
           existingContact = newContact;
         }
 
-        console.log(`👤 [${requestId}] Contact resolved: ${existingContact?.id} - ${existingContact?.name}`);
+        console.log(`👤 [${requestId}] Contact resolved: ${existingContact.id} - ${existingContact.name}`);
 
-        // Buscar ou criar conversa (só se temos contato)
-        if (existingContact) {
-          let { data: existingConv, error: findConvError } = await supabase
+        // Buscar ou criar conversa
+        let { data: existingConv, error: findConvError } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('contact_id', existingContact.id)
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'open')
+          .maybeSingle();
+
+        if (findConvError) {
+          console.error(`❌ [${requestId}] Error finding conversation:`, findConvError);
+          return new Response(JSON.stringify({
+            code: 'DATABASE_ERROR',
+            message: 'Error finding conversation',
+            details: findConvError.message,
+            requestId
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        if (!existingConv) {
+          console.log(`➕ [${requestId}] Creating new conversation for contact: ${existingContact.id}`);
+          const { data: newConv, error: createConvError } = await supabase
             .from('conversations')
+            .insert({
+              contact_id: existingContact.id,
+              workspace_id: workspaceId,
+              connection_id: resolvedConnectionId,
+              status: 'open',
+              agente_ativo: false,
+              evolution_instance: evolutionInstance || null,
+              canal: 'whatsapp',
+              last_activity_at: new Date().toISOString(),
+              last_message_at: new Date().toISOString(),
+            })
             .select('id')
-            .eq('contact_id', existingContact.id)
-            .eq('workspace_id', workspaceId)
-            .eq('status', 'open')
-            .maybeSingle();
+            .single();
 
-          if (findConvError) {
-            console.error(`❌ [${requestId}] Error finding conversation:`, findConvError);
+          if (createConvError) {
+            console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
             return new Response(JSON.stringify({
               code: 'DATABASE_ERROR',
-              message: 'Error finding conversation',
-              details: findConvError.message,
+              message: 'Error creating conversation',
+              details: createConvError.message,
               requestId
             }), {
               status: 500,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
           }
-
-          if (!existingConv) {
-            console.log(`➕ [${requestId}] Creating new conversation for contact: ${existingContact.id}`);
-            const { data: newConv, error: createConvError } = await supabase
-              .from('conversations')
-              .insert({
-                contact_id: existingContact.id,
-                workspace_id: workspaceId,
-                connection_id: resolvedConnectionId,
-                status: 'open',
-                agente_ativo: false,
-                evolution_instance: evolutionInstance || null,
-                canal: 'whatsapp',
-                last_activity_at: new Date().toISOString(),
-                last_message_at: new Date().toISOString(),
-              })
-              .select('id')
-              .single();
-
-            if (createConvError) {
-              console.error(`❌ [${requestId}] Error creating conversation:`, createConvError);
-              return new Response(JSON.stringify({
-                code: 'DATABASE_ERROR',
-                message: 'Error creating conversation',
-                details: createConvError.message,
-                requestId
-              }), {
-                status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-              });
-            }
-            
-            finalConversationId = newConv.id;
-          } else {
-            finalConversationId = existingConv.id;
-          }
-
-          console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
+          
+          finalConversationId = newConv.id;
+        } else {
+          finalConversationId = existingConv.id;
         }
+
+        console.log(`✅ [${requestId}] Conversation resolved: ${finalConversationId}`);
 
       } catch (error) {
         console.error(`❌ [${requestId}] Unexpected error during upsert:`, error);
@@ -642,9 +631,16 @@ serve(async (req) => {
       }
     }
 
-    // CONTINUAR SEMPRE - mesmo sem conversation_id para compatibilidade
     if (!finalConversationId) {
-      console.log(`⚠️ [${requestId}] No conversation_id resolved - proceeding anyway for compatibility`);
+      console.error(`❌ [${requestId}] Could not resolve conversation_id`);
+      return new Response(JSON.stringify({
+        code: 'CONVERSATION_RESOLUTION_FAILED',
+        message: 'Could not create or find conversation',
+        requestId
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Preparar conteúdo final e payload para N8N
