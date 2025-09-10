@@ -204,17 +204,23 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    // Normalize remoteJid to phone_number
+    // CORRIGIDO: usar número de quem ENVIOU a mensagem (não o destinatário)
     const remoteJid = key.remoteJid;
-    const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-    const contactName = message.pushName || phoneNumber;
+    const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
+    const contactName = message.pushName || senderPhone;
 
-    console.log('📞 Processing message for contact:', { remoteJid, phoneNumber, contactName, workspaceId });
+    console.log('📞 Processing message for contact:', { 
+      remoteJid, 
+      senderPhone, 
+      contactName, 
+      workspaceId, 
+      fromMe: key.fromMe 
+    });
 
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .upsert({
-        phone: phoneNumber,
+        phone: senderPhone,
         name: contactName,
         workspace_id: workspaceId
       }, {
@@ -226,11 +232,11 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
 
     if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
       await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
-        'Failed to upsert contact', { error: contactError, phoneNumber, workspaceId });
+        'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
       return;
     }
 
-    console.log('👤 Contact resolved:', { contactId: contact?.id, phoneNumber });
+    console.log('👤 Contact resolved:', { contactId: contact?.id, senderPhone });
 
     // Get or create conversation
     const { data: conversation, error: conversationError } = await supabase
@@ -304,8 +310,15 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
       }
     }
 
-    // Insert message
-    const { error: messageError } = await supabase
+    // Insert message - CORRIGIDO: garantir que message seja inserida
+    console.log('💾 Inserting message into database:', { 
+      conversationId: conversation.id, 
+      content: content.substring(0, 50), 
+      messageType, 
+      senderPhone 
+    });
+    
+    const { data: insertedMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversation.id,
@@ -324,15 +337,30 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
           timestamp: messageTimestamp,
           raw_message: message
         }
-      });
+      })
+      .select()
+      .single();
 
     if (messageError) {
+      console.error('❌ Failed to insert message:', messageError);
+      console.error('❌ Message error details:', { 
+        error: messageError, 
+        conversationId: conversation.id, 
+        workspaceId, 
+        content: content.substring(0, 100) 
+      });
       await logEvent(supabase, connectionId, correlationId, 'MESSAGE_INSERT_ERROR', 'error', 
         'Failed to insert message', { error: messageError, workspaceId });
     } else {
-      console.log('✅ Message inserted successfully:', { conversationId: conversation.id, messageType, phoneNumber });
+      console.log('✅ Message inserted successfully:', { 
+        messageId: insertedMessage?.id,
+        conversationId: conversation.id, 
+        messageType, 
+        senderPhone,
+        content: content.substring(0, 50)
+      });
       await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSED', 'info', 
-        'Message processed successfully', { messageType, phoneNumber, workspaceId });
+        'Message processed successfully', { messageType, senderPhone, workspaceId });
     }
 
   } catch (error) {

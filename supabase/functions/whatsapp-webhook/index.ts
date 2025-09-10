@@ -124,16 +124,16 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
       return;
     }
 
-    // Get or create contact
-    const phoneNumber = key.remoteJid.replace('@s.whatsapp.net', '');
-    const contactName = message.pushName || phoneNumber;
+    // Get or create contact - CORRIGIDO: usar número de quem ENVIOU a mensagem
+    const senderPhone = key.remoteJid.replace('@s.whatsapp.net', '');
+    const contactName = message.pushName || senderPhone;
 
-    console.log('📞 Processing message for contact:', { phoneNumber, contactName, workspaceId });
+    console.log('📞 Processing message for contact:', { senderPhone, contactName, workspaceId, fromMe: key.fromMe });
 
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
       .upsert({
-        phone: phoneNumber,
+        phone: senderPhone,
         name: contactName,
         workspace_id: workspaceId
       }, {
@@ -148,7 +148,7 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
       return;
     }
 
-    console.log('👤 Contact resolved:', { contactId: contact?.id, phoneNumber });
+    console.log('👤 Contact resolved:', { contactId: contact?.id, senderPhone });
 
     // Get or create conversation
     const conversationData: any = {
@@ -222,8 +222,15 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
       return;
     }
 
-    // Insert message
-    const { error: messageError } = await supabase
+    // Insert message - CORRIGIDO: garantir que message seja inserida
+    console.log('💾 Inserting message into database:', { 
+      conversationId: conversation.id, 
+      content: content.substring(0, 50), 
+      messageType, 
+      senderPhone 
+    });
+    
+    const { data: insertedMessage, error: messageError } = await supabase
       .from('messages')
       .insert({
         conversation_id: conversation.id,
@@ -242,12 +249,26 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
           timestamp: messageTimestamp,
           correlation_id: correlationId
         }
-      });
+      })
+      .select()
+      .single();
 
     if (messageError) {
       console.error('❌ Failed to insert message:', messageError);
+      console.error('❌ Message error details:', { 
+        error: messageError, 
+        conversationId: conversation.id, 
+        workspaceId, 
+        content: content.substring(0, 100) 
+      });
     } else {
-      console.log('✅ Message inserted successfully:', { conversationId: conversation.id, messageType, phoneNumber });
+      console.log('✅ Message inserted successfully:', { 
+        messageId: insertedMessage?.id,
+        conversationId: conversation.id, 
+        messageType, 
+        senderPhone,
+        content: content.substring(0, 50)
+      });
     }
 
   } catch (error) {
