@@ -95,7 +95,7 @@ serve(async (req) => {
       });
     }
 
-    console.log('✅ Contact found:', contact);
+    console.log('✅ Contact found:', { phone: contact.phone });
 
     // Buscar dados da conexão para pegar a instância
     let instance = null;
@@ -114,6 +114,8 @@ serve(async (req) => {
         console.log('⚠️ Connection error:', connectionError);
       }
     }
+    
+    console.log('📋 Dados para N8N - Phone:', contact.phone, 'Instance:', instance);
 
     // Inserir mensagem no banco
     console.log('💾 Inserting message...');
@@ -175,12 +177,21 @@ serve(async (req) => {
       console.log('📤 Sending to N8N webhook:', webhookData.webhook_url);
       
       // Criar payload no padrão do Evolution (igual quando chega pelo celular)
+      const destinatarioPhone = contact.phone;
+      const senderFormatted = `${destinatarioPhone}@s.whatsapp.net`;
+      
+      console.log('🎯 Preparando sender para N8N:', { 
+        destinatarioPhone, 
+        senderFormatted, 
+        instance 
+      });
+      
       const n8nPayload = {
         // Dados principais do Evolution format
         instance: instance,
-        sender: `${contact.phone}@s.whatsapp.net`,
+        sender: senderFormatted,
         message: content,
-        phoneNumber: contact.phone,
+        phoneNumber: destinatarioPhone,
         status: 'sent',
         external_id: message.id,
         
