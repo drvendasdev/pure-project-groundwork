@@ -68,11 +68,34 @@ serve(async (req) => {
     // CORRIGIDO: Extrair telefone corretamente, NUNCA usar número da instância como contato
     let finalPhoneNumber = null;
     
-    // Prioridade: 1) phoneNumber do payload 2) sender (remoteJid)
-    if (phoneNumber) {
-      finalPhoneNumber = phoneNumber.replace(/\D/g, ''); // Sanitizar
-    } else if (sender && sender.includes('@s.whatsapp.net')) {
+    console.log(`🔍 [${requestId}] Raw payload fields:`, {
+      phoneNumber,
+      sender,
+      message,
+      instance,
+      hasPhoneNumber: !!phoneNumber,
+      hasSender: !!sender,
+      senderType: typeof sender
+    });
+    
+    // CRÍTICO: NÃO usar phoneNumber do payload pois pode ser da instância
+    // Prioridade: APENAS sender (remoteJid) para mensagens de contato
+    if (sender && sender.includes('@s.whatsapp.net')) {
       finalPhoneNumber = sender.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+      console.log(`📱 [${requestId}] Using sender (remoteJid): ${sender} -> ${finalPhoneNumber}`);
+    } else {
+      console.error(`❌ [${requestId}] CRÍTICO: Não foi possível extrair número de contato válido do sender`);
+      console.error(`❌ [${requestId}] IGNORANDO phoneNumber=${phoneNumber} (pode ser da instância)`);
+      
+      // Não processar se não temos sender válido
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Ignored - no valid contact sender found',
+        requestId,
+        debug: { phoneNumber, sender, instance }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
     const finalInstance = instance;
@@ -132,11 +155,18 @@ serve(async (req) => {
         .single();
 
       if (!contact) {
+        console.log(`🏗️ [${requestId}] CRIANDO NOVO CONTATO:`, {
+          phone: finalPhoneNumber,
+          name: finalPhoneNumber,
+          workspace_id: connection.workspace_id,
+          is_instance_phone: finalPhoneNumber === instancePhoneClean
+        });
+        
         const { data: newContact } = await supabase
           .from('contacts')
           .insert({
             phone: finalPhoneNumber,
-            name: finalPhoneNumber,
+            name: `Contato ${finalPhoneNumber}`,
             workspace_id: connection.workspace_id
           })
           .select('id')

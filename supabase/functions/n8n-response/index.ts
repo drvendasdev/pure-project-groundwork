@@ -145,7 +145,8 @@ serve(async (req) => {
       instancePhone: payload.phone_number ?? payload.phoneNumber ?? payload.phone,
       pushName,
       senderType: payload.sender_type,
-      fullPayload: JSON.stringify(payload).substring(0, 500)
+      payloadKeys: Object.keys(payload),
+      fullPayload: JSON.stringify(payload).substring(0, 800)
     });
     
     // Prioridade: 1) contact_phone 2) remoteJid - NUNCA usar phone_number da instância
@@ -603,7 +604,14 @@ serve(async (req) => {
             });
           }
           
-          console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone} (sender_type: contact)`);
+          console.log(`➕ [${requestId}] CRIANDO NOVO CONTATO:`, {
+            phone: sanitizedPhone,
+            name: `Contato ${sanitizedPhone}`,
+            workspace_id: workspaceId,
+            sender_type: senderType,
+            source: 'n8n-response-function'
+          });
+          
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
             .insert({
