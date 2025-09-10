@@ -52,16 +52,31 @@ serve(async (req) => {
     let finalOrgId = orgId
     
     if (!finalOrgId && instance) {
-      // Try to find workspace from connections table using instance
+      // Try to find workspace from connections table using instance AND get phone number for protection
       const { data: connectionData } = await supabase
         .from('connections')
-        .select('workspace_id')
+        .select('workspace_id, phone_number')
         .eq('instance_name', instance)
         .maybeSingle()
       
       if (connectionData) {
         finalOrgId = connectionData.workspace_id
         console.log(`Found workspace from connections: ${finalOrgId}`)
+        
+        // PROTEÇÃO CRÍTICA: Verificar se não é número da instância
+        const instancePhoneClean = connectionData.phone_number?.replace(/\D/g, '')
+        if (instancePhoneClean && normalizedPhone === instancePhoneClean) {
+          console.error(`❌ BLOQUEADO: Tentativa de criar conversa com número da instância: ${normalizedPhone} (instance: ${instance})`)
+          return new Response(
+            JSON.stringify({ 
+              error: 'Instance phone number cannot be used as contact',
+              instance_phone: instancePhoneClean,
+              received_phone: normalizedPhone,
+              instance: instance
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
       }
     }
 
@@ -97,6 +112,13 @@ serve(async (req) => {
 
     // Create temporary contact if doesn't exist
     if (!contactId) {
+      console.log(`🏗️ CRIANDO NOVO CONTATO (create-quick-conversation):`, {
+        phone: normalizedPhone,
+        name: `+${normalizedPhone}`,
+        workspace_id: finalOrgId,
+        source: 'create-quick-conversation'
+      })
+      
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
