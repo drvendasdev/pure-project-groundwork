@@ -485,12 +485,19 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
       }
+      
+      console.log('🌍 POST request received from:', {
+        correlationId,
+        userAgent: req.headers.get('user-agent')?.substring(0, 50),
+        contentLength: req.headers.get('content-length'),
+        timestamp: new Date().toISOString()
+      });
 
       const body = await req.json();
       
       // Extract metadata for logging
       const metadata = extractMetadata(body);
-        console.log('📥 Webhook recebido:', {
+      console.log('📥 Webhook recebido:', {
         correlationId,
         event: metadata.event,
         instance: metadata.instance,
@@ -604,6 +611,12 @@ serve(async (req) => {
       }
 
       // Forward to n8n if configured
+      console.log('🔍 Checking N8N forwarding:', {
+        correlationId,
+        n8nConfigured: !!config.n8nWebhookUrl,
+        n8nUrl: config.n8nWebhookUrl ? config.n8nWebhookUrl.substring(0, 50) + '...' : 'NOT_SET'
+      });
+      
       if (config.n8nWebhookUrl) {
         try {
           const sanitizedData = sanitizeWebhookData(body);
@@ -645,6 +658,8 @@ serve(async (req) => {
             url: config.n8nWebhookUrl.substring(0, 50) + '...'
           });
         }
+      } else {
+        console.log('⚠️ N8N not configured - skipping forward:', { correlationId });
       }
 
       return new Response(JSON.stringify({ 
