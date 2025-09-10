@@ -204,12 +204,14 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    // IMPORTANTE: Apenas processar mensagens recebidas (fromMe: false)
-    // Mensagens enviadas (fromMe: true) não devem criar contatos
-    if (!key?.remoteJid || key.fromMe) {
-      console.log('⏭️ Skipping message: no remoteJid or fromMe is true (sent message)');
+    if (!key?.remoteJid) {
+      console.log('⏭️ Skipping message: no remoteJid');
       return;
     }
+    
+    // IMPORTANTE: Processar para N8N independente de fromMe
+    // Mas só criar contatos para mensagens RECEBIDAS (fromMe: false)
+    const shouldCreateContact = !key.fromMe;
     
     // CRÍTICO: usar SEMPRE o número de quem ENVIOU a mensagem (remoteJid)
     // NUNCA usar o número da instância como contato
@@ -217,55 +219,71 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
     const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || senderPhone;
 
-    console.log('📞 Processing received message for contact:', { 
+    console.log('📞 Processing message:', { 
       remoteJid, 
       senderPhone, 
       contactName, 
       workspaceId, 
-      fromMe: key.fromMe 
+      fromMe: key.fromMe,
+      shouldCreateContact
     });
 
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .upsert({
-        phone: senderPhone,
-        name: contactName,
-        workspace_id: workspaceId
-      }, {
-        onConflict: 'phone,workspace_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
+    let contact = null;
+    
+    // Só criar/atualizar contato para mensagens RECEBIDAS
+    if (shouldCreateContact) {
+      const { data: contactData, error: contactError } = await supabase
+        .from('contacts')
+        .upsert({
+          phone: senderPhone,
+          name: contactName,
+          workspace_id: workspaceId
+        }, {
+          onConflict: 'phone,workspace_id',
+          ignoreDuplicates: false
+        })
+        .select()
+        .single();
 
-    if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
-      await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
-        'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
-      return;
+      if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
+        await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
+          'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
+        return;
+      }
+      
+      contact = contactData;
+      console.log('👤 Contact created/updated:', { contactId: contact?.id, senderPhone });
+    } else {
+      console.log('⏭️ Skipping contact creation for sent message (fromMe: true)');
     }
 
-    console.log('👤 Contact resolved:', { contactId: contact?.id, senderPhone });
+    let conversation = null;
 
-    // Get or create conversation
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .upsert({
-        contact_id: contact?.id,
-        connection_id: connectionId,
-        workspace_id: workspaceId,
-        status: 'open',
-        canal: 'whatsapp'
-      }, {
-        onConflict: 'contact_id,connection_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
+    // Só criar conversa se temos um contato (mensagens recebidas)
+    if (contact) {
+      // Get or create conversation
+      const { data: conversationData, error: conversationError } = await supabase
+        .from('conversations')
+        .upsert({
+          contact_id: contact.id,
+          connection_id: connectionId,
+          workspace_id: workspaceId,
+          status: 'open',
+          canal: 'whatsapp'
+        }, {
+          onConflict: 'contact_id,connection_id',
+          ignoreDuplicates: false
+        })
+        .select()
+        .single();
 
-    if (conversationError) {
-      await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
-        'Failed to upsert conversation', { error: conversationError, workspaceId });
-      return;
+      if (conversationError) {
+        await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
+          'Failed to upsert conversation', { error: conversationError, workspaceId });
+        return;
+      }
+      
+      conversation = conversationData;
     }
 
     console.log('💬 Conversation resolved:', { conversationId: conversation?.id, contactId: contact?.id });
