@@ -129,13 +129,24 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-  // Normalizar remoteJid para phone_number (aceitar várias fontes)
-  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
+  // CORRIGIDO: Normalizar phone_number garantindo que NUNCA seja o número da instância
+  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
   let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
   
-  if (!phoneNumber && remoteJid) {
+  // Se temos remoteJid, usar ele como fonte primária (é sempre o outro lado da conversa)
+  if (remoteJid) {
     phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-    console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
+    console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
+  }
+  
+  // IMPORTANTE: Nunca usar payload.to como phoneNumber pois pode ser o número da instância
+  // payload.to contém o destinatário, que em mensagens recebidas seria a instância
+  
+  // Validação adicional: se phoneNumber é igual ao evolutionInstance, é erro
+  const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
+  if (phoneNumber && evolutionInstance && phoneNumber === evolutionInstance.replace(/\D/g, '')) {
+    console.warn(`⚠️ [${requestId}] phoneNumber ${phoneNumber} matches evolutionInstance ${evolutionInstance}, this is incorrect!`);
+    phoneNumber = null; // Forçar erro para não criar contato com número da instância
   }
   
   // Suporte para camelCase e base64 direto

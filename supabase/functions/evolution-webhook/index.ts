@@ -204,10 +204,22 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    // CORRIGIDO: usar número de quem ENVIOU a mensagem (não o destinatário)
+    // CRÍTICO: usar SEMPRE o número de quem ENVIOU a mensagem (remoteJid)
+    // NUNCA usar o número da instância como contato
     const remoteJid = key.remoteJid;
     const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
     const contactName = message.pushName || senderPhone;
+    
+    // Validação crítica: garantir que não estamos salvando o número da instância
+    const instancePhone = metadata.instance?.replace(/\D/g, '');
+    if (instancePhone && senderPhone === instancePhone) {
+      console.error('🚨 ERRO CRÍTICO: Tentativa de salvar número da instância como contato!', {
+        senderPhone,
+        instance: metadata.instance,
+        instancePhone
+      });
+      return; // Abortar processamento
+    }
 
     console.log('📞 Processing message for contact:', { 
       remoteJid, 
