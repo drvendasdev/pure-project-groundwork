@@ -139,11 +139,17 @@ serve(async (req) => {
   }
   
   // Suporte para camelCase e base64 direto
-  let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? null;
+  let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? payload.conversation ?? payload.data?.message?.conversation ?? payload.data?.message?.extendedTextMessage?.text ?? null;
   const messageTypeRaw = (payload.message_type ?? payload.messageType ?? payload.type ?? payload.messageType ?? "text").toString().toLowerCase();
   let fileUrl = payload.file_url ?? payload.fileUrl ?? payload.url ?? payload.media?.url ?? payload.imageMessage?.url ?? payload.videoMessage?.url ?? payload.audioMessage?.url ?? payload.documentMessage?.url ?? null;
   let fileName = payload.file_name ?? payload.fileName ?? payload.filename ?? payload.media?.filename ?? payload.imageMessage?.fileName ?? payload.videoMessage?.fileName ?? payload.audioMessage?.fileName ?? payload.documentMessage?.fileName ?? null;
   let mimeType = payload.mime_type ?? payload.mimeType ?? payload.mimetype ?? payload.contentType ?? null;
+  
+  // CORRIGIDO: Melhor extração de conteúdo do Evolution format
+  if (!responseMessage && payload.data?.message) {
+    const msg = payload.data.message;
+    responseMessage = msg.conversation ?? msg.extendedTextMessage?.text ?? msg.imageMessage?.caption ?? msg.videoMessage?.caption ?? msg.documentMessage?.caption ?? null;
+  }
   
   // Detectar e processar base64 direto
   let base64Data = payload.base64 ?? payload.base64Data ?? null;
@@ -240,6 +246,14 @@ serve(async (req) => {
 
   const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
   const hasValidContent = !!(responseMessage || (fileUrl && finalMessageType !== "text") || base64Data);
+  
+  console.log(`📝 [${requestId}] Content analysis:`, {
+    responseMessage: responseMessage?.substring(0, 50) + (responseMessage?.length > 50 ? '...' : ''),
+    hasValidContent,
+    finalMessageType,
+    fileUrl: !!fileUrl,
+    base64Data: !!base64Data
+  });
 
     // Validações mínimas
     if (!conversationId && !phoneNumber) {
@@ -254,9 +268,10 @@ serve(async (req) => {
       });
     }
 
-    // Check if this is an Evolution webhook event (skip strict content validation for Evolution payloads)
+    // Check if this is an Evolution webhook event 
     const isEvolutionEvent = !!(payload.event || payload.instance || payload.data?.key?.remoteJid);
     
+    // CORRIGIDO: Permitir inserção de mensagens mesmo sem conteúdo em alguns casos
     if (!hasValidContent && !isEvolutionEvent) {
       console.error(`❌ [${requestId}] Missing content for non-Evolution event`);
       return new Response(JSON.stringify({
@@ -269,9 +284,10 @@ serve(async (req) => {
       });
     }
     
-    // For Evolution events without extractable content, log but continue processing
-    if (!hasValidContent && isEvolutionEvent) {
-      console.log(`⚠️ [${requestId}] Evolution event without extractable content - will forward to n8n but skip message recording`);
+    // Para eventos Evolution sem conteúdo, usar conteúdo placeholder
+    if (!hasValidContent && isEvolutionEvent && phoneNumber) {
+      responseMessage = "📱 Mensagem recebida";
+      console.log(`✅ [${requestId}] Using placeholder content for Evolution event: "${responseMessage}"`);
     }
 
     // Supabase client já inicializado no nível do módulo
@@ -629,9 +645,12 @@ serve(async (req) => {
     // Preparar conteúdo final e payload para N8N
     const finalContent = responseMessage || generateContentForMedia(finalMessageType, fileName);
     let newMessage = null;
+    
+    // CORRIGIDO: Recalcular hasValidContent após possível placeholder
+    const hasContentNow = !!(finalContent || fileUrl || base64Data);
 
-    // Only insert message if we have extractable content or if it's not an Evolution event
-    if (hasValidContent) {
+    // Insert message if we have content (including placeholder content)
+    if (hasContentNow) {
       // Inserir mensagem com idempotência (usando external_id se fornecido)
       const messagePayload: any = {
         conversation_id: finalConversationId,
@@ -712,7 +731,7 @@ serve(async (req) => {
         console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
       }
     } else {
-      console.log(`⚠️ [${requestId}] Skipping message insertion for Evolution event without extractable content`);
+      console.log(`⚠️ [${requestId}] Skipping message insertion - no valid content found`);
     }
 
     // Encaminhar para N8N usando webhook específico do workspace
