@@ -165,31 +165,74 @@ serve(async (req) => {
       console.log('✅ Conversation updated');
     }
 
-    // NOVO: Usar message-sender centralizado ao invés de chamar N8N diretamente
-    console.log('🔗 Using centralized message-sender for delivery...');
-    
-    try {
-      const { data: senderResult, error: senderError } = await supabase.functions.invoke('message-sender', {
-        body: {
-          messageId: message.id,
-          phoneNumber: contact.phone,
-          content,
-          messageType: message_type,
-          file_url,
-          file_name,
-          evolutionInstance: instance,
-          conversationId: conversation_id,
-          workspaceId: conversation.workspace_id
-        }
-      });
+    // Integração com N8N
+    console.log('🔗 Checking N8N webhook for workspace:', conversation.workspace_id);
+    const { data: webhookData, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')
+      .select('webhook_url')
+      .eq('workspace_id', conversation.workspace_id)
+      .maybeSingle();
 
-      if (senderError) {
-        console.error('❌ Message sender error:', senderError);
-      } else {
-        console.log('✅ Message sent via centralized sender:', senderResult);
+    if (webhookData?.webhook_url) {
+      console.log('📤 Sending to N8N webhook:', webhookData.webhook_url);
+      
+      // Criar payload no padrão do Evolution (igual quando chega pelo celular)
+      const destinatarioPhone = contact.phone;
+      const senderFormatted = `${destinatarioPhone}@s.whatsapp.net`;
+      
+      console.log('🎯 Preparando sender para N8N:', { 
+        destinatarioPhone, 
+        senderFormatted, 
+        instance 
+      });
+      
+      const n8nPayload = {
+        // Dados principais do Evolution format
+        instance: instance,
+        sender: senderFormatted,
+        message: content,
+        phoneNumber: destinatarioPhone,
+        status: 'sent',
+        external_id: message.id,
+        
+        // Dados adicionais do sistema
+        response_message: content,
+        workspace_id: conversation.workspace_id,
+        conversation_id: conversation_id,
+        connection_id: conversation.connection_id,
+        contact_id: conversation.contact_id,
+        message_id: message.id,
+        message_type: message_type,
+        sender_id: sender_id,
+        sender_type: sender_type,
+        timestamp: new Date().toISOString(),
+        
+        // Metadados para identificar origem
+        source: 'agent_system',
+        processed_at: new Date().toISOString()
+      };
+      
+      console.log('📋 N8N Payload (formato Evolution):', JSON.stringify(n8nPayload));
+
+      try {
+        const webhookResponse = await fetch(webhookData.webhook_url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        if (webhookResponse.ok) {
+          console.log('✅ N8N webhook called successfully');
+        } else {
+          console.log('⚠️ N8N webhook returned status:', webhookResponse.status);
+        }
+      } catch (webhookErr) {
+        console.error('❌ Error calling N8N webhook:', webhookErr);
       }
-    } catch (senderException) {
-      console.error('❌ Message sender exception:', senderException);
+    } else {
+      console.log('⚠️ No N8N webhook configured for workspace');
     }
 
     console.log('🎉 SUCCESS - Message sent:', message.id);

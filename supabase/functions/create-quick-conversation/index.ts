@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { phoneNumber, orgId, instance, workspace_id } = await req.json()
+    const { phoneNumber, orgId, instance } = await req.json()
 
     if (!phoneNumber) {
       return new Response(
@@ -48,8 +48,8 @@ serve(async (req) => {
       }
     }
 
-    // Discover orgId if not provided - priorizar workspace_id do frontend
-    let finalOrgId = workspace_id || orgId
+    // Discover orgId if not provided
+    let finalOrgId = orgId
     
     if (!finalOrgId && instance) {
       // Try to find workspace from connections table using instance
