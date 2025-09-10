@@ -189,9 +189,9 @@ serve(async (req) => {
         });
       }
 
-      // 3. APENAS ENVIAR PARA WEBHOOK DO WORKSPACE - SEM SALVAR NO BANCO
+      // 3. Forward to N8N workspace webhook ONLY - no direct database operations
       try {
-        console.log(`📤 [${requestId}] Enviando para workspace webhook: ${workspaceWebhookUrl.substring(0, 50)}...`);
+        console.log(`📤 [${requestId}] Forwarding to N8N workspace webhook ONLY: ${workspaceWebhookUrl.substring(0, 50)}...`);
         
         const n8nPayload = {
           ...body,
@@ -209,13 +209,27 @@ serve(async (req) => {
           body: JSON.stringify(n8nPayload)
         });
 
-        if (response.ok) {
-          console.log(`✅ [${requestId}] Workspace webhook success - no local processing`);
-        } else {
-          console.error(`❌ [${requestId}] Workspace webhook failed:`, response.status);
-        }
-      } catch (n8nError) {
-        console.error(`❌ [${requestId}] Workspace webhook error:`, n8nError);
+        console.log(`✅ [${requestId}] Forwarded to N8N successfully. Status: ${response.status}`);
+        console.log(`ℹ️ [${requestId}] N8N will handle all message processing - no direct database operations`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Webhook processed and forwarded to N8N',
+          workspace_id: connection.workspace_id,
+          note: 'N8N handles final message processing'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+        
+      } catch (forwardError) {
+        console.error(`❌ [${requestId}] Forward error to N8N:`, forwardError);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Failed to forward webhook to N8N' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 

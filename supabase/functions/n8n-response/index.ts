@@ -68,6 +68,24 @@ serve(async (req) => {
     });
   }
 
+  // 🔐 SECURITY: Require authorization from N8N only
+  const authHeader = req.headers.get('Authorization');
+  const expectedAuth = `Bearer ${Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK')}`;
+  
+  if (!authHeader || authHeader !== expectedAuth) {
+    console.log(`❌ [${requestId}] Unauthorized access attempt - missing or invalid Authorization header`);
+    return new Response(JSON.stringify({ 
+      error: 'Unauthorized', 
+      message: 'This endpoint only accepts calls from N8N with proper authorization',
+      requestId 
+    }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  console.log(`✅ [${requestId}] Authorization verified - request from N8N`);
+
   try {
     const url = new URL(req.url);
     const isGet = req.method === 'GET';
@@ -279,9 +297,18 @@ serve(async (req) => {
   const metadata = payload.metadata ?? payload.meta ?? null;
   const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
     
-    // Melhor heurística para sender_type
-    const senderType = payload.sender_type ?? 
-      (payload.messageTimestamp || payload.messageTime || payload.received_at || payload.from_contact ? "contact" : "agent");
+    // 🎯 CORRECT SENDER TYPE DETECTION based on data.key.fromMe
+    let senderType = payload.sender_type;
+    
+    if (payload.data?.key?.fromMe !== undefined) {
+      senderType = payload.data.key.fromMe ? 'agent' : 'contact';
+      console.log(`🎯 [${requestId}] Sender type derived from data.key.fromMe: ${payload.data.key.fromMe} -> ${senderType}`);
+    } else if (!senderType) {
+      // Fallback logic - if no explicit sender type, assume contact for incoming messages
+      senderType = payload.messageTimestamp || payload.messageTime || payload.received_at || payload.from_contact ? "contact" : "agent";
+      console.log(`⚠️ [${requestId}] No fromMe info, using fallback logic: ${senderType}`);
+    }
+    
     const messageStatus = payload.status ?? (senderType === "contact" ? "received" : "sent");
     
     // VALIDAÇÃO CRÍTICA: Mensagens de contato devem ter telefone válido
@@ -896,7 +923,16 @@ serve(async (req) => {
         file_name: fileName,
         status: messageStatus,
         origem_resposta: "automatica",
-        metadata: metadata ? { n8n_data: metadata, source: "n8n", requestId } : { source: "n8n", requestId },
+        metadata: {
+          original_data: payload,
+          processing_method: 'n8n_webhook',
+          phone_number: phoneNumber,
+          push_name: pushName,
+          fromMe: payload.data?.key?.fromMe,
+          extracted_sender_type: senderType,
+          source: "n8n",
+          requestId
+        },
       };
 
       if (externalId) {
@@ -943,28 +979,21 @@ serve(async (req) => {
       } else {
         newMessage = insertedMessage;
         
-        // Atualizar conversa com lógica correta de unread_count
-        const conversationUpdate: any = {
-          last_activity_at: new Date().toISOString(),
-          last_message_at: new Date().toISOString(),
-        };
-
-        // Se mensagem é de contato, incrementar unread_count; se é de agente, resetar
-        if (senderType === "contact") {
-          conversationUpdate.unread_count = supabase.raw('unread_count + 1');
-        } else {
-          conversationUpdate.unread_count = 0;
-        }
-
+        // Update conversation activity timestamp - triggers will handle unread count automatically
         const { error: updateError } = await supabase
           .from("conversations")
-          .update(conversationUpdate)
+          .update({ 
+            last_activity_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
           .eq("id", finalConversationId);
 
         if (updateError) {
           console.error(`⚠️ [${requestId}] Error updating conversation:`, updateError);
           // Não falha a operação, apenas loga o erro
         }
+        
+        console.log(`🔄 [${requestId}] Conversation activity updated - triggers will handle unread count based on sender_type: ${senderType}`);
 
         console.log(`✅ [${requestId}] Message registered successfully: ${newMessage.id} in conversation: ${finalConversationId} (workspace: ${workspaceId})`);
       }

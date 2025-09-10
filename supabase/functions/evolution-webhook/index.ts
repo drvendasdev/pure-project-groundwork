@@ -313,9 +313,9 @@ serve(async (req) => {
         });
       }
 
-      // Forward to workspace-specific N8N webhook only (no local processing)
+      // Forward to N8N workspace webhook ONLY - no direct database operations
       try {
-        console.log(`📤 [${correlationId}] Forwarding to workspace webhook: ${workspaceWebhookUrl.substring(0, 50)}...`);
+        console.log(`📤 [${correlationId}] Forwarding to N8N workspace webhook ONLY: ${workspaceWebhookUrl.substring(0, 50)}...`);
         
         // Sanitizar dados antes de enviar
         const sanitizedData = sanitizeWebhookData(body);
@@ -336,18 +336,20 @@ serve(async (req) => {
         });
         
         const fText = await fRes.text();
-        console.log(`📨 [${correlationId}] Workspace webhook response: ${fRes.status} ${fRes.ok ? 'SUCCESS' : fText}`);
+        console.log(`📨 [${correlationId}] N8N webhook response: ${fRes.status} ${fRes.ok ? 'SUCCESS' : fText}`);
+        console.log(`ℹ️ [${correlationId}] N8N will handle all message processing - no direct database operations`);
         
         return new Response(JSON.stringify({ 
           ok: true, 
           forwarded: fRes.ok,
           processed: true,
+          note: 'N8N handles final message processing',
           metadata: metadata
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (forwardErr) {
-        console.error(`❌ [${correlationId}] Error forwarding to workspace webhook:`, forwardErr.message);
+        console.error(`❌ [${correlationId}] Error forwarding to N8N workspace webhook:`, forwardErr.message);
         return new Response(JSON.stringify({ 
           ok: true, 
           forwarded: false, 
@@ -358,6 +360,18 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+    } else {
+      console.log(`⚠️ [${correlationId}] No workspace webhook configured - event will be lost`);
+      return new Response(JSON.stringify({ 
+        ok: true, 
+        forwarded: false, 
+        processed: false,
+        note: 'no workspace webhook configured',
+        metadata: metadata
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     }
 
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
