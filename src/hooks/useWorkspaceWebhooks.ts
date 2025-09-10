@@ -40,11 +40,12 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
       // If no data in settings, try to get from secrets as fallback
       if (!settingsData) {
         console.log('No webhook settings found, checking secrets...');
+        const secretName = `N8N_WEBHOOK_URL_${workspaceId}`;
         const { data: secretsData, error: secretsError } = await supabase
           .from('workspace_webhook_secrets')
           .select('webhook_url')
           .eq('workspace_id', workspaceId)
-          .eq('secret_name', 'default_webhook')
+          .eq('secret_name', secretName)
           .maybeSingle();
 
         console.log('Secrets data:', secretsData);
@@ -104,7 +105,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
-      // Save to workspace_webhook_settings (primary)
+      // Save to workspace_webhook_settings (primary) - always upsert to avoid duplicates
       const { data, error } = await supabase
         .from('workspace_webhook_settings')
         .upsert({
@@ -112,20 +113,32 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
           webhook_url: url,
           webhook_secret: secret,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'workspace_id'
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Also save to workspace_webhook_secrets for backwards compatibility
-      await supabase
+      // Use the correct secret name format: N8N_WEBHOOK_URL_{workspace_id}
+      const secretName = `N8N_WEBHOOK_URL_${workspaceId}`;
+      
+      // Always upsert to workspace_webhook_secrets to avoid duplicates
+      const { error: secretsError } = await supabase
         .from('workspace_webhook_secrets')
         .upsert({
           workspace_id: workspaceId,
-          secret_name: 'default_webhook',
+          secret_name: secretName,
           webhook_url: url
+        }, {
+          onConflict: 'workspace_id,secret_name'
         });
+
+      if (secretsError) {
+        console.error('Error saving to webhook secrets:', secretsError);
+        // Don't fail the entire operation if secrets save fails
+      }
       
       setWebhookConfig(data);
       toast({
