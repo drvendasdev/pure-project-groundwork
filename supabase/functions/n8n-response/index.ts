@@ -129,35 +129,13 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-  // CORRIGIDO: Identificar corretamente o contato baseado no tipo de evento
-  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
-  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.data?.key?.remoteJid ?? null;
-  let destination = payload.to ?? payload.destination ?? null;
-  let evolutionInstance = payload.instance ?? payload.evolution_instance ?? null;
+  // Normalizar remoteJid para phone_number (aceitar várias fontes)
+  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
+  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
   
-  // Para eventos Evolution, o contato NUNCA deve ser o número da instância
-  if (payload.event === 'MESSAGES_UPSERT' || payload.event === 'messages.upsert') {
-    // Mensagem recebida: contato é o sender (remoteJid)
-    if (!phoneNumber && remoteJid) {
-      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-      console.log(`📱 [${requestId}] Normalized sender to phone_number: ${remoteJid} -> ${phoneNumber}`);
-    }
-  } else {
-    // Mensagem enviada pelo sistema: contato é o destinatário
-    if (!phoneNumber && destination) {
-      phoneNumber = destination.replace('@s.whatsapp.net', '');
-      console.log(`📱 [${requestId}] Normalized destination to phone_number: ${destination} -> ${phoneNumber}`);
-    } else if (!phoneNumber && remoteJid) {
-      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-      console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
-    }
-  }
-  
-  // VALIDAÇÃO CRÍTICA: Verificar se phoneNumber não é o número da instância
-  if (phoneNumber && evolutionInstance && phoneNumber === evolutionInstance) {
-    console.warn(`⚠️ [${requestId}] Detectado número da instância (${evolutionInstance}) como contato. Mensagem será enviada ao N8N mas contato não será criado.`);
-    // Definir phoneNumber como null para evitar criação de contato incorreto, mas continuar processamento
-    phoneNumber = null;
+  if (!phoneNumber && remoteJid) {
+    phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+    console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
   }
   
   // Suporte para camelCase e base64 direto
@@ -277,13 +255,12 @@ serve(async (req) => {
     base64Data: !!base64Data
   });
 
-    // CORRIGIDO: Permitir processamento N8N mesmo sem phoneNumber válido
-    // Validações mínimas - não bloquear N8N se só falta phoneNumber
-    if (!conversationId && !phoneNumber && !isEvolutionEvent) {
-      console.error(`❌ [${requestId}] Missing required identifiers for non-Evolution event`);
+    // Validações mínimas
+    if (!conversationId && !phoneNumber) {
+      console.error(`❌ [${requestId}] Missing required identifiers`);
       return new Response(JSON.stringify({
         code: 'MISSING_IDENTIFIERS',
-        message: 'Either conversation_id or phone_number is required for non-Evolution events',
+        message: 'Either conversation_id or phone_number is required',
         requestId
       }), {
         status: 400,
@@ -757,9 +734,8 @@ serve(async (req) => {
       console.log(`⚠️ [${requestId}] Skipping message insertion - no valid content found`);
     }
 
-    // SEMPRE enviar para N8N, mesmo se não conseguirmos criar mensagem/contato
-    console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId} (hasContent: ${hasContentNow}, phoneNumber: ${phoneNumber || 'null'})`);
-    
+    // Encaminhar para N8N usando webhook específico do workspace
+    console.log(`🔀 [${requestId}] Forwarding to N8N webhook for workspace ${workspaceId}`);
     
     // Buscar webhook URL específico do workspace na tabela
     const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${workspaceId}`;
