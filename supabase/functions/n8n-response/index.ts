@@ -129,14 +129,28 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-  // CORRIGIDO: Normalizar phone_number garantindo que NUNCA seja o número da instância
+    // CRÍTICO: Garantir que NUNCA usemos o número da instância como contato
   let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
   let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
   
-  // Se temos remoteJid, usar ele como fonte primária (é sempre o outro lado da conversa)
+  // Para mensagens recebidas: usar SEMPRE o remoteJid (remetente real)
+  // Para mensagens enviadas: usar o número do destinatário
   if (remoteJid) {
     phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
     console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
+  }
+  
+  // VALIDAÇÃO CRÍTICA: se phoneNumber ainda é nulo e temos sender_type = contact, é erro
+  if (!phoneNumber && senderType === "contact") {
+    console.error(`❌ [${requestId}] CRITICAL: Contact message without valid phone number`);
+    return new Response(JSON.stringify({
+      code: 'INVALID_CONTACT_MESSAGE',
+      message: 'Contact messages must have a valid phone number',
+      requestId
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
   
   // Suporte para camelCase e base64 direto
@@ -256,9 +270,9 @@ serve(async (req) => {
     base64Data: !!base64Data
   });
 
-    // Validações mínimas
+    // Validações mínimas - não processar sem identificadores válidos
     if (!conversationId && !phoneNumber) {
-      console.error(`❌ [${requestId}] Missing required identifiers`);
+      console.error(`❌ [${requestId}] Missing required identifiers - BLOCKING execution`);
       return new Response(JSON.stringify({
         code: 'MISSING_IDENTIFIERS',
         message: 'Either conversation_id or phone_number is required',
@@ -496,18 +510,16 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);
 
-    // Se ainda não temos conversation_id, precisar resolver via phoneNumber
+    // CRÍTICO: Resolver conversa via phoneNumber - mas criar contato SOMENTE para sender_type = "contact"
     if (!finalConversationId && phoneNumber && workspaceId) {
-      console.log(`🔍 [${requestId}] Creating/finding conversation for phone: ${phoneNumber} in workspace: ${workspaceId}`);
+      console.log(`🔍 [${requestId}] Resolving conversation for phone: ${phoneNumber} in workspace: ${workspaceId} (sender_type: ${senderType})`);
       
       const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
+      let existingContact = null;
       
       try {
-        // Executar upsert em transação simples para evitar problemas de concorrência
-        console.log(`🔄 [${requestId}] Starting contact/conversation upsert for phone: ${sanitizedPhone}`);
-        
-        // Buscar ou criar contato
-        let { data: existingContact, error: findContactError } = await supabase
+        // BUSCAR contato existente primeiro
+        const { data: foundContact, error: findContactError } = await supabase
           .from('contacts')
           .select('id, name')
           .eq('phone', sanitizedPhone)
@@ -527,8 +539,11 @@ serve(async (req) => {
           });
         }
 
-        if (!existingContact) {
-          console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone}`);
+        existingContact = foundContact;
+
+        // CRIAR contato SOMENTE se sender_type = "contact" e não existe
+        if (!existingContact && senderType === "contact") {
+          console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone} (sender_type: contact)`);
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
             .insert({
@@ -555,7 +570,13 @@ serve(async (req) => {
           existingContact = newContact;
         }
 
-        console.log(`👤 [${requestId}] Contact resolved: ${existingContact.id} - ${existingContact.name}`);
+        if (existingContact) {
+          console.log(`👤 [${requestId}] Contact resolved: ${existingContact.id} - ${existingContact.name}`);
+        } else if (senderType === "agent") {
+          console.log(`🤖 [${requestId}] Agent message - using existing conversation or will fail gracefully`);
+        } else {
+          console.log(`⚠️ [${requestId}] No contact found for phone ${sanitizedPhone} and sender_type is not 'contact' - will continue without contact`);
+        }
 
         // Buscar ou criar conversa
         let { data: existingConv, error: findConvError } = await supabase
@@ -767,12 +788,12 @@ serve(async (req) => {
       console.log(`📤 [${requestId}] Using workspace webhook: ${webhookUrl.hostname}${webhookUrl.pathname}`);
     }
     
-    // No global fallback - if no workspace webhook URL, return error
+    // CRÍTICO: Se não há webhook do N8N configurado, BLOQUEAR totalmente
     if (!workspaceWebhookUrl) {
-      console.error(`❌ [${requestId}] No webhook URL configured for workspace ${workspaceId}`);
+      console.error(`❌ [${requestId}] CRITICAL: No webhook URL configured for workspace ${workspaceId} - BLOCKING processing`);
       return new Response(JSON.stringify({
         code: 'MISSING_WEBHOOK_URL',
-        message: `No webhook URL configured for workspace ${workspaceId}`,
+        message: `No webhook URL configured for workspace ${workspaceId}. Processing blocked to prevent bypassing N8N.`,
         requestId
       }), {
         status: 424,
@@ -813,11 +834,12 @@ serve(async (req) => {
       
       if (!n8nResponse.ok) {
         const errorText = await n8nResponse.text();
-        console.error(`❌ [${requestId}] N8N webhook failed (${n8nResponse.status}):`, errorText);
+        console.error(`❌ [${requestId}] N8N webhook failed (${n8nResponse.status}) - BLOCKING processing:`, errorText);
         
+        // CRÍTICO: Se N8N falha, BLOQUEAR completamente - não permitir bypass
         return new Response(JSON.stringify({
           code: 'N8N_WEBHOOK_ERROR',
-          message: `N8N webhook returned ${n8nResponse.status}`,
+          message: `N8N webhook returned ${n8nResponse.status} - Processing blocked`,
           details: errorText,
           requestId
         }), {
@@ -828,11 +850,12 @@ serve(async (req) => {
         console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
       }
     } catch (n8nError) {
-      console.error(`❌ [${requestId}] Error calling N8N webhook:`, n8nError);
+      console.error(`❌ [${requestId}] Error calling N8N webhook - BLOCKING processing:`, n8nError);
       
+      // CRÍTICO: Se N8N não responde, BLOQUEAR completamente - não permitir bypass
       return new Response(JSON.stringify({
         code: 'N8N_WEBHOOK_TIMEOUT',
-        message: 'Failed to call N8N webhook',
+        message: 'Failed to call N8N webhook - Processing blocked',
         details: String(n8nError?.message ?? n8nError),
         requestId
       }), {

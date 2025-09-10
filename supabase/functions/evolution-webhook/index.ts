@@ -200,175 +200,8 @@ async function uploadMediaToStorage(supabase: any, mediaData: string, fileName: 
   }
 }
 
-async function processMessage(supabase: any, workspaceId: string, connectionId: string, messageData: any, correlationId: string) {
-  try {
-    const { key, message, messageTimestamp } = messageData;
-    
-    // CRÍTICO: usar SEMPRE o número de quem ENVIOU a mensagem (remoteJid)
-    // NUNCA usar o número da instância como contato
-    const remoteJid = key.remoteJid;
-    const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
-    const contactName = message.pushName || senderPhone;
-
-    console.log('📞 Processing message for contact:', { 
-      remoteJid, 
-      senderPhone, 
-      contactName, 
-      workspaceId, 
-      fromMe: key.fromMe 
-    });
-
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .upsert({
-        phone: senderPhone,
-        name: contactName,
-        workspace_id: workspaceId
-      }, {
-        onConflict: 'phone,workspace_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
-
-    if (contactError && contactError.code !== '23505') { // Ignore duplicate errors
-      await logEvent(supabase, connectionId, correlationId, 'CONTACT_UPSERT_ERROR', 'error', 
-        'Failed to upsert contact', { error: contactError, senderPhone, workspaceId });
-      return;
-    }
-
-    console.log('👤 Contact resolved:', { contactId: contact?.id, senderPhone });
-
-    // Get or create conversation
-    const { data: conversation, error: conversationError } = await supabase
-      .from('conversations')
-      .upsert({
-        contact_id: contact?.id,
-        connection_id: connectionId,
-        workspace_id: workspaceId,
-        status: 'open',
-        canal: 'whatsapp'
-      }, {
-        onConflict: 'contact_id,connection_id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
-
-    if (conversationError) {
-      await logEvent(supabase, connectionId, correlationId, 'CONVERSATION_UPSERT_ERROR', 'error', 
-        'Failed to upsert conversation', { error: conversationError, workspaceId });
-      return;
-    }
-
-    console.log('💬 Conversation resolved:', { conversationId: conversation?.id, contactId: contact?.id });
-
-    // Process message content
-    let content = '';
-    let messageType = 'text';
-    let fileUrl = null;
-    let fileName = null;
-    let mimeType = null;
-
-    if (message.conversation) {
-      content = message.conversation;
-    } else if (message.extendedTextMessage?.text) {
-      content = message.extendedTextMessage.text;
-    } else if (message.imageMessage) {
-      messageType = 'image';
-      content = message.imageMessage.caption || '';
-      mimeType = message.imageMessage.mimetype;
-      fileName = `image_${Date.now()}.jpg`;
-      
-      if (message.imageMessage.url) {
-        fileUrl = await uploadMediaToStorage(supabase, message.imageMessage.url, fileName, mimeType);
-      }
-    } else if (message.videoMessage) {
-      messageType = 'video';
-      content = message.videoMessage.caption || '';
-      mimeType = message.videoMessage.mimetype;
-      fileName = `video_${Date.now()}.mp4`;
-      
-      if (message.videoMessage.url) {
-        fileUrl = await uploadMediaToStorage(supabase, message.videoMessage.url, fileName, mimeType);
-      }
-    } else if (message.audioMessage) {
-      messageType = 'audio';
-      mimeType = message.audioMessage.mimetype;
-      fileName = `audio_${Date.now()}.ogg`;
-      
-      if (message.audioMessage.url) {
-        fileUrl = await uploadMediaToStorage(supabase, message.audioMessage.url, fileName, mimeType);
-      }
-    } else if (message.documentMessage) {
-      messageType = 'document';
-      content = message.documentMessage.caption || '';
-      mimeType = message.documentMessage.mimetype;
-      fileName = message.documentMessage.fileName || `document_${Date.now()}`;
-      
-      if (message.documentMessage.url) {
-        fileUrl = await uploadMediaToStorage(supabase, message.documentMessage.url, fileName, mimeType);
-      }
-    }
-
-    // Insert message - CORRIGIDO: garantir que message seja inserida
-    console.log('💾 Inserting message into database:', { 
-      conversationId: conversation.id, 
-      content: content.substring(0, 50), 
-      messageType, 
-      senderPhone 
-    });
-    
-    const { data: insertedMessage, error: messageError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversation.id,
-        workspace_id: workspaceId,
-        content,
-        message_type: messageType,
-        sender_type: 'contact',
-        file_url: fileUrl,
-        file_name: fileName,
-        mime_type: mimeType,
-        external_id: key.id,
-        status: 'received',
-        metadata: {
-          remote_jid: key.remoteJid,
-          participant: key.participant,
-          timestamp: messageTimestamp,
-          raw_message: message
-        }
-      })
-      .select()
-      .single();
-
-    if (messageError) {
-      console.error('❌ Failed to insert message:', messageError);
-      console.error('❌ Message error details:', { 
-        error: messageError, 
-        conversationId: conversation.id, 
-        workspaceId, 
-        content: content.substring(0, 100) 
-      });
-      await logEvent(supabase, connectionId, correlationId, 'MESSAGE_INSERT_ERROR', 'error', 
-        'Failed to insert message', { error: messageError, workspaceId });
-    } else {
-      console.log('✅ Message inserted successfully:', { 
-        messageId: insertedMessage?.id,
-        conversationId: conversation.id, 
-        messageType, 
-        senderPhone,
-        content: content.substring(0, 50)
-      });
-      await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSED', 'info', 
-        'Message processed successfully', { messageType, senderPhone, workspaceId });
-    }
-
-  } catch (error) {
-    await logEvent(supabase, connectionId, correlationId, 'MESSAGE_PROCESSING_ERROR', 'error', 
-      'Error processing message', { error: error.message });
-  }
-}
+// REMOVIDO: função processMessage para forçar passagem pelo N8N
+// Todas as mensagens devem ser processadas EXCLUSIVAMENTE pelo N8N
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -538,13 +371,12 @@ serve(async (req) => {
 
           case 'messages.upsert':
           case 'MESSAGES_UPSERT':
-            if (data.messages && Array.isArray(data.messages)) {
-              for (const messageData of data.messages) {
-                await processMessage(supabaseClient, connection.workspace_id, connection.id, messageData, correlationId);
-              }
-            } else if (data.message) {
-              await processMessage(supabaseClient, connection.workspace_id, connection.id, data, correlationId);
-            }
+            // REMOVIDO: não processar mensagens localmente - deixar apenas para o N8N
+            console.log(`📱 [${correlationId}] Message event received - will be forwarded to N8N only`);
+            await logEvent(supabaseClient, connection.id, correlationId, 'MESSAGE_EVENT_RECEIVED', 'info', 
+              'Message event received and will be processed by N8N', { 
+                messageCount: data.messages?.length || (data.message ? 1 : 0) 
+              });
             break;
 
           case 'send.message':
