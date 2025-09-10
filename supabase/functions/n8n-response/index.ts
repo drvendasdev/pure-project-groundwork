@@ -129,29 +129,33 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-    // CRÍTICO: Garantir que NUNCA usemos o número da instância como contato
-  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
-  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
-  
-  // Para mensagens recebidas: usar SEMPRE o remoteJid (remetente real)
-  // Para mensagens enviadas: usar o número do destinatário
-  if (remoteJid) {
-    phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-    console.log(`📱 [${requestId}] Using remoteJid as phone_number: ${remoteJid} -> ${phoneNumber}`);
-  }
-  
-  // VALIDAÇÃO CRÍTICA: se phoneNumber ainda é nulo e temos sender_type = contact, é erro
-  if (!phoneNumber && senderType === "contact") {
-    console.error(`❌ [${requestId}] CRITICAL: Contact message without valid phone number`);
-    return new Response(JSON.stringify({
-      code: 'INVALID_CONTACT_MESSAGE',
-      message: 'Contact messages must have a valid phone number',
-      requestId
-    }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    // Extrair dados do contato prioritários
+    const contactPhone = payload.contact_phone ?? payload.contactPhone ?? payload.to ?? null;
+    const pushName = payload.pushName ?? payload.push_name ?? payload.contactName ?? payload.from_name ?? null;
+    const profilePicUrl = payload.profilePicUrl ?? payload.profile_pic_url ?? payload.profilePictureUrl ?? payload.avatar_url ?? null;
+    
+    // CRÍTICO: Resolução de telefone com prioridade para contato real
+    let phoneNumber = null;
+    let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
+    
+    console.log(`🔍 [${requestId}] Phone resolution inputs:`, {
+      contactPhone,
+      remoteJid,
+      instancePhone: payload.phone_number ?? payload.phoneNumber ?? payload.phone,
+      pushName
     });
-  }
+    
+    // Prioridade: 1) contact_phone 2) remoteJid 3) instance phone (último recurso)
+    if (contactPhone) {
+      phoneNumber = sanitizePhoneNumber(contactPhone);
+      console.log(`📱 [${requestId}] Using contact_phone: ${contactPhone} -> ${phoneNumber}`);
+    } else if (remoteJid) {
+      phoneNumber = sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
+      console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${phoneNumber}`);
+    } else {
+      phoneNumber = sanitizePhoneNumber(payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? '');
+      console.log(`⚠️ [${requestId}] Using instance phone as fallback: ${phoneNumber}`);
+    }
   
   // Suporte para camelCase e base64 direto
   let responseMessage = payload.response_message ?? payload.responseMessage ?? payload.message ?? payload.text ?? payload.caption ?? payload.content ?? payload.body?.text ?? payload.extendedTextMessage?.text ?? payload.conversation ?? payload.data?.message?.conversation ?? payload.data?.message?.extendedTextMessage?.text ?? null;
@@ -258,6 +262,19 @@ serve(async (req) => {
     const senderType = payload.sender_type ?? 
       (payload.messageTimestamp || payload.messageTime || payload.received_at || payload.from_contact ? "contact" : "agent");
     const messageStatus = payload.status ?? (senderType === "contact" ? "received" : "sent");
+    
+    // VALIDAÇÃO CRÍTICA: Mensagens de contato devem ter telefone válido
+    if (senderType === "contact" && !phoneNumber) {
+      console.error(`❌ [${requestId}] CRITICAL: Contact message without valid phone number`);
+      return new Response(JSON.stringify({
+        code: 'INVALID_CONTACT_MESSAGE',
+        message: 'Contact messages must have a valid phone number',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
   const finalMessageType = messageTypeRaw || inferMessageType(fileUrl || "");
   const hasValidContent = !!(responseMessage || (fileUrl && finalMessageType !== "text") || base64Data);
@@ -698,7 +715,7 @@ serve(async (req) => {
         
         const { data: existingContact, error: contactError } = await supabase
           .from('contacts')
-          .select('id')
+          .select('id, name, profile_image_url')
           .eq('phone', sanitizedPhone)
           .eq('workspace_id', workspaceId)
           .maybeSingle();
@@ -706,21 +723,38 @@ serve(async (req) => {
         if (!contactError && existingContact) {
           contactId = existingContact.id;
           console.log(`✅ [${requestId}] Found existing contact: ${contactId}`);
+          
+          // Atualizar pushName se fornecido e diferente
+          if (pushName && existingContact.name !== pushName) {
+            const { error: updateError } = await supabase
+              .from('contacts')
+              .update({ 
+                name: pushName,
+                profile_image_url: profilePicUrl || existingContact.profile_image_url
+              })
+              .eq('id', contactId);
+            
+            if (!updateError) {
+              console.log(`✅ [${requestId}] Updated contact name: "${existingContact.name}" -> "${pushName}"`);
+            }
+          }
         } else {
-          // Criar novo contato
+          // Criar novo contato com pushName
+          const contactName = pushName || `Contato ${sanitizedPhone}`;
           const { data: newContact, error: createContactError } = await supabase
             .from('contacts')
             .insert({
-              name: `Contato ${sanitizedPhone}`,
+              name: contactName,
               phone: sanitizedPhone,
-              workspace_id: workspaceId
+              workspace_id: workspaceId,
+              profile_image_url: profilePicUrl
             })
             .select('id')
             .single();
           
           if (!createContactError && newContact) {
             contactId = newContact.id;
-            console.log(`✅ [${requestId}] Created new contact: ${contactId}`);
+            console.log(`✅ [${requestId}] Created new contact: ${contactId} - ${contactName}`);
           } else {
             console.error(`❌ [${requestId}] Error creating contact:`, createContactError);
           }
