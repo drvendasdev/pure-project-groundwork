@@ -35,7 +35,8 @@ import {
   Eye,
   RefreshCw,
   Mic,
-  Square
+  Square,
+  X
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -64,6 +65,42 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
   const { assignments } = useInstanceAssignments();
   const { toast } = useToast();
+
+  // Função para remover tag de uma conversa
+  const handleRemoveTagFromConversation = async (conversationId: string, tagId: string, tagName: string) => {
+    try {
+      const { error } = await supabase
+        .from('conversation_tags')
+        .delete()
+        .eq('conversation_id', conversationId)
+        .eq('tag_id', tagId);
+
+      if (error) {
+        console.error('Erro ao remover tag:', error);
+        toast({
+          title: "Erro",
+          description: "Não foi possível remover a tag da conversa.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Sucesso",
+        description: `Tag "${tagName}" removida da conversa.`,
+      });
+
+      // Refetch conversations to update the UI
+      await fetchConversations();
+    } catch (error) {
+      console.error('Erro ao remover tag:', error);
+      toast({
+        title: "Erro",
+        description: "Erro interno ao remover tag.",
+        variant: "destructive",
+      });
+    }
+  };
   
   const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
   const [messageText, setMessageText] = useState("");
@@ -732,23 +769,62 @@ const stopRecording = () => {
                     
                     {/* Secondary actions */}
                     <div className="flex items-center gap-2 ml-2">
-                      {/* Tag/Label system */}
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center">
-                          <div 
-                            className="px-1.5 py-0.5 rounded text-xs flex items-center gap-1"
-                            title="TESTE INTERNO"
-                          >
-                            <svg 
-                              className="w-3 h-3" 
-                              viewBox="0 0 24 24" 
-                              fill="rgb(196, 0, 0)"
-                              style={{ stroke: 'white', strokeWidth: 1 }}
-                            >
-                              <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
-                            </svg>
-                          </div>
-                        </div>
+                       {/* Tag/Label system */}
+                       <div className="flex items-center gap-2">
+                         <div className="flex items-center gap-1">
+                            {conversation.tags && conversation.tags.length > 0 ? (
+                              conversation.tags.map((tag) => (
+                                <div 
+                                  key={tag.id}
+                                  className={cn(
+                                    "rounded text-xs flex items-center gap-1 group relative",
+                                    conversation.tags.length === 1 
+                                      ? "px-1.5 py-0.5" 
+                                      : "w-5 h-5 justify-center"
+                                  )}
+                                  style={{ 
+                                    backgroundColor: `${tag.color}20`,
+                                    color: tag.color,
+                                    border: `1px solid ${tag.color}40`
+                                  }}
+                                  title={tag.name}
+                                >
+                                  <svg 
+                                    className={cn(
+                                      conversation.tags.length === 1 ? "w-3 h-3" : "w-3 h-3"
+                                    )}
+                                    viewBox="0 0 24 24" 
+                                    fill={tag.color}
+                                    style={{ stroke: 'white', strokeWidth: 1 }}
+                                  >
+                                    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.42 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+                                  </svg>
+                                  {conversation.tags.length === 1 && (
+                                    <span className="text-xs">{tag.name}</span>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveTagFromConversation(conversation.id, tag.id, tag.name);
+                                    }}
+                                    className={cn(
+                                      "opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110",
+                                      conversation.tags.length === 1 
+                                        ? "ml-1" 
+                                        : "absolute -top-1 -right-1 bg-white rounded-full w-3 h-3 flex items-center justify-center shadow-sm"
+                                    )}
+                                    title={`Remover tag ${tag.name}`}
+                                  >
+                                    <X 
+                                      size={conversation.tags.length === 1 ? 12 : 8} 
+                                      style={{ color: tag.color }}
+                                      className="cursor-pointer"
+                                    />
+                                  </button>
+                                </div>
+                             ))
+                           ) : null}
+                         </div>
                         
                         {/* Small avatar */}
                         <Avatar className="w-4 h-4 rounded-full">
@@ -830,6 +906,61 @@ const stopRecording = () => {
                     <h3 className="font-medium text-gray-900 text-base">
                       {selectedConversation.contact.name}
                     </h3>
+                    
+                    {/* Tags da conversa no cabeçalho */}
+                    <div className="flex items-center gap-1">
+                      {selectedConversation.tags && selectedConversation.tags.length > 0 && (
+                        selectedConversation.tags.map((tag) => (
+                          <div 
+                            key={tag.id}
+                            className={cn(
+                              "rounded text-xs flex items-center gap-1 group",
+                              selectedConversation.tags.length === 1 
+                                ? "px-1.5 py-0.5" 
+                                : "w-6 h-6 justify-center"
+                            )}
+                            style={{ 
+                              backgroundColor: `${tag.color}20`,
+                              color: tag.color,
+                              border: `1px solid ${tag.color}40`
+                            }}
+                            title={tag.name}
+                          >
+                            <svg 
+                              className={cn(
+                                selectedConversation.tags.length === 1 ? "w-3 h-3" : "w-4 h-4"
+                              )}
+                              viewBox="0 0 24 24" 
+                              fill={tag.color}
+                              style={{ stroke: 'white', strokeWidth: 1 }}
+                            >
+                              <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.42 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+                            </svg>
+                            {selectedConversation.tags.length === 1 && (
+                              <span className="text-xs">{tag.name}</span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveTagFromConversation(selectedConversation.id, tag.id, tag.name);
+                              }}
+                              className={cn(
+                                "opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110",
+                                selectedConversation.tags.length === 1 ? "ml-1" : "absolute -top-1 -right-1 bg-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                              )}
+                              title={`Remover tag ${tag.name}`}
+                            >
+                              <X 
+                                size={selectedConversation.tags.length === 1 ? 12 : 10} 
+                                style={{ color: tag.color }}
+                                className="cursor-pointer"
+                              />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    
                     <AddTagButton
                       conversationId={selectedConversation.id}
                       isDarkMode={isDarkMode}

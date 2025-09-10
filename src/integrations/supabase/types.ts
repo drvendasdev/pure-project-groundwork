@@ -1464,6 +1464,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      debug_current_user: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      debug_user_permissions: {
+        Args: { p_workspace_id: string }
+        Returns: Json
+      }
       delete_connection_anon: {
         Args: { p_connection_id: string }
         Returns: undefined

@@ -16,8 +16,13 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
 
   useEffect(() => {
     if (open) {
-      drawColorPicker();
-      drawHueBar();
+      // Reset selected color when modal opens
+      setSelectedColor("#ff0000");
+      // Small timeout to ensure canvas is rendered
+      setTimeout(() => {
+        drawColorPicker();
+        drawHueBar();
+      }, 100);
     }
   }, [open]);
 
@@ -133,36 +138,37 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
 
   const handleConfirm = () => {
     onColorSelect(selectedColor);
+    onOpenChange(false); // Close modal after selecting color
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`sm:max-w-md ${isDarkMode ? 'bg-[#2d2d2d] border-gray-600' : 'bg-white'}`}>
+      <DialogContent className={`sm:max-w-md pointer-events-auto ${isDarkMode ? 'bg-[#2d2d2d] border-gray-600' : 'bg-white'}`}>
         <DialogHeader>
           <DialogTitle className={isDarkMode ? 'text-white' : 'text-gray-900'}>
             Escolha uma cor
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
+        <div className="space-y-4 pointer-events-auto">
           {/* Main color picker */}
-          <div className="relative">
+          <div className="relative pointer-events-auto">
             <canvas
               ref={canvasRef}
               width={300}
               height={200}
-              className="w-full h-48 border border-gray-300 rounded cursor-crosshair"
+              className="w-full h-48 border border-gray-300 rounded cursor-crosshair pointer-events-auto"
               onClick={handleCanvasClick}
             />
           </div>
           
           {/* Hue bar */}
-          <div className="relative">
+          <div className="relative pointer-events-auto">
             <canvas
               ref={hueCanvasRef}
               width={300}
               height={20}
-              className="w-full h-5 border border-gray-300 rounded cursor-crosshair"
+              className="w-full h-5 border border-gray-300 rounded cursor-crosshair pointer-events-auto"
               onClick={handleHueClick}
             />
           </div>
@@ -181,7 +187,7 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
           <div className="flex justify-end">
             <Button 
               onClick={handleConfirm}
-              className="bg-warning hover:bg-yellow-500 text-black"
+              variant="warning"
             >
               Concluir
             </Button>

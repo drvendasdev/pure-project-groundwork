@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User } from "lucide-react";
+import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { DeletarTicketModal } from "@/components/modals/DeletarTicketModal";
 import { useToast } from "@/components/ui/use-toast";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { SelectTagModal } from "@/components/modals/SelectTagModal";
 
 interface Contact {
   id: string;
@@ -42,12 +43,14 @@ export function CRMContatos() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(false);
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+  const [selectedContactForTag, setSelectedContactForTag] = useState<string | null>(null);
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
   
   const { tags } = useTags();
   const { toast } = useToast();
 
-  // Fetch contacts from conversations
+  // Fetch all contacts from workspace
   const fetchContacts = async () => {
     try {
       setIsLoading(true);
@@ -58,30 +61,21 @@ export function CRMContatos() {
         return;
       }
 
-      // First, get distinct contact_ids from conversations filtered by workspace
-      const { data: conversationContacts, error: conversationsError } = await supabase
-        .from('conversations')
-        .select('contact_id')
-        .eq('workspace_id', selectedWorkspace.workspace_id)
-        .order('created_at', { ascending: false });
-
-      if (conversationsError) throw conversationsError;
-
-      const uniqueContactIds = [...new Set(conversationContacts?.map(c => c.contact_id) || [])];
-
-      if (uniqueContactIds.length === 0) {
-        setContacts([]);
-        return;
-      }
-
-      // Get contact details filtered by workspace
+      // Get all contact details filtered by workspace
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('*')
         .eq('workspace_id', selectedWorkspace.workspace_id)
-        .in('id', uniqueContactIds);
+        .order('created_at', { ascending: false });
 
       if (contactsError) throw contactsError;
+
+      if (!contactsData || contactsData.length === 0) {
+        setContacts([]);
+        return;
+      }
+
+      const contactIds = contactsData.map(c => c.id);
 
       // Get contact tags
       const { data: contactTagsData, error: tagsError } = await supabase
@@ -94,7 +88,7 @@ export function CRMContatos() {
             color
           )
         `)
-        .in('contact_id', uniqueContactIds);
+        .in('contact_id', contactIds);
 
       if (tagsError) throw tagsError;
 
@@ -129,46 +123,58 @@ export function CRMContatos() {
 
   useEffect(() => {
     fetchContacts();
-  }, []);
+  }, [selectedWorkspace]);
 
-  // Real-time subscription for new conversations
+  // Real-time subscription for new contacts
   useEffect(() => {
     const channel = supabase
-      .channel('conversations-contacts')
+      .channel('contacts-realtime')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'conversations'
+          table: 'contacts'
         },
-        async (payload) => {
-          // When a new conversation is created, check if the contact is already in our list
-          const newContactId = payload.new.contact_id;
-          const existingContact = contacts.find(c => c.id === newContactId);
-          
-          if (!existingContact) {
-            // Fetch the new contact and add it to the list
-            const { data: newContactData, error } = await supabase
-              .from('contacts')
-              .select('*')
-              .eq('id', newContactId)
-              .single();
-
-            if (!error && newContactData) {
-              const newContact: Contact = {
-                id: newContactData.id,
-                name: newContactData.name,
-                phone: newContactData.phone || '',
-                email: newContactData.email || '',
-                createdAt: format(new Date(newContactData.created_at), 'dd/MM/yyyy HH:mm:ss'),
-                tags: [],
-                profile_image_url: newContactData.profile_image_url,
-                extra_info: newContactData.extra_info as Record<string, any> || {}
-              };
-
-              setContacts(prev => [newContact, ...prev]);
-            }
+        (payload) => {
+          // Add new contact to the list if it's from the current workspace
+          if (payload.new.workspace_id === selectedWorkspace?.workspace_id) {
+            const newContact: Contact = {
+              id: payload.new.id,
+              name: payload.new.name,
+              phone: payload.new.phone || '',
+              email: payload.new.email || '',
+              createdAt: format(new Date(payload.new.created_at), 'dd/MM/yyyy HH:mm:ss'),
+              tags: [],
+              profile_image_url: payload.new.profile_image_url,
+              extra_info: payload.new.extra_info as Record<string, any> || {}
+            };
+            
+            setContacts(prev => [newContact, ...prev]);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'contacts'
+        },
+        (payload) => {
+          // Update contact in the list
+          if (payload.new.workspace_id === selectedWorkspace?.workspace_id) {
+            setContacts(prev => prev.map(contact => 
+              contact.id === payload.new.id 
+                ? {
+                    ...contact,
+                    name: payload.new.name,
+                    phone: payload.new.phone || '',
+                    email: payload.new.email || '',
+                    extra_info: payload.new.extra_info as Record<string, any> || {}
+                  }
+                : contact
+            ));
           }
         }
       )
@@ -177,8 +183,7 @@ export function CRMContatos() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [contacts]);
-
+  }, [selectedWorkspace, contacts]);
   // Filter contacts based on search and tag filter
   const filteredContacts = contacts.filter(contact => {
     const matchesSearch = !searchTerm || 
@@ -310,6 +315,51 @@ export function CRMContatos() {
       toast({
         title: "Erro na exclusão em massa",
         description: "Ocorreu um erro ao excluir os contatos. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveTagFromContact = async (contactId: string, tagName: string) => {
+    try {
+      // Find the tag by name to get its ID
+      const { data: tagData, error: tagError } = await supabase
+        .from('tags')
+        .select('id')
+        .eq('name', tagName)
+        .single();
+
+      if (tagError) throw tagError;
+
+      // Remove the tag from contact_tags
+      const { error } = await supabase
+        .from('contact_tags')
+        .delete()
+        .eq('contact_id', contactId)
+        .eq('tag_id', tagData.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setContacts(prev => prev.map(contact => 
+        contact.id === contactId 
+          ? {
+              ...contact,
+              tags: contact.tags.filter(tag => tag.name !== tagName)
+            }
+          : contact
+      ));
+
+      toast({
+        title: "Tag removida",
+        description: `A tag "${tagName}" foi removida do contato.`,
+      });
+
+    } catch (error) {
+      console.error('Error removing tag from contact:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover a tag. Tente novamente.",
         variant: "destructive",
       });
     }
@@ -601,7 +651,11 @@ export function CRMContatos() {
                         variant="outline" 
                         size="sm" 
                         className="h-6 w-6 p-0 border-dashed border-muted-foreground/30 rounded-full hover:border-muted-foreground/50"
-                        aria-label="Adicionar"
+                        aria-label="Adicionar Tag"
+                        onClick={() => {
+                          setSelectedContactForTag(contact.id);
+                          setIsTagModalOpen(true);
+                        }}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -612,14 +666,24 @@ export function CRMContatos() {
                           <Badge 
                             key={index}
                             variant="secondary" 
-                            className="text-xs"
+                            className="text-xs flex items-center gap-1 pr-1"
                             style={{ 
                               backgroundColor: `${tag.color}20`, 
                               color: tag.color,
                               border: `1px solid ${tag.color}40`
                             }}
                           >
-                            {tag.name}
+                            <span>{tag.name}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveTagFromContact(contact.id, tag.name);
+                              }}
+                              className="ml-1 hover:bg-black/10 rounded-full p-0.5 transition-colors"
+                              aria-label={`Remover tag ${tag.name}`}
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
                           </Badge>
                         ))}
                       </div>
@@ -799,6 +863,20 @@ export function CRMContatos() {
         isOpen={isBulkDeleteOpen}
         onClose={() => setIsBulkDeleteOpen(false)}
         onConfirm={handleBulkDelete}
+      />
+
+      {/* Add Tag Modal */}
+      <SelectTagModal
+        isOpen={isTagModalOpen}
+        onClose={() => {
+          setIsTagModalOpen(false);
+          setSelectedContactForTag(null);
+        }}
+        onTagAdded={() => {
+          // Refresh contacts to show new tag
+          fetchContacts();
+        }}
+        contactId={selectedContactForTag || ""}
       />
     </div>
   );

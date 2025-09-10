@@ -167,6 +167,30 @@ serve(async (req) => {
           .eq('conversation_id', conv.id)
           .order('created_at', { ascending: true });
 
+        // Fetch conversation tags with proper join
+        const { data: conversationTags, error: tagsError } = await supabase
+          .from('conversation_tags')
+          .select(`
+            id,
+            conversation_id,
+            tag_id,
+            tag:tags (
+              id,
+              name,
+              color
+            )
+          `)
+          .eq('conversation_id', conv.id);
+
+        if (tagsError) {
+          console.error('❌ Error fetching tags for conversation', conv.id, ':', tagsError);
+        } else {
+          console.log(`✅ Fetched ${conversationTags?.length || 0} tags for conversation ${conv.id}`);
+          if (conversationTags && conversationTags.length > 0) {
+            console.log('🏷️ Tags data:', JSON.stringify(conversationTags, null, 2));
+          }
+        }
+
         return {
           id: conv.id,
           contact: conv.contacts ? {
@@ -192,6 +216,7 @@ serve(async (req) => {
           assigned_at: conv.assigned_at,
           connection_id: conv.connection_id,
           workspace_id: conv.workspace_id,
+          tags: (conversationTags || []).map(ct => ct.tag).filter(Boolean),
           messages: (messagesData || []).map(msg => ({
             id: msg.id,
             content: msg.content,

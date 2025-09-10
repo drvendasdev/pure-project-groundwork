@@ -37,6 +37,11 @@ export interface WhatsAppConversation {
   connection_id?: string;
   workspace_id?: string;
   messages: WhatsAppMessage[];
+  tags?: Array<{
+    id: string;
+    name: string;
+    color: string;
+  }>;
 }
 
 export const useWhatsAppConversations = () => {
@@ -631,10 +636,32 @@ export const useWhatsAppConversations = () => {
       )
       .subscribe();
 
+    // Subscription for conversation tags changes
+    const tagsChannel = supabase
+      .channel('conversation-tags')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'conversation_tags' },
+        (payload) => {
+          console.log('🔔 Tag adicionada à conversa:', payload.new);
+          // Refetch conversations to update tags
+          fetchConversations();
+        }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'conversation_tags' },
+        (payload) => {
+          console.log('🔔 Tag removida da conversa:', payload.old);
+          // Refetch conversations to update tags
+          fetchConversations();
+        }
+      )
+      .subscribe();
+
     return () => {
       console.log('🧹 Limpando subscriptions real-time');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
+      supabase.removeChannel(tagsChannel);
     };
   }, []);
 
