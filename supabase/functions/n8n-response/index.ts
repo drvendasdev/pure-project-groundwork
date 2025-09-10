@@ -732,61 +732,93 @@ serve(async (req) => {
     
     if (webhookError) {
       console.error(`❌ [${requestId}] Error fetching workspace webhook:`, webhookError);
-    } else if (webhookData) {
+      return new Response(JSON.stringify({
+        code: 'WEBHOOK_CONFIG_ERROR',
+        message: 'Error fetching workspace webhook configuration',
+        details: webhookError.message,
+        requestId
+      }), {
+        status: 424,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    } else if (webhookData && webhookData.webhook_url) {
       workspaceWebhookUrl = webhookData.webhook_url;
-      console.log(`📤 [${requestId}] Using workspace-specific webhook from table: ${workspaceWebhookSecretName}`);
+      const webhookUrl = new URL(workspaceWebhookUrl);
+      console.log(`📤 [${requestId}] Using workspace webhook: ${webhookUrl.hostname}${webhookUrl.pathname}`);
     }
     
-    // Fallback para webhook global se não houver webhook específico do workspace
+    // No global fallback - if no workspace webhook URL, return error
     if (!workspaceWebhookUrl) {
-      workspaceWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
-      if (workspaceWebhookUrl) {
-        console.log(`📤 [${requestId}] Using fallback global webhook`);
-      }
+      console.error(`❌ [${requestId}] No webhook URL configured for workspace ${workspaceId}`);
+      return new Response(JSON.stringify({
+        code: 'MISSING_WEBHOOK_URL',
+        message: `No webhook URL configured for workspace ${workspaceId}`,
+        requestId
+      }), {
+        status: 424,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
     
-    if (workspaceWebhookUrl) {
-      try {
-        const n8nPayload = {
-          workspace_id: workspaceId,
-          conversation_id: finalConversationId,
-          message_id: newMessage?.id || null,
-          phone_number: phoneNumber ? sanitizePhoneNumber(phoneNumber) : null,
-          content: finalContent,
-          message_type: finalMessageType,
-          sender_type: senderType,
-          file_url: fileUrl,
-          file_name: fileName,
-          mime_type: mimeType,
-          external_id: externalId,
-          metadata: metadata,
-          processed_at: new Date().toISOString(),
-          request_id: requestId,
-          // Include original Evolution payload for advanced n8n processing
-          evolution_payload: isEvolutionEvent ? payload : null
-        };
+    try {
+      const n8nPayload = {
+        workspace_id: workspaceId,
+        conversation_id: finalConversationId,
+        message_id: newMessage?.id || null,
+        phone_number: phoneNumber ? sanitizePhoneNumber(phoneNumber) : null,
+        content: finalContent,
+        message_type: finalMessageType,
+        sender_type: senderType,
+        file_url: fileUrl,
+        file_name: fileName,
+        mime_type: mimeType,
+        external_id: externalId,
+        metadata: metadata,
+        processed_at: new Date().toISOString(),
+        request_id: requestId,
+        // Include original Evolution payload for advanced n8n processing
+        evolution_payload: isEvolutionEvent ? payload : null
+      };
 
-        const n8nResponse = await fetch(workspaceWebhookUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(n8nPayload)
-        });
+      const n8nResponse = await fetch(workspaceWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(n8nPayload),
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      });
 
-        console.log(`📨 [${requestId}] N8N webhook response: ${n8nResponse.status}`);
+      console.log(`📨 [${requestId}] N8N webhook response: ${n8nResponse.status}`);
+      
+      if (!n8nResponse.ok) {
+        const errorText = await n8nResponse.text();
+        console.error(`❌ [${requestId}] N8N webhook failed (${n8nResponse.status}):`, errorText);
         
-        if (!n8nResponse.ok) {
-          const errorText = await n8nResponse.text();
-          console.error(`❌ [${requestId}] N8N webhook failed:`, errorText);
-        } else {
-          console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
-        }
-      } catch (n8nError) {
-        console.error(`❌ [${requestId}] Error calling N8N webhook:`, n8nError);
+        return new Response(JSON.stringify({
+          code: 'N8N_WEBHOOK_ERROR',
+          message: `N8N webhook returned ${n8nResponse.status}`,
+          details: errorText,
+          requestId
+        }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } else {
+        console.log(`✅ [${requestId}] Successfully forwarded to N8N webhook`);
       }
-    } else {
-      console.log(`⚠️ [${requestId}] No webhook configured for workspace ${workspaceId}, skipping N8N forward`);
+    } catch (n8nError) {
+      console.error(`❌ [${requestId}] Error calling N8N webhook:`, n8nError);
+      
+      return new Response(JSON.stringify({
+        code: 'N8N_WEBHOOK_TIMEOUT',
+        message: 'Failed to call N8N webhook',
+        details: String(n8nError?.message ?? n8nError),
+        requestId
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     return new Response(JSON.stringify({
