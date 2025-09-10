@@ -234,11 +234,11 @@ serve(async (req) => {
       console.error(`❌ [${requestId}] Error processing base64:`, error);
     }
   }
-    const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
-    const instanceId = payload.instance_id ?? payload.instanceId ?? payload.instanceID ?? null;
-    const connectionId = payload.connection_id ?? payload.connectionId ?? null;
-    const externalId = payload.external_id ?? payload.externalId ?? payload.message_id ?? payload.messageId ?? payload.key?.id ?? null;
-    const metadata = payload.metadata ?? payload.meta ?? null;
+  const instanceId = payload.instance_id ?? payload.instanceId ?? payload.instanceID ?? null;
+  const connectionId = payload.connection_id ?? payload.connectionId ?? null;
+  const externalId = payload.external_id ?? payload.externalId ?? payload.message_id ?? payload.messageId ?? payload.key?.id ?? null;
+  const metadata = payload.metadata ?? payload.meta ?? null;
+  const evolutionInstance = payload.evolution_instance ?? payload.evolutionInstance ?? payload.instance ?? null;
     
     // Melhor heurística para sender_type
     const senderType = payload.sender_type ?? 
