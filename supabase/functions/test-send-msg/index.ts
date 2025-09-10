@@ -174,10 +174,18 @@ serve(async (req) => {
     if (webhookData?.webhook_url) {
       console.log('📤 Sending to N8N webhook:', webhookData.webhook_url);
       
+      // Criar payload no padrão do Evolution (igual quando chega pelo celular)
       const n8nPayload = {
-        phone_number: contact.phone,
-        response_message: content,
+        // Dados principais do Evolution format
         instance: instance,
+        sender: `${contact.phone}@s.whatsapp.net`,
+        message: content,
+        phoneNumber: contact.phone,
+        status: 'sent',
+        external_id: message.id,
+        
+        // Dados adicionais do sistema
+        response_message: content,
         workspace_id: conversation.workspace_id,
         conversation_id: conversation_id,
         connection_id: conversation.connection_id,
@@ -186,10 +194,14 @@ serve(async (req) => {
         message_type: message_type,
         sender_id: sender_id,
         sender_type: sender_type,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        
+        // Metadados para identificar origem
+        source: 'agent_system',
+        processed_at: new Date().toISOString()
       };
       
-      console.log('📋 N8N Payload:', JSON.stringify(n8nPayload));
+      console.log('📋 N8N Payload (formato Evolution):', JSON.stringify(n8nPayload));
 
       try {
         const webhookResponse = await fetch(webhookData.webhook_url, {
