@@ -204,9 +204,19 @@ async function processMessage(supabase: any, workspaceId: string, connectionId: 
   try {
     const { key, message, messageTimestamp } = messageData;
     
-    // CORRIGIDO: usar número de quem ENVIOU a mensagem (não o destinatário)
+    // CORRIGIDO: Para mensagens RECEBIDAS, o contato é quem ENVIOU (fromMe = false)
+    // Para mensagens ENVIADAS pelo sistema, o contato é o destinatário (fromMe = true)
     const remoteJid = key.remoteJid;
-    const senderPhone = remoteJid.replace('@s.whatsapp.net', '');
+    let senderPhone;
+    
+    if (key.fromMe) {
+      // Mensagem enviada pelo sistema: contato é o destinatário (remoteJid)
+      senderPhone = remoteJid.replace('@s.whatsapp.net', '');
+    } else {
+      // Mensagem recebida: contato é quem enviou (remoteJid é o remetente)
+      senderPhone = remoteJid.replace('@s.whatsapp.net', '');
+    }
+    
     const contactName = message.pushName || senderPhone;
 
     console.log('📞 Processing message for contact:', { 

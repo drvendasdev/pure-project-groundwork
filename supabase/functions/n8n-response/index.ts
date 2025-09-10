@@ -129,13 +129,34 @@ serve(async (req) => {
   // Extrair e normalizar campos do payload com mais fallbacks
   const conversationId = payload.conversation_id ?? payload.conversationId ?? payload.conversationID ?? payload.conversation ?? null;
   
-  // Normalizar remoteJid para phone_number (aceitar várias fontes)
-  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? payload.to ?? null;
-  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.sender ?? payload.data?.key?.remoteJid ?? null;
+  // CORRIGIDO: Identificar corretamente o contato baseado no tipo de evento
+  let phoneNumber = payload.phone_number ?? payload.phoneNumber ?? payload.phone ?? null;
+  let remoteJid = payload.remoteJid ?? payload.remote_jid ?? payload.data?.key?.remoteJid ?? null;
+  let destination = payload.to ?? payload.destination ?? null;
+  let evolutionInstance = payload.instance ?? payload.evolution_instance ?? null;
   
-  if (!phoneNumber && remoteJid) {
-    phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-    console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
+  // Para eventos Evolution, o contato NUNCA deve ser o número da instância
+  if (payload.event === 'MESSAGES_UPSERT' || payload.event === 'messages.upsert') {
+    // Mensagem recebida: contato é o sender (remoteJid)
+    if (!phoneNumber && remoteJid) {
+      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+      console.log(`📱 [${requestId}] Normalized sender to phone_number: ${remoteJid} -> ${phoneNumber}`);
+    }
+  } else {
+    // Mensagem enviada pelo sistema: contato é o destinatário
+    if (!phoneNumber && destination) {
+      phoneNumber = destination.replace('@s.whatsapp.net', '');
+      console.log(`📱 [${requestId}] Normalized destination to phone_number: ${destination} -> ${phoneNumber}`);
+    } else if (!phoneNumber && remoteJid) {
+      phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
+      console.log(`📱 [${requestId}] Normalized remoteJid to phone_number: ${remoteJid} -> ${phoneNumber}`);
+    }
+  }
+  
+  // VALIDAÇÃO CRÍTICA: Verificar se phoneNumber não é o número da instância
+  if (phoneNumber && evolutionInstance && phoneNumber === evolutionInstance) {
+    console.error(`❌ [${requestId}] ERRO CRÍTICO: Tentativa de usar número da instância (${evolutionInstance}) como contato! Ignorando.`);
+    phoneNumber = null;
   }
   
   // Suporte para camelCase e base64 direto
