@@ -569,6 +569,22 @@ serve(async (req) => {
 
     console.log('Mensagem registrada no CRM. N8N deve processar a resposta.');
 
+    // 6.5. Trigger AI response if agent is active
+    if (newConversation?.agente_ativo) {
+      try {
+        console.log('🤖 Triggering AI response for conversation:', newConversation.id);
+        await supabase.functions.invoke('ai-chat-response', {
+          body: {
+            message: messageContent,
+            conversationId: newConversation.id,
+            phoneNumber: phoneNumber
+          }
+        });
+      } catch (aiError) {
+        console.error('❌ Error calling AI response:', aiError);
+      }
+    }
+
     // 7. Forward event to N8N webhook (after CRM registration)
     const requestUrl = new URL(req.url);
     const customN8nUrl = requestUrl.searchParams.get('n8nUrl'); // Allow override for testing
