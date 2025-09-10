@@ -503,10 +503,10 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Final workspace resolution: ${workspaceId} (method: ${resolutionMethod})`);
 
-    // Se ainda não temos conversation_id, precisar resolver via phoneNumber
-    // CRÍTICO: Para mensagens de agentes, só resolver se já existe conversationId
-    if (!finalConversationId && phoneNumber && workspaceId && senderType === "contact") {
-      console.log(`🔍 [${requestId}] Creating/finding conversation for CONTACT phone: ${phoneNumber} in workspace: ${workspaceId}`);
+    // Se ainda não temos conversation_id, tentar resolver via phoneNumber
+    // Para contatos: criar contato + conversa; Para agentes: buscar conversa existente
+    if (!finalConversationId && phoneNumber && workspaceId) {
+      console.log(`🔍 [${requestId}] Resolving conversation for ${senderType} with phone: ${phoneNumber} in workspace: ${workspaceId}`);
       
       const sanitizedPhone = sanitizePhoneNumber(phoneNumber);
       
@@ -535,7 +535,8 @@ serve(async (req) => {
           });
         }
 
-        if (!existingContact) {
+        if (!existingContact && senderType === "contact") {
+          // CRÍTICO: Só criar contatos para sender_type = "contact"
           console.log(`➕ [${requestId}] Creating new contact for phone: ${sanitizedPhone} (sender_type: ${senderType})`);
           const personName = payload.person_name ?? payload.personName ?? payload.contact_name ?? payload.pushName ?? `Contato ${sanitizedPhone}`;
           const { data: newContact, error: createContactError } = await supabase
@@ -562,15 +563,18 @@ serve(async (req) => {
           }
           
           existingContact = newContact;
+        } else if (!existingContact && senderType === "agent") {
+          console.log(`⚠️ [${requestId}] No existing contact found for agent message - this may be an issue`);
         }
 
-        console.log(`👤 [${requestId}] Contact resolved: ${existingContact.id} - ${existingContact.name}`);
+        console.log(`👤 [${requestId}] Contact resolved: ${existingContact?.id} - ${existingContact?.name}`);
 
-        // Buscar ou criar conversa
-        let { data: existingConv, error: findConvError } = await supabase
-          .from('conversations')
-          .select('id')
-          .eq('contact_id', existingContact.id)
+        // Buscar conversa existente (para ambos: contatos e agentes)
+        if (existingContact) {
+          let { data: existingConv, error: findConvError } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('contact_id', existingContact.id)
           .eq('workspace_id', workspaceId)
           .eq('status', 'open')
           .maybeSingle();
@@ -639,19 +643,8 @@ serve(async (req) => {
         });
       }
     } else if (!finalConversationId && senderType !== "contact") {
-      console.log(`⚠️ [${requestId}] No conversation_id for agent message - this should have been provided by N8N!`);
-      // Para mensagens de agentes, o conversation_id DEVE vir do payload
-      if (!conversationId) {
-        return new Response(JSON.stringify({
-          code: 'MISSING_CONVERSATION_ID',
-          message: 'Agent messages require conversation_id to be provided',
-          requestId,
-          senderType
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
+      console.log(`⚠️ [${requestId}] No conversation_id for agent message, but allowing processing with phone_number if available`);
+      // Para mensagens de agentes, tentar resolver via phone_number se não tiver conversation_id
     }
 
     // VALIDAÇÃO FINAL: Garantir que temos conversation_id para prosseguir
