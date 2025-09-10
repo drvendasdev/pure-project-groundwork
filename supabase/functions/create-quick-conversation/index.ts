@@ -122,7 +122,7 @@ serve(async (req) => {
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
-          name: `+${normalizedPhone}`,
+          name: normalizedPhone, // SEM PREFIXO - apenas o número
           phone: normalizedPhone,
           workspace_id: finalOrgId,
           extra_info: { temporary: true }

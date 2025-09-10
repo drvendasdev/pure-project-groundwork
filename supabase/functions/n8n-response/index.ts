@@ -149,21 +149,19 @@ serve(async (req) => {
       fullPayload: JSON.stringify(payload).substring(0, 800)
     });
     
-    // Prioridade: 1) contact_phone 2) remoteJid - NUNCA usar phone_number da instância
-    if (contactPhone) {
-      phoneNumber = sanitizePhoneNumber(contactPhone);
-      console.log(`📱 [${requestId}] Using contact_phone: ${contactPhone} -> ${phoneNumber}`);
-    } else if (remoteJid) {
+    // CORRIGIDO: APENAS usar remoteJid/sender - NUNCA contact_phone que pode ser da instância
+    if (remoteJid && remoteJid.includes('@s.whatsapp.net')) {
       phoneNumber = sanitizePhoneNumber(remoteJid.replace('@s.whatsapp.net', ''));
-      console.log(`📱 [${requestId}] Using remoteJid: ${remoteJid} -> ${phoneNumber}`);
+      console.log(`📱 [${requestId}] Using remoteJid (sender): ${remoteJid} -> ${phoneNumber}`);
     } else {
-      console.error(`❌ [${requestId}] FALHA: Não foi possível extrair número de contato válido`);
-      console.error(`❌ [${requestId}] Payload deve conter 'contact_phone' ou 'remoteJid' para criar/atualizar contato`);
+      console.error(`❌ [${requestId}] FALHA: Não foi possível extrair número de contato válido do remoteJid/sender`);
+      console.error(`❌ [${requestId}] IGNORANDO contact_phone=${contactPhone} (pode ser da instância)`);
+      console.error(`❌ [${requestId}] Payload deve conter 'remoteJid' ou 'sender' válido para criar/atualizar contato`);
       
       return new Response(
         JSON.stringify({ 
-          error: 'Número de contato não encontrado. Use contact_phone ou remoteJid.',
-          available_fields: Object.keys(payload).filter(k => k.includes('phone') || k.includes('jid') || k.includes('contact')),
+          error: 'Número de contato não encontrado no sender/remoteJid.',
+          available_fields: Object.keys(payload).filter(k => k.includes('jid') || k.includes('sender')),
           payload_size: Object.keys(payload).length
         }),
         { 
@@ -616,7 +614,7 @@ serve(async (req) => {
             .from('contacts')
             .insert({
               phone: sanitizedPhone,
-              name: `Contato ${sanitizedPhone}`,
+              name: pushName || sanitizedPhone, // SEM PREFIXO - pushName ou apenas número
               workspace_id: workspaceId,
             })
             .select('id, name')

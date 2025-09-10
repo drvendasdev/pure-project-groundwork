@@ -65,26 +65,24 @@ serve(async (req) => {
       });
     }
 
-    // CORRIGIDO: Extrair telefone corretamente, NUNCA usar número da instância como contato
+    // CORRIGIDO: APENAS usar sender (remoteJid) - NUNCA phoneNumber do payload
     let finalPhoneNumber = null;
     
     console.log(`🔍 [${requestId}] Raw payload fields:`, {
-      phoneNumber,
       sender,
       message,
       instance,
-      hasPhoneNumber: !!phoneNumber,
+      phoneNumber_IGNORADO: phoneNumber, // Mostrar mas ignorar
       hasSender: !!sender,
       senderType: typeof sender
     });
     
-    // CRÍTICO: NÃO usar phoneNumber do payload pois pode ser da instância
-    // Prioridade: APENAS sender (remoteJid) para mensagens de contato
+    // CRÍTICO: APENAS sender (remoteJid) - é o contato real
     if (sender && sender.includes('@s.whatsapp.net')) {
       finalPhoneNumber = sender.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-      console.log(`📱 [${requestId}] Using sender (remoteJid): ${sender} -> ${finalPhoneNumber}`);
+      console.log(`📱 [${requestId}] Using sender (contact): ${sender} -> ${finalPhoneNumber}`);
     } else {
-      console.error(`❌ [${requestId}] CRÍTICO: Não foi possível extrair número de contato válido do sender`);
+      console.error(`❌ [${requestId}] REJEITADO: Não há sender válido de contato`);
       console.error(`❌ [${requestId}] IGNORANDO phoneNumber=${phoneNumber} (pode ser da instância)`);
       
       // Não processar se não temos sender válido
@@ -92,7 +90,7 @@ serve(async (req) => {
         success: true, 
         message: 'Ignored - no valid contact sender found',
         requestId,
-        debug: { phoneNumber, sender, instance }
+        debug: { phoneNumber_ignored: phoneNumber, sender, instance }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -166,7 +164,7 @@ serve(async (req) => {
           .from('contacts')
           .insert({
             phone: finalPhoneNumber,
-            name: `Contato ${finalPhoneNumber}`,
+            name: finalPhoneNumber, // SEM PREFIXO - apenas o número
             workspace_id: connection.workspace_id
           })
           .select('id')
