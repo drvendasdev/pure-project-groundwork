@@ -83,6 +83,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
       length: normalizedUrl.length,
       isSupabasePublic: normalizedUrl.includes('supabase.co/storage/v1/object/public'),
       isSupabaseGeneral: normalizedUrl.includes('supabase.co'),
+      isWhatsappMedia: normalizedUrl.includes('/whatsapp-media/'),
+      isChatMedia: normalizedUrl.includes('/chat-media/'),
       isBlob: normalizedUrl.startsWith('blob:'),
       isData: normalizedUrl.startsWith('data:'),
       isHttps: normalizedUrl.startsWith('https://'),

@@ -159,23 +159,68 @@ serve(async (req) => {
 
     // Se for mensagem de entrada, atualizar no banco
     if (direction === 'inbound' && messageId) {
-      const { error: updateError } = await supabase
-        .from('messages')
-        .update({ 
-          file_url: publicUrl,
-          file_name: finalFileName,
-          mime_type: finalMimeType,
-          message_type: computedMessageType,
-          metadata: { 
-            original_url: mediaUrl,
-            storage_path: storagePath,
-            processed_by: 'n8n'
-          }
-        })
-        .eq('id', messageId);
+      console.log('Tentando atualizar mensagem com ID:', messageId);
+      
+      // Verificar se messageId é um UUID válido ou usar external_id
+      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+      
+      let updateQuery;
+      if (isValidUUID) {
+        console.log('MessageId é um UUID válido, usando campo id');
+        updateQuery = supabase
+          .from('messages')
+          .update({ 
+            file_url: publicUrl,
+            file_name: finalFileName,
+            mime_type: finalMimeType,
+            message_type: computedMessageType,
+            metadata: { 
+              original_url: mediaUrl,
+              storage_path: storagePath,
+              processed_by: 'n8n'
+            }
+          })
+          .eq('id', messageId);
+      } else {
+        console.log('MessageId não é UUID válido, usando campo external_id');
+        updateQuery = supabase
+          .from('messages')
+          .update({ 
+            file_url: publicUrl,
+            file_name: finalFileName,
+            mime_type: finalMimeType,
+            message_type: computedMessageType,
+            metadata: { 
+              original_url: mediaUrl,
+              storage_path: storagePath,
+              processed_by: 'n8n'
+            }
+          })
+          .eq('external_id', messageId);
+      }
+
+      const { data: updateData, error: updateError } = await updateQuery;
 
       if (updateError) {
         console.error('Erro ao atualizar mensagem:', updateError);
+        console.log('Tentando buscar mensagem para debug...');
+        
+        // Debug: tentar encontrar a mensagem
+        const { data: searchData, error: searchError } = await supabase
+          .from('messages')
+          .select('id, external_id, message_type, file_url')
+          .eq('external_id', messageId)
+          .limit(5);
+          
+        console.log('Resultado da busca de debug:', { searchData, searchError, messageId });
+      } else {
+        console.log('✅ Mensagem atualizada com sucesso - campos atualizados:', {
+          messageId,
+          isValidUUID,
+          updateMethod: isValidUUID ? 'id' : 'external_id',
+          publicUrl,
+          finalFileName
+        });
       }
     }
 
