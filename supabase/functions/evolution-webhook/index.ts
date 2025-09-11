@@ -49,6 +49,7 @@ serve(async (req) => {
     console.log(`📨 [${requestId}] Evolution webhook received`);
     
     const data = await req.json();
+    console.log(`📋 [${requestId}] Full payload:`, JSON.stringify(data, null, 2));
     console.log(`📋 [${requestId}] Payload keys:`, Object.keys(data));
 
     // Extract instance name and validate
@@ -191,6 +192,9 @@ serve(async (req) => {
                        data.messageId ||
                        data.id;
 
+      console.log(`🔍 [${requestId}] Debug message structure:`);
+      console.log(`🔍 [${requestId}] data.data?.key:`, JSON.stringify(data.data?.key));
+      console.log(`🔍 [${requestId}] data.key:`, JSON.stringify(data.key));
       console.log(`📋 [${requestId}] Extracted message ID: ${messageId}`);
 
       // Prepare N8N payload
@@ -209,6 +213,7 @@ serve(async (req) => {
         request_id: requestId
       };
 
+      console.log(`📤 [${requestId}] N8N Payload:`, JSON.stringify(n8nPayload, null, 2));
       console.log(`📤 [${requestId}] Forwarding to webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
       
       try {
