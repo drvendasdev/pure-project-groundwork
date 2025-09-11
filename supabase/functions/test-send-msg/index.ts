@@ -206,29 +206,59 @@ serve(async (req) => {
       
       try {
         // Baixar a imagem da URL
+        console.log(`📥 [${requestId}] Downloading image from: ${file_url}`);
         const imageResponse = await fetch(file_url);
         if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status}`);
+          throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`);
         }
         
         const imageArrayBuffer = await imageResponse.arrayBuffer();
+        console.log(`📊 [${requestId}] Downloaded ${imageArrayBuffer.byteLength} bytes`);
+        
+        // Detectar mimeType da resposta ou usar padrão
+        let mimeType = imageResponse.headers.get('content-type');
+        if (!mimeType) {
+          // Tentar detectar pelo nome do arquivo
+          if (file_name) {
+            const ext = file_name.split('.').pop()?.toLowerCase();
+            switch (ext) {
+              case 'jpg':
+              case 'jpeg':
+                mimeType = 'image/jpeg';
+                break;
+              case 'png':
+                mimeType = 'image/png';
+                break;
+              case 'gif':
+                mimeType = 'image/gif';
+                break;
+              case 'webp':
+                mimeType = 'image/webp';
+                break;
+              default:
+                mimeType = 'image/jpeg';
+            }
+          } else {
+            mimeType = 'image/jpeg'; // fallback
+          }
+        }
+        
+        console.log(`🎯 [${requestId}] Detected MIME type: ${mimeType}`);
         
         // Converter para base64 usando método seguro para imagens grandes
         const uint8Array = new Uint8Array(imageArrayBuffer);
-        let binaryString = '';
-        const chunkSize = 8192; // Processar em chunks para evitar stack overflow
         
-        for (let i = 0; i < uint8Array.length; i += chunkSize) {
-          const chunk = uint8Array.slice(i, i + chunkSize);
-          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+        // Método mais eficiente para base64 em Deno
+        let imageBase64;
+        try {
+          // Usar TextDecoder para converter bytes em string binária
+          const binaryString = String.fromCharCode(...uint8Array);
+          imageBase64 = btoa(binaryString);
+          console.log(`✅ [${requestId}] Image converted to base64 successfully (${imageBase64.length} chars, original: ${uint8Array.length} bytes)`);
+        } catch (conversionError) {
+          console.error(`❌ [${requestId}] Base64 conversion failed:`, conversionError);
+          throw new Error(`Base64 conversion failed: ${conversionError.message}`);
         }
-        
-        const imageBase64 = btoa(binaryString);
-        
-        console.log(`✅ [${requestId}] Image converted to base64 safely (${imageBase64.length} chars, original: ${uint8Array.length} bytes)`);
-        
-        // Detectar mimeType da resposta ou usar padrão
-        const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
         
         // Usar file_name fornecido ou extrair da URL
         let fileName = file_name;
@@ -237,16 +267,22 @@ serve(async (req) => {
           fileName = urlParts[urlParts.length - 1];
         }
         
-        // Formato específico para N8N com base64
+        // Formato específico para N8N com base64 (incluindo phone_number)
         n8nPayload = {
           messageId: external_id,
           base64: imageBase64,
           fileName: fileName,
           mimeType: mimeType,
-          direction: 'outbound'
+          direction: 'outbound',
+          phone_number: contact.phone,
+          workspace_id: conversation.workspace_id,
+          conversation_id: conversation_id,
+          connection_id: actualConnectionId,
+          contact_id: conversation.contact_id,
+          instance: instance_name
         };
         
-        console.log(`✅ [${requestId}] Image converted to base64 (${imageBase64.length} chars)`);
+        
         
       } catch (imageError) {
         console.error(`❌ [${requestId}] Error processing image:`, imageError);
