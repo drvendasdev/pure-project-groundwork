@@ -183,7 +183,6 @@ serve(async (req) => {
 
     // Use fixed n8n-response-v2 webhook URL for Evolution instances
     console.log('Using fixed n8n-response-v2 webhook for Evolution instance...')
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const fixedWebhookUrl = `${supabaseUrl}/functions/v1/n8n-response-v2`
     const fixedWebhookSecret = 'supabase-evolution-webhook'
     
