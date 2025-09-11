@@ -185,3 +185,6 @@ verify_jwt = false
 
 [functions.configure-evolution-webhook]
 verify_jwt = false
+
+[functions.test-webhook-config]
+verify_jwt = false
