@@ -90,55 +90,42 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
       hasValidExtension: /\.(jpg|jpeg|png|gif|webp|mp4|mp3|ogg|pdf)$/i.test(normalizedUrl)
     });
     
-    // Supabase storage URLs - Enhanced validation
-    if (normalizedUrl.includes('supabase.co/storage/v1/object/public')) {
-      console.log('✅ Valid Supabase public URL detected');
-      return normalizedUrl;
-    }
-    
-    // General Supabase URLs (might need transformation)
-    if (normalizedUrl.includes('supabase.co') && !normalizedUrl.includes('/storage/v1/object/public/')) {
-      console.log('⚠️ Supabase URL detected but not in public format, attempting to fix...');
-      // Try to fix malformed Supabase URLs
-      if (normalizedUrl.includes('/storage/v1/object/')) {
-        const fixedUrl = normalizedUrl.replace('/storage/v1/object/', '/storage/v1/object/public/');
-        console.log('🔧 Fixed Supabase URL:', fixedUrl);
-        return fixedUrl;
+    // Accept ALL Supabase URLs - more permissive approach
+    if (normalizedUrl.includes('supabase.co')) {
+      console.log('✅ Supabase URL detected - accepting as valid');
+      
+      // Auto-fix common URL issues
+      let fixedUrl = normalizedUrl;
+      
+      // Fix missing public in storage URLs
+      if (normalizedUrl.includes('/storage/v1/object/') && !normalizedUrl.includes('/storage/v1/object/public/')) {
+        fixedUrl = normalizedUrl.replace('/storage/v1/object/', '/storage/v1/object/public/');
+        console.log('🔧 Fixed Supabase URL (added public):', fixedUrl);
       }
+      
+      return fixedUrl;
     }
     
-    // Blob URLs
-    if (normalizedUrl.startsWith('blob:')) {
-      console.log('✅ Valid blob URL detected');
+    // Accept any HTTP/HTTPS URL - browser will handle CORS
+    if (normalizedUrl.startsWith('http')) {
+      console.log('✅ HTTP/HTTPS URL detected - accepting as valid');
       return normalizedUrl;
     }
     
-    // Data URLs
-    if (normalizedUrl.startsWith('data:')) {
-      console.log('✅ Valid data URL detected');
+    // Accept blob and data URLs
+    if (normalizedUrl.startsWith('blob:') || normalizedUrl.startsWith('data:')) {
+      console.log('✅ Blob/Data URL detected - accepting as valid');
       return normalizedUrl;
     }
     
-    // External HTTPS URLs
-    if (normalizedUrl.startsWith('https://')) {
-      console.log('✅ Valid HTTPS URL detected');
+    // More permissive - try to use any URL that looks like a file
+    if (normalizedUrl.length > 10 && /\.(jpg|jpeg|png|gif|webp|mp4|mp3|ogg|pdf)$/i.test(normalizedUrl)) {
+      console.log('⚠️ File-like URL detected - attempting to use:', normalizedUrl);
       return normalizedUrl;
     }
     
-    // HTTP URLs (less secure but might work)
-    if (normalizedUrl.startsWith('http://')) {
-      console.log('⚠️ HTTP URL detected (not HTTPS)');
-      return normalizedUrl;
-    }
-    
-    // Relative or incomplete URLs
-    if (!normalizedUrl.startsWith('http') && !normalizedUrl.startsWith('blob:') && !normalizedUrl.startsWith('data:')) {
-      console.warn('❌ Relative or incomplete URL detected:', normalizedUrl);
-      return null;
-    }
-    
-    console.warn('❌ Unsupported URL format:', normalizedUrl);
-    return normalizedUrl; // Return anyway to let browser attempt
+    console.warn('❌ Unable to process URL:', normalizedUrl);
+    return normalizedUrl; // Return anyway - let browser/network handle the failure
   }, []);
 
   // Força renderização como imagem se o arquivo terminar com extensões de imagem

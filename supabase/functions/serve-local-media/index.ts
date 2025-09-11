@@ -61,10 +61,20 @@ serve(async (req) => {
     const storagePath = `messages/${messageId}/${fileName}`
     
     try {
-      // Download file from Supabase Storage
-      const { data: fileData, error: downloadError } = await supabase.storage
-        .from('chat-media')
+      // Try whatsapp-media bucket first (where n8n-media-processor stores files)
+      let { data: fileData, error: downloadError } = await supabase.storage
+        .from('whatsapp-media')
         .download(storagePath)
+
+      // If not found in whatsapp-media, try chat-media bucket
+      if (downloadError && downloadError.message?.includes('not found')) {
+        console.log(`⚠️ File not found in whatsapp-media, trying chat-media bucket...`)
+        const chatMediaResult = await supabase.storage
+          .from('chat-media')
+          .download(storagePath)
+        fileData = chatMediaResult.data
+        downloadError = chatMediaResult.error
+      }
 
       if (downloadError || !fileData) {
         console.error('File not found in storage:', downloadError)
