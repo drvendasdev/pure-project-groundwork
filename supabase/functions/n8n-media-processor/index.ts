@@ -117,7 +117,21 @@ serve(async (req) => {
       }
     }
 
-    const finalFileName = fileName || `${Date.now()}.${fileExtension}`;
+    // Gerar nome único para evitar conflitos
+    const timestamp = Date.now();
+    const randomId = crypto.randomUUID().split('-')[0]; // Primeiros 8 caracteres do UUID
+    let finalFileName;
+    
+    if (fileName) {
+      // Extrair extensão do arquivo original
+      const fileParts = fileName.split('.');
+      const extension = fileParts.length > 1 ? fileParts.pop() : fileExtension;
+      const baseName = fileParts.join('.') || 'file';
+      finalFileName = `${timestamp}_${randomId}_${baseName}.${extension}`;
+    } else {
+      finalFileName = `${timestamp}_${randomId}.${fileExtension}`;
+    }
+    
     const storagePath = `messages/${finalFileName}`;
 
     console.log('Upload details:', {
@@ -128,16 +142,42 @@ serve(async (req) => {
       storagePath
     });
 
-    // Upload para Supabase Storage com MIME type correto
+    // Upload para Supabase Storage com MIME type correto e verificação de conflito
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('whatsapp-media')
       .upload(storagePath, uint8Array, {
         contentType: finalMimeType,
-        duplex: 'half'
+        upsert: false // Não sobrescrever arquivos existentes
       });
 
     if (uploadError) {
-      throw new Error(`Erro no upload: ${uploadError.message}`);
+      // Se ainda houver conflito, tentar com timestamp mais específico
+      if (uploadError.message.includes('already exists') || uploadError.message.includes('resource already exists')) {
+        console.log(`⚠️ Conflito de nome detectado, tentando com nome mais específico...`);
+        const specificTimestamp = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const newFileName = fileName ? 
+          `${specificTimestamp}_${fileName}` : 
+          `${specificTimestamp}.${fileExtension}`;
+        const newStoragePath = `messages/${newFileName}`;
+        
+        const { data: retryUploadData, error: retryUploadError } = await supabase.storage
+          .from('whatsapp-media')
+          .upload(newStoragePath, uint8Array, {
+            contentType: finalMimeType,
+            upsert: false
+          });
+          
+        if (retryUploadError) {
+          throw new Error(`Erro no upload após retry: ${retryUploadError.message}`);
+        }
+        
+        // Atualizar variáveis para usar o novo nome
+        finalFileName = newFileName;
+        storagePath = newStoragePath;
+        console.log(`✅ Upload realizado com nome alternativo: ${newFileName}`);
+      } else {
+        throw new Error(`Erro no upload: ${uploadError.message}`);
+      }
     }
 
     // Obter URL pública
