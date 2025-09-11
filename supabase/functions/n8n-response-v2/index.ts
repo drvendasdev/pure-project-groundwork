@@ -42,7 +42,7 @@ async function resolveConnectionId(
       .select('id')
       .eq('id', existingConnectionId)
       .eq('workspace_id', workspaceId)
-      .single();
+      .maybeSingle();
     
     if (existingConnection) {
       console.log(`✅ Using existing connection_id: ${existingConnectionId}`);
@@ -57,7 +57,7 @@ async function resolveConnectionId(
       .select('id')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', instanceName)
-      .single();
+      .maybeSingle();
     
     if (instanceConnection) {
       console.log(`✅ Found connection by instance name: ${instanceConnection.id}`);
@@ -73,7 +73,7 @@ async function resolveConnectionId(
     .eq('status', 'connected')
     .order('created_at', { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
   
   if (firstConnection) {
     console.log(`✅ Using first active connection: ${firstConnection.id}`);
@@ -87,7 +87,7 @@ async function resolveConnectionId(
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
   
   if (anyConnection) {
     console.log(`⚠️ Using fallback connection: ${anyConnection.id}`);
@@ -164,7 +164,7 @@ serve(async (req) => {
           .from('connections')
           .select('workspace_id')
           .eq('instance_name', instanceName)
-          .single();
+          .maybeSingle();
 
         if (connection) {
           workspaceId = connection.workspace_id;
@@ -174,7 +174,7 @@ serve(async (req) => {
             .from('workspace_webhook_settings')
             .select('webhook_url, webhook_secret')
             .eq('workspace_id', workspaceId)
-            .single();
+            .maybeSingle();
 
           if (webhookSettings) {
             webhookUrl = webhookSettings.webhook_url;
