@@ -198,30 +198,92 @@ serve(async (req) => {
     // Generate external_id for tracking
     const external_id = crypto.randomUUID();
     
-    // Prepare N8N payload
-    const n8nPayload = {
-      direction: 'outbound',
-      external_id: external_id,
-      message_id: external_id, // Add message_id field
-      phone_number: contact.phone,
-      message_type: message_type,
-      sender_type: sender_type || 'agent',
-      sender_id: sender_id,
-      file_url: file_url || null,
-      file_name: file_name || null,
-      workspace_id: conversation.workspace_id,
-      conversation_id: conversation_id,
-      connection_id: actualConnectionId,
-      contact_id: conversation.contact_id,
-      instance: instance_name,
-      source: 'test-send-msg',
-      timestamp: new Date().toISOString(),
-      request_id: requestId
-    };
+    let n8nPayload: any;
 
-    // Só incluir content se houver conteúdo válido
-    if (content && content.trim() !== '') {
-      n8nPayload.content = content.trim();
+    // Se for imagem com file_url, enviar no formato base64 para N8N
+    if (message_type !== 'text' && file_url) {
+      console.log(`🖼️ [${requestId}] Processing image for base64 conversion: ${file_url}`);
+      
+      try {
+        // Baixar a imagem da URL
+        const imageResponse = await fetch(file_url);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to download image: ${imageResponse.status}`);
+        }
+        
+        const imageArrayBuffer = await imageResponse.arrayBuffer();
+        const imageBase64 = btoa(String.fromCharCode(...new Uint8Array(imageArrayBuffer)));
+        
+        // Detectar mimeType da resposta ou usar padrão
+        const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+        
+        // Usar file_name fornecido ou extrair da URL
+        let fileName = file_name;
+        if (!fileName) {
+          const urlParts = file_url.split('/');
+          fileName = urlParts[urlParts.length - 1];
+        }
+        
+        // Formato específico para N8N com base64
+        n8nPayload = {
+          messageId: external_id,
+          base64: imageBase64,
+          fileName: fileName,
+          mimeType: mimeType,
+          direction: 'outbound'
+        };
+        
+        console.log(`✅ [${requestId}] Image converted to base64 (${imageBase64.length} chars)`);
+        
+      } catch (imageError) {
+        console.error(`❌ [${requestId}] Error processing image:`, imageError);
+        // Fallback para formato normal se conversão falhar
+        n8nPayload = {
+          direction: 'outbound',
+          external_id: external_id,
+          message_id: external_id,
+          phone_number: contact.phone,
+          message_type: message_type,
+          sender_type: sender_type || 'agent',
+          sender_id: sender_id,
+          file_url: file_url,
+          file_name: file_name,
+          workspace_id: conversation.workspace_id,
+          conversation_id: conversation_id,
+          connection_id: actualConnectionId,
+          contact_id: conversation.contact_id,
+          instance: instance_name,
+          source: 'test-send-msg',
+          timestamp: new Date().toISOString(),
+          request_id: requestId
+        };
+      }
+    } else {
+      // Formato padrão para mensagens de texto
+      n8nPayload = {
+        direction: 'outbound',
+        external_id: external_id,
+        message_id: external_id,
+        phone_number: contact.phone,
+        message_type: message_type,
+        sender_type: sender_type || 'agent',
+        sender_id: sender_id,
+        file_url: file_url || null,
+        file_name: file_name || null,
+        workspace_id: conversation.workspace_id,
+        conversation_id: conversation_id,
+        connection_id: actualConnectionId,
+        contact_id: conversation.contact_id,
+        instance: instance_name,
+        source: 'test-send-msg',
+        timestamp: new Date().toISOString(),
+        request_id: requestId
+      };
+
+      // Só incluir content se houver conteúdo válido
+      if (content && content.trim() !== '') {
+        n8nPayload.content = content.trim();
+      }
     }
     
     console.log(`📤 [${requestId}] Sending to N8N workspace webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
