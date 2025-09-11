@@ -248,11 +248,17 @@ serve(async (req) => {
         // Converter para base64 usando método seguro para imagens grandes
         const uint8Array = new Uint8Array(imageArrayBuffer);
         
-        // Método mais eficiente para base64 em Deno
+        // Converter para base64 usando método chunk-based para evitar stack overflow
         let imageBase64;
         try {
-          // Usar TextDecoder para converter bytes em string binária
-          const binaryString = String.fromCharCode(...uint8Array);
+          let binaryString = '';
+          const chunkSize = 8192; // Processar em chunks para evitar stack overflow
+          
+          for (let i = 0; i < uint8Array.length; i += chunkSize) {
+            const chunk = uint8Array.slice(i, i + chunkSize);
+            binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+          }
+          
           imageBase64 = btoa(binaryString);
           console.log(`✅ [${requestId}] Image converted to base64 successfully (${imageBase64.length} chars, original: ${uint8Array.length} bytes)`);
         } catch (conversionError) {
