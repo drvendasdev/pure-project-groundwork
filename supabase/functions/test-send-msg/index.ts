@@ -196,6 +196,7 @@ serve(async (req) => {
     const n8nPayload = {
       direction: 'outbound',
       external_id: external_id,
+      message_id: external_id, // Add message_id field
       phone_number: contact.phone,
       content: content,
       message_type: message_type,
