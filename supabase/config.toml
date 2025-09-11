@@ -191,3 +191,6 @@ verify_jwt = false
 
 [functions.fix-webhook]
 verify_jwt = false
+
+[functions.debug-webhook]
+verify_jwt = false
