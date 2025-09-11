@@ -60,13 +60,50 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
     console.log(`✅ [${requestId}] Supabase client created`);
 
-    // Fetch conversation details
+    // Fetch conversation details with connection info
     console.log(`🔍 [${requestId}] Fetching conversation: ${conversation_id}`);
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
       .select('workspace_id, connection_id, contact_id')
       .eq('id', conversation_id)
       .single();
+
+    if (convError || !conversation) {
+      console.log(`❌ [${requestId}] Conversation error:`, convError);
+      return new Response(JSON.stringify({
+        error: 'Conversation not found',
+        details: convError?.message
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // If conversation doesn't have connection_id, try to find default connection for workspace
+    let actualConnectionId = conversation.connection_id;
+    if (!actualConnectionId) {
+      console.log(`⚠️ [${requestId}] Conversation has no connection_id, finding default for workspace`);
+      const { data: defaultConnection } = await supabase
+        .from('connections')
+        .select('id')
+        .eq('workspace_id', conversation.workspace_id)
+        .eq('status', 'connected')
+        .limit(1)
+        .single();
+      
+      if (defaultConnection) {
+        actualConnectionId = defaultConnection.id;
+        console.log(`✅ [${requestId}] Using default connection: ${actualConnectionId}`);
+        
+        // Update the conversation to include the connection_id
+        await supabase
+          .from('conversations')
+          .update({ connection_id: actualConnectionId })
+          .eq('id', conversation_id);
+          
+        console.log(`✅ [${requestId}] Updated conversation with connection_id`);
+      }
+    }
 
     if (convError || !conversation) {
       console.log(`❌ [${requestId}] Conversation error:`, convError);
@@ -105,12 +142,12 @@ serve(async (req) => {
     // Fetch connection details to get instance_name
     let instance_name = null;
     
-    if (conversation.connection_id) {
-      console.log(`🔍 [${requestId}] Fetching connection: ${conversation.connection_id}`);
+    if (actualConnectionId) {
+      console.log(`🔍 [${requestId}] Fetching connection: ${actualConnectionId}`);
       const { data: connection, error: connectionError } = await supabase
         .from('connections')
         .select('instance_name')
-        .eq('id', conversation.connection_id)
+        .eq('id', actualConnectionId)
         .single();
 
       if (connectionError || !connection) {
@@ -127,22 +164,7 @@ serve(async (req) => {
       instance_name = connection.instance_name;
       console.log(`✅ [${requestId}] Connection found: ${instance_name}`);
     } else {
-      // Se não há connection_id, buscar uma instância padrão do workspace
-      console.log(`⚠️ [${requestId}] No connection_id, fetching default instance for workspace`);
-      const { data: defaultConnection, error: defaultError } = await supabase
-        .from('connections')
-        .select('instance_name')
-        .eq('workspace_id', conversation.workspace_id)
-        .eq('status', 'connected')
-        .limit(1)
-        .single();
-      
-      if (defaultConnection && !defaultError) {
-        instance_name = defaultConnection.instance_name;
-        console.log(`✅ [${requestId}] Using default instance: ${instance_name}`);
-      } else {
-        console.log(`⚠️ [${requestId}] No default instance found, using null`);
-      }
+      console.log(`⚠️ [${requestId}] No connection available for this conversation`);
     }
 
     // Get N8N webhook URL from workspace configuration
@@ -183,7 +205,7 @@ serve(async (req) => {
       file_name: file_name || null,
       workspace_id: conversation.workspace_id,
       conversation_id: conversation_id,
-      connection_id: conversation.connection_id,
+      connection_id: actualConnectionId,
       contact_id: conversation.contact_id,
       instance: instance_name,
       source: 'test-send-msg',

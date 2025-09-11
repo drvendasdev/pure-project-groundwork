@@ -478,14 +478,38 @@ serve(async (req) => {
 
     // Find or create conversation
     let conversationId: string;
+    
+    // For inbound messages without explicit connection_id, try to get it from instance
+    let resolvedConnectionId = connection_id;
+    
+    if (!resolvedConnectionId && direction === 'inbound') {
+      // Try to find connection_id from the instance that received the message
+      // This could come from the Evolution webhook payload or be inferred from the workspace
+      const { data: connectionData } = await supabase
+        .from('connections')
+        .select('id')
+        .eq('workspace_id', workspace_id)
+        .eq('status', 'connected')
+        .limit(1)
+        .single();
+      
+      if (connectionData) {
+        resolvedConnectionId = connectionData.id;
+        console.log(`🔗 [${requestId}] Resolved connection_id from workspace: ${resolvedConnectionId}`);
+      }
+    }
+    
     let conversationQuery = supabase
       .from('conversations')
       .select('id')
       .eq('contact_id', contactId)
       .eq('workspace_id', workspace_id);
 
-    if (connection_id) {
-      conversationQuery = conversationQuery.eq('connection_id', connection_id);
+    if (resolvedConnectionId) {
+      conversationQuery = conversationQuery.eq('connection_id', resolvedConnectionId);
+    } else {
+      // If no connection_id, look for conversations without connection_id
+      conversationQuery = conversationQuery.is('connection_id', null);
     }
 
     const { data: existingConversation, error: conversationFindError } = await conversationQuery.maybeSingle();
@@ -512,7 +536,7 @@ serve(async (req) => {
         .insert({
           contact_id: contactId,
           workspace_id: workspace_id,
-          connection_id: connection_id || null,
+          connection_id: resolvedConnectionId,
           status: 'open'
         })
         .select('id')
