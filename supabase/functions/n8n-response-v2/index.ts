@@ -507,7 +507,7 @@ serve(async (req) => {
             .from('conversations')
             .select('contact_id')
             .eq('id', existingMessage.conversation_id)
-            .single();
+            .maybeSingle();
           
           return new Response(JSON.stringify({
             success: true,
@@ -561,7 +561,7 @@ serve(async (req) => {
           .from('conversations')
           .select('contact_id')
           .eq('id', existingMessage.conversation_id)
-          .single();
+          .maybeSingle();
         
         return new Response(JSON.stringify({
           success: true,
@@ -626,7 +626,7 @@ serve(async (req) => {
           .from('conversations')
           .select('contact_id')
           .eq('id', duplicateCheck.conversation_id)
-          .single();
+          .maybeSingle();
         
         return new Response(JSON.stringify({
           success: true,
@@ -849,7 +849,7 @@ serve(async (req) => {
         .from('conversations')
         .select('connection_id')
         .eq('id', conversationId)
-        .single();
+        .maybeSingle();
       
       if (convData?.connection_id) {
         resolvedConnectionId = convData.connection_id;
@@ -861,7 +861,7 @@ serve(async (req) => {
         .from('connections')
         .select('instance_name')
         .eq('id', resolvedConnectionId)
-        .single();
+        .maybeSingle();
       
       if (connectionData) {
         instanceInfo = connectionData.instance_name;
