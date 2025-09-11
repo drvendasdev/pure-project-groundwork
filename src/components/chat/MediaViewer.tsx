@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Image, Music, Video } from 'lucide-react';
+import { Download, FileText, Image, Music, Video, AlertCircle } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
 import { ImageModal } from './ImageModal';
 
@@ -18,37 +18,92 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   className = ''
 }) => {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  // Debug logging
-  console.log('MediaViewer debug:', { fileUrl, fileName, messageType });
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Enhanced debug logging
+  console.log('MediaViewer render:', { 
+    fileUrl, 
+    fileName, 
+    messageType, 
+    imageError, 
+    retryCount,
+    urlType: fileUrl?.includes('supabase.co') ? 'supabase' : fileUrl?.startsWith('blob:') ? 'blob' : 'external'
+  });
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.error('Erro ao carregar mídia:', fileUrl);
-    console.log('Tentando reprocessar arquivo corrompido...');
-    e.currentTarget.style.display = 'none';
-    // Mostrar fallback
-    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>, errorDetails?: string) => {
+    const img = e.currentTarget;
+    const errorMsg = `Failed to load image: ${fileUrl}. Error: ${errorDetails || 'Unknown'}. Retry count: ${retryCount}`;
+    
+    console.error('Image load error:', {
+      url: fileUrl,
+      fileName,
+      messageType,
+      retryCount,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+      complete: img.complete,
+      errorDetails
+    });
+    
+    setImageError(errorMsg);
+    
+    // Try retry with cache busting if first attempt and it's a supabase URL
+    if (retryCount === 0 && fileUrl?.includes('supabase.co')) {
+      setRetryCount(1);
+      const cacheBustedUrl = `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      console.log('Retrying with cache-busted URL:', cacheBustedUrl);
+      img.src = cacheBustedUrl;
+      return;
+    }
+    
+    // Show fallback after retry
+    img.style.display = 'none';
+    const fallback = img.nextElementSibling as HTMLElement;
     if (fallback) {
       fallback.style.display = 'block';
     }
-  };
+  }, [fileUrl, fileName, messageType, retryCount]);
 
-  // Simplificar validação - usar URLs diretas
-  const getValidImageUrl = (url: string) => {
-    if (!url) return null;
+  const getValidImageUrl = useCallback((url: string) => {
+    if (!url) {
+      console.warn('MediaViewer: No URL provided');
+      return null;
+    }
     
-    // URLs do storage Supabase sempre funcionam
+    // Log URL validation
+    console.log('Validating URL:', {
+      url,
+      isSupabase: url.includes('supabase.co/storage/v1/object/public'),
+      isBlob: url.startsWith('blob:'),
+      isData: url.startsWith('data:'),
+      isHttps: url.startsWith('https://')
+    });
+    
+    // Supabase storage URLs
     if (url.includes('supabase.co/storage/v1/object/public')) {
       return url;
     }
     
-    // URLs blob também são válidas
+    // Blob URLs
     if (url.startsWith('blob:')) {
       return url;
     }
     
-    // Outras URLs externas
-    return url;
-  };
+    // Data URLs
+    if (url.startsWith('data:')) {
+      return url;
+    }
+    
+    // External HTTPS URLs
+    if (url.startsWith('https://')) {
+      return url;
+    }
+    
+    // Log invalid URLs
+    console.warn('MediaViewer: Invalid or unsupported URL format:', url);
+    return url; // Return anyway to let browser handle it
+  }, []);
 
   // Força renderização como imagem se o arquivo terminar com extensões de imagem
   const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
@@ -80,19 +135,27 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
     switch (effectiveMessageType) {
       case 'image':
-        // Se URL é inválida, mostra erro amigável
+        // Show detailed error if URL is invalid
         if (!validImageUrl) {
           return (
-            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] border border-destructive/20">
-              <Image className="h-8 w-8 text-destructive" />
+            <div className="flex items-center gap-3 p-3 bg-destructive/10 rounded-lg max-w-[300px] border border-destructive/20">
+              <AlertCircle className="h-8 w-8 text-destructive" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm text-destructive">
                   {fileName || 'Imagem'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Arquivo não disponível
+                  URL inválida: {fileUrl?.substring(0, 50)}...
                 </p>
+                {imageError && (
+                  <p className="text-xs text-destructive mt-1">
+                    {imageError.substring(0, 100)}...
+                  </p>
+                )}
               </div>
+              <Button size="sm" variant="ghost" onClick={handleDownload}>
+                <Download className="h-4 w-4" />
+              </Button>
             </div>
           );
         }
@@ -104,33 +167,32 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
               alt={fileName || 'Imagem'}
               className="max-w-[300px] max-h-[200px] rounded-lg object-cover cursor-pointer"
               onClick={() => setIsImageModalOpen(true)}
-              onError={(e) => {
-                console.error('Erro ao carregar imagem:', validImageUrl);
-                console.error('Tentando recarregar sem crossOrigin...');
-                e.currentTarget.removeAttribute('crossorigin');
-                // Força reload da imagem
-                const src = e.currentTarget.src;
-                e.currentTarget.src = '';
-                setTimeout(() => {
-                  e.currentTarget.src = src + '?reload=' + Date.now();
-                }, 100);
-                handleImageError(e);
+              onError={(e) => handleImageError(e, 'Image load failed')}
+              onLoad={() => {
+                console.log('✅ Image loaded successfully:', validImageUrl);
+                setImageError(null);
+                setRetryCount(0);
               }}
-              onLoad={() => console.log('Imagem carregada com sucesso:', validImageUrl)}
               loading="lazy"
+              crossOrigin="anonymous"
             />
             <div 
               className="hidden flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors" 
               onClick={handleDownload}
             >
-              <Image className="h-8 w-8 text-muted-foreground" />
+              <AlertCircle className="h-8 w-8 text-destructive" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">
                   {fileName || 'Imagem'}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-destructive">
                   Erro ao carregar - Clique para baixar
                 </p>
+                {imageError && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Debug: {imageError.substring(0, 80)}...
+                  </p>
+                )}
               </div>
               <Download className="h-4 w-4 text-muted-foreground" />
             </div>
