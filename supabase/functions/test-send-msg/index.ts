@@ -362,6 +362,48 @@ serve(async (req) => {
       } else {
         console.log(`✅ [${requestId}] N8N webhook called successfully`);
         n8nSuccess = true;
+        
+        // Para imagens enviadas pelo sistema, sempre salvar localmente também
+        // para garantir que aparece na conversa imediatamente
+        if (message_type !== 'text' && file_url) {
+          console.log(`💾 [${requestId}] Saving image message locally for immediate display`);
+          
+          try {
+            const messageData = {
+              id: external_id,
+              conversation_id: conversation_id,
+              workspace_id: conversation.workspace_id,
+              content: effectiveContent || '',
+              message_type: message_type,
+              sender_type: sender_type || 'agent',
+              sender_id: sender_id,
+              file_url: file_url,
+              file_name: file_name || null,
+              status: 'sent',
+              origem_resposta: 'manual',
+              external_id: external_id,
+              metadata: {
+                source: 'test-send-msg-local-save',
+                request_id: requestId,
+                n8n_success: true
+              }
+            };
+
+            const { data: savedMessage, error: saveError } = await supabase
+              .from('messages')
+              .insert(messageData)
+              .select('id')
+              .single();
+
+            if (saveError) {
+              console.error(`❌ [${requestId}] Failed to save local message:`, saveError);
+            } else {
+              console.log(`✅ [${requestId}] Image message saved locally: ${savedMessage.id}`);
+            }
+          } catch (localSaveError) {
+            console.error(`❌ [${requestId}] Local save error:`, localSaveError);
+          }
+        }
       }
     } catch (webhookErr) {
       console.error(`❌ [${requestId}] Error calling N8N webhook:`, webhookErr);
