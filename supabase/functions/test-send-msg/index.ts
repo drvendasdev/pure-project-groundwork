@@ -344,6 +344,8 @@ serve(async (req) => {
     console.log(`📤 [${requestId}] Sending to N8N workspace webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
     console.log(`📋 [${requestId}] N8N Payload:`, JSON.stringify(n8nPayload, null, 2));
 
+    let n8nSuccess = false;
+    
     try {
       const webhookResponse = await fetch(n8nWebhookUrl, {
         method: 'POST',
@@ -356,26 +358,80 @@ serve(async (req) => {
       if (!webhookResponse.ok) {
         console.error(`❌ [${requestId}] N8N webhook failed with status: ${webhookResponse.status}`);
         const errorText = await webhookResponse.text();
+        console.error(`❌ [${requestId}] N8N response: ${errorText}`);
+      } else {
+        console.log(`✅ [${requestId}] N8N webhook called successfully`);
+        n8nSuccess = true;
+      }
+    } catch (webhookErr) {
+      console.error(`❌ [${requestId}] Error calling N8N webhook:`, webhookErr);
+    }
+
+    // FALLBACK: Salvar mensagem diretamente na base de dados se N8N falhar
+    if (!n8nSuccess) {
+      console.log(`🔄 [${requestId}] N8N failed, saving message directly to database as fallback`);
+      
+      try {
+        const messageData = {
+          id: external_id,
+          conversation_id: conversation_id,
+          workspace_id: conversation.workspace_id,
+          content: effectiveContent || '',
+          message_type: message_type,
+          sender_type: sender_type || 'agent',
+          sender_id: sender_id,
+          file_url: file_url || null,
+          file_name: file_name || null,
+          status: 'sent',
+          origem_resposta: 'manual',
+          external_id: external_id,
+          metadata: {
+            source: 'test-send-msg-fallback',
+            request_id: requestId,
+            n8n_failed: true,
+            original_payload: n8nPayload
+          }
+        };
+
+        const { data: savedMessage, error: saveError } = await supabase
+          .from('messages')
+          .insert(messageData)
+          .select('id')
+          .single();
+
+        if (saveError) {
+          console.error(`❌ [${requestId}] Failed to save fallback message:`, saveError);
+          return new Response(JSON.stringify({
+            error: 'N8N failed and fallback save failed',
+            n8n_error: 'N8N webhook failed',
+            save_error: saveError.message
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        console.log(`✅ [${requestId}] Message saved via fallback: ${savedMessage.id}`);
+        
+        // Update conversation timestamp
+        await supabase
+          .from('conversations')
+          .update({ 
+            last_activity_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', conversation_id);
+
+      } catch (fallbackError) {
+        console.error(`❌ [${requestId}] Fallback save failed:`, fallbackError);
         return new Response(JSON.stringify({
-          error: 'N8N webhook failed',
-          status: webhookResponse.status,
-          response: errorText
+          error: 'Both N8N and fallback save failed',
+          details: fallbackError.message
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-
-      console.log(`✅ [${requestId}] N8N webhook called successfully`);
-    } catch (webhookErr) {
-      console.error(`❌ [${requestId}] Error calling N8N webhook:`, webhookErr);
-      return new Response(JSON.stringify({
-        error: 'Failed to call N8N webhook',
-        details: webhookErr.message
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
     }
 
     console.log(`🎉 [${requestId}] SUCCESS - Message sent to N8N with external_id: ${external_id}`);

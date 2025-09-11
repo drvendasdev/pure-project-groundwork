@@ -73,7 +73,8 @@ serve(async (req) => {
 
     // If request is from Evolution API, process locally AND forward to N8N
     if (isValidEvolutionCall) {
-      console.log(`🔄 [${requestId}] Processing Evolution webhook event`);
+  console.log(`🔄 [${requestId}] Processing Evolution webhook event`);
+      console.log(`📊 [${requestId}] Instance: ${instanceName}, Event: ${payload.event}`);
       
       // Get workspace_id and webhook details from database
       let workspaceId = null;
@@ -332,6 +333,9 @@ serve(async (req) => {
     // N8N Response Processing - Only process if from N8N
     console.log(`🎯 [${requestId}] Processing N8N response payload`);
     console.log(`📋 [${requestId}] Full payload structure:`, JSON.stringify(payload, null, 2));
+    console.log(`🔍 [${requestId}] Auth header: ${authHeader ? 'present' : 'missing'}`);
+    console.log(`🔍 [${requestId}] Expected auth: ${expectedAuth}`);
+    console.log(`🔍 [${requestId}] Headers:`, Object.fromEntries(req.headers.entries()));
     
     // 🎯 STRICT PAYLOAD VALIDATION - N8N must send normalized payload
     const { 
