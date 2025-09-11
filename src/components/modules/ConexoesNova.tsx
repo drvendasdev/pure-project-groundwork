@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -459,6 +460,51 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     }
   };
 
+  const configureWebhook = async (connection: Connection) => {
+    try {
+      setIsDisconnecting(true); // Reuse loading state
+      
+      console.log('🔧 Configuring webhook for connection:', connection.instance_name);
+      
+      const { data, error } = await supabase.functions.invoke('configure-evolution-webhook', {
+        body: {
+          instance_name: connection.instance_name,
+          workspace_id: workspaceId
+        }
+      });
+
+      if (error) {
+        console.error('Error configuring webhook:', error);
+        toast({
+          title: 'Erro',
+          description: 'Erro ao configurar webhook',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      console.log('✅ Webhook configured successfully:', data);
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Webhook configurado com sucesso! Agora você receberá mensagens.',
+      });
+      
+      // Reload connections to show updated webhook status
+      loadConnections();
+
+    } catch (error) {
+      console.error('Error configuring webhook:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao configurar webhook: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
@@ -636,7 +682,11 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => configureWebhook(connection)}>
+                        <Webhook className="mr-2 h-4 w-4" />
+                        Configurar Webhook
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openEditModal(connection)}>
                         <Edit3 className="mr-2 h-4 w-4" />
                         Editar
@@ -648,7 +698,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                         <Trash2 className="mr-2 h-4 w-4" />
                         Excluir
                       </DropdownMenuItem>
-                    </DropdownMenuContent>
+                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               </CardHeader>
