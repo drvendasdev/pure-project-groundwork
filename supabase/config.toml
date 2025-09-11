@@ -194,3 +194,6 @@ verify_jwt = false
 
 [functions.debug-webhook]
 verify_jwt = false
+
+[functions.webhook-to-n8n]
+verify_jwt = false
