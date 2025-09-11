@@ -24,6 +24,80 @@ function sanitizePhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
+/**
+ * Helper function to resolve connection_id for a conversation
+ * Ensures all conversations have a valid connection_id
+ */
+async function resolveConnectionId(
+  workspaceId: string, 
+  instanceName?: string, 
+  existingConnectionId?: string
+): Promise<string | null> {
+  console.log(`🔍 Resolving connection_id for workspace: ${workspaceId}, instance: ${instanceName}, existing: ${existingConnectionId}`);
+  
+  // 1. If we already have a valid connection_id, use it
+  if (existingConnectionId) {
+    const { data: existingConnection } = await supabase
+      .from('connections')
+      .select('id')
+      .eq('id', existingConnectionId)
+      .eq('workspace_id', workspaceId)
+      .single();
+    
+    if (existingConnection) {
+      console.log(`✅ Using existing connection_id: ${existingConnectionId}`);
+      return existingConnectionId;
+    }
+  }
+  
+  // 2. Try to find connection by instance name
+  if (instanceName) {
+    const { data: instanceConnection } = await supabase
+      .from('connections')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('instance_name', instanceName)
+      .single();
+    
+    if (instanceConnection) {
+      console.log(`✅ Found connection by instance name: ${instanceConnection.id}`);
+      return instanceConnection.id;
+    }
+  }
+  
+  // 3. Find the first active connection for this workspace
+  const { data: firstConnection } = await supabase
+    .from('connections')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'connected')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+  
+  if (firstConnection) {
+    console.log(`✅ Using first active connection: ${firstConnection.id}`);
+    return firstConnection.id;
+  }
+  
+  // 4. Fallback to any connection in the workspace
+  const { data: anyConnection } = await supabase
+    .from('connections')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+  
+  if (anyConnection) {
+    console.log(`⚠️ Using fallback connection: ${anyConnection.id}`);
+    return anyConnection.id;
+  }
+  
+  console.error(`❌ No connection found for workspace: ${workspaceId}`);
+  return null;
+}
+
 serve(async (req) => {
   const requestId = generateRequestId();
   
@@ -178,19 +252,21 @@ serve(async (req) => {
             }
 
             // Get connection_id for proper conversation association
-            let resolvedConnectionId = null;
-            const { data: connectionData } = await supabase
-              .from('connections')
-              .select('id')
-              .eq('workspace_id', workspaceId)
-              .eq('instance_name', instanceName)
-              .single();
+            const resolvedConnectionId = await resolveConnectionId(workspaceId, instanceName);
             
-            if (connectionData) {
-              resolvedConnectionId = connectionData.id;
+            if (!resolvedConnectionId) {
+              console.error(`❌ [${requestId}] Cannot process message: no connection found for workspace ${workspaceId}`);
+              return new Response(JSON.stringify({
+                error: 'No connection available',
+                message: 'Workspace has no active connections',
+                requestId
+              }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+              });
             }
 
-            // Find existing conversation for this contact and workspace (any connection)
+            // Find existing conversation for this contact and workspace
             let conversationId: string;
             const { data: existingConversation } = await supabase
               .from('conversations')
@@ -204,26 +280,35 @@ serve(async (req) => {
             if (existingConversation) {
               conversationId = existingConversation.id;
               
-              // Update connection_id if it's different (link conversation to current connection)
-              if (resolvedConnectionId && existingConversation.connection_id !== resolvedConnectionId) {
+              // MANDATORY: Ensure existing conversation has connection_id
+              if (!existingConversation.connection_id) {
+                console.log(`🔧 [${requestId}] Updating conversation ${conversationId} with connection_id: ${resolvedConnectionId}`);
+                await supabase
+                  .from('conversations')
+                  .update({ connection_id: resolvedConnectionId })
+                  .eq('id', conversationId);
+              } else if (existingConversation.connection_id !== resolvedConnectionId) {
+                // Update to current connection if different
+                console.log(`🔧 [${requestId}] Updating conversation ${conversationId} connection from ${existingConversation.connection_id} to ${resolvedConnectionId}`);
                 await supabase
                   .from('conversations')
                   .update({ connection_id: resolvedConnectionId })
                   .eq('id', conversationId);
               }
             } else {
-              // Create new conversation only if none exists for this contact
+              // Create new conversation - connection_id is MANDATORY
               const { data: newConversation } = await supabase
                 .from('conversations')
                 .insert({
                   contact_id: contactId,
                   workspace_id: workspaceId,
-                  connection_id: resolvedConnectionId,
+                  connection_id: resolvedConnectionId, // REQUIRED
                   status: 'open'
                 })
                 .select('id')
                 .single();
               conversationId = newConversation?.id;
+              console.log(`✅ [${requestId}] Created new conversation ${conversationId} with connection_id: ${resolvedConnectionId}`);
             }
 
             // Create message with Evolution message ID as external_id
@@ -635,26 +720,48 @@ serve(async (req) => {
       });
     }
 
+    // MANDATORY: Resolve connection_id for conversation
+    const resolvedConnectionId = await resolveConnectionId(workspace_id, null, connection_id);
+    
+    if (!resolvedConnectionId) {
+      console.error(`❌ [${requestId}] Cannot create message: no connection found for workspace ${workspace_id}`);
+      return new Response(JSON.stringify({
+        error: 'No connection available',
+        message: 'Workspace has no active connections',
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     if (existingConversation) {
       conversationId = existingConversation.id;
       console.log(`✅ [${requestId}] Found existing conversation: ${conversationId}`);
       
-      // Update connection_id if provided and different (link conversation to current connection)
-      if (connection_id && existingConversation.connection_id !== connection_id) {
+      // MANDATORY: Ensure existing conversation has connection_id
+      if (!existingConversation.connection_id) {
+        console.log(`🔧 [${requestId}] Updating conversation ${conversationId} with connection_id: ${resolvedConnectionId}`);
         await supabase
           .from('conversations')
-          .update({ connection_id: connection_id })
+          .update({ connection_id: resolvedConnectionId })
           .eq('id', conversationId);
-        console.log(`🔗 [${requestId}] Updated conversation connection_id: ${connection_id}`);
+      } else if (resolvedConnectionId !== existingConversation.connection_id) {
+        // Update to resolved connection if different
+        console.log(`🔧 [${requestId}] Updating conversation ${conversationId} connection from ${existingConversation.connection_id} to ${resolvedConnectionId}`);
+        await supabase
+          .from('conversations')
+          .update({ connection_id: resolvedConnectionId })
+          .eq('id', conversationId);
       }
     } else {
-      // Create new conversation only if none exists for this contact
+      // Create new conversation - connection_id is MANDATORY
       const { data: newConversation, error: conversationCreateError } = await supabase
         .from('conversations')
         .insert({
           contact_id: contactId,
           workspace_id: workspace_id,
-          connection_id: connection_id,
+          connection_id: resolvedConnectionId, // REQUIRED - never null
           status: 'open'
         })
         .select('id')
