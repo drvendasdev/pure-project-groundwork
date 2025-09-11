@@ -227,7 +227,10 @@ serve(async (req) => {
       
       const { data: existingMessage, error: findError } = await supabase
         .from('messages')
-        .select('id, conversation_id, workspace_id')
+        .select(`
+          id, conversation_id, workspace_id, content, file_url, file_name, mime_type, metadata,
+          conversations(contact_id)
+        `)
         .eq('id', external_id)
         .maybeSingle();
 
@@ -277,6 +280,9 @@ serve(async (req) => {
           success: true,
           action: 'updated',
           message_id: external_id,
+          workspace_id: existingMessage.workspace_id,
+          conversation_id: existingMessage.conversation_id,
+          contact_id: existingMessage.conversations?.contact_id,
           requestId
         }), {
           status: 200,
@@ -481,6 +487,7 @@ serve(async (req) => {
       success: true,
       action: 'created',
       message_id: newMessage.id,
+      workspace_id: workspace_id,
       conversation_id: conversationId,
       contact_id: contactId,
       requestId
