@@ -431,6 +431,150 @@ export const useWhatsAppConversations = () => {
     }
   }, []);
 
+  // Handlers para novas mensagens e conversas via Realtime
+  const handleNewMessage = useCallback((newMessage: any) => {
+    console.log('🔔 Processando nova mensagem:', newMessage);
+    
+    setConversations(prev => {
+      // Verificar se a conversa existe
+      const conversationExists = prev.some(conv => conv.id === newMessage.conversation_id);
+      
+      if (!conversationExists) {
+        console.log('⚠️ Mensagem para conversa não encontrada, refazendo fetch:', newMessage.conversation_id);
+        // Se a conversa não existe, buscar novamente
+        fetchConversations();
+        return prev;
+      }
+      
+      return prev.map(conv => {
+        if (conv.id === newMessage.conversation_id) {
+          // Verificar se mensagem já existe
+          const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
+          if (messageExists) {
+            console.log('⚠️ Mensagem duplicada ignorada:', newMessage.id);
+            return conv;
+          }
+
+          console.log('✅ Adicionando nova mensagem:', {
+            conversation_id: conv.id,
+            message_id: newMessage.id,
+            content: newMessage.content,
+            sender_type: newMessage.sender_type
+          });
+
+          const updatedConv = {
+            ...conv,
+            messages: [...conv.messages, {
+              id: newMessage.id,
+              content: newMessage.content,
+              sender_type: newMessage.sender_type,
+              created_at: newMessage.created_at,
+              read_at: newMessage.read_at,
+              status: newMessage.status,
+              message_type: newMessage.message_type,
+              file_url: newMessage.file_url,
+              file_name: newMessage.file_name,
+              origem_resposta: newMessage.origem_resposta || 'manual',
+            }],
+            last_activity_at: newMessage.created_at
+          };
+
+          // Se é mensagem de contato, incrementar unread_count localmente
+          if (newMessage.sender_type === 'contact') {
+            updatedConv.unread_count = (conv.unread_count || 0) + 1;
+          }
+
+          return updatedConv;
+        }
+        return conv;
+      }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
+    });
+  }, [fetchConversations]);
+
+  const handleNewConversation = useCallback((newConv: any) => {
+    // Só processar conversas do WhatsApp
+    if (newConv.canal !== 'whatsapp') return;
+    
+    console.log('🔔 Processando nova conversa:', newConv);
+    
+    // Para novas conversas, é melhor refazer o fetch completo
+    fetchConversations();
+  }, [fetchConversations]);
+
+  // Setup realtime subscriptions - SIMPLIFICADO
+  const setupRealtimeSubscriptions = useCallback(() => {
+    console.log('🧹 Limpando subscriptions real-time');
+    supabase.removeAllChannels();
+
+    if (!selectedWorkspace?.workspace_id) {
+      console.log('❌ Nenhum workspace selecionado para subscriptions');
+      return;
+    }
+
+    console.log('🔄 Configurando subscriptions Realtime para workspace:', selectedWorkspace.workspace_id);
+
+    // Canal único para tudo
+    const channel = supabase
+      .channel(`workspace-${selectedWorkspace.workspace_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        (payload) => {
+          console.log('📨 Evento de mensagem via Realtime:', payload.eventType, payload.new);
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            handleNewMessage(payload.new);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public', 
+          table: 'conversations',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        (payload) => {
+          console.log('💬 Evento de conversa via Realtime:', payload.eventType, payload.new);
+          if (payload.eventType === 'INSERT') {
+            handleNewConversation(payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedConv = payload.new as any;
+            setConversations(prev => prev.map(conv => 
+              conv.id === updatedConv.id
+                ? { 
+                    ...conv, 
+                    agente_ativo: updatedConv.agente_ativo,
+                    unread_count: updatedConv.unread_count,
+                    last_activity_at: updatedConv.last_activity_at,
+                    status: updatedConv.status,
+                    evolution_instance: updatedConv.evolution_instance ?? conv.evolution_instance
+                  }
+                : conv
+            ));
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Status Realtime:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Realtime conectado para workspace:', selectedWorkspace.workspace_id);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Erro no Realtime para workspace:', selectedWorkspace.workspace_id);
+        }
+      });
+
+    return () => {
+      console.log('🧹 Limpando Realtime para workspace:', selectedWorkspace.workspace_id);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedWorkspace?.workspace_id, handleNewMessage, handleNewConversation]);
+
   // Real-time subscriptions and workspace dependency
   useEffect(() => {
     // Get current user from localStorage
@@ -443,289 +587,11 @@ export const useWhatsAppConversations = () => {
     }
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
 
+  // Effect para configurar subscriptions quando workspace muda
   useEffect(() => {
-    if (!selectedWorkspace?.workspace_id) {
-      console.log('❌ Sem workspace selecionado, não configurando subscriptions');
-      return;
-    }
-
-    console.log('🔄 Configurando subscriptions Realtime para workspace:', selectedWorkspace.workspace_id);
-    console.log('🔍 Estado atual das conversas:', conversations.length);
-    console.log('📊 Estado do Supabase Realtime:', supabase.realtime.isConnected());
-
-    // Subscription para novas mensagens com filtro por workspace
-    const messagesChannel = supabase
-      .channel(`whatsapp-messages-${selectedWorkspace.workspace_id}`)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          console.log('🔔 Nova mensagem recebida via Realtime:', payload.new);
-          const newMessage = payload.new as any;
-          
-          setConversations(prev => {
-            // Primeiro, verificar se a conversa existe na lista
-            const conversationExists = prev.some(conv => conv.id === newMessage.conversation_id);
-            
-            if (!conversationExists) {
-              console.log('⚠️ Mensagem recebida para conversa não encontrada na lista atual:', {
-                conversation_id: newMessage.conversation_id,
-                current_conversations: prev.map(c => c.id),
-                message_id: newMessage.id
-              });
-              
-              // Se a conversa não existe, buscar novamente as conversas
-              fetchConversations();
-              return prev;
-            }
-            
-            return prev.map(conv => {
-              if (conv.id === newMessage.conversation_id) {
-                // Verificar se mensagem já existe para evitar duplicatas
-                const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
-                if (messageExists) {
-                  console.log('⚠️ Mensagem duplicada ignorada:', newMessage.id);
-                  return conv;
-                }
-
-                console.log('✅ Adicionando nova mensagem à conversa:', {
-                  conversation_id: conv.id,
-                  message_id: newMessage.id,
-                  content: newMessage.content,
-                  sender_type: newMessage.sender_type
-                });
-
-                const updatedConv = {
-                  ...conv,
-                  messages: [...conv.messages, {
-                    id: newMessage.id,
-                    content: newMessage.content,
-                    sender_type: newMessage.sender_type,
-                    created_at: newMessage.created_at,
-                    read_at: newMessage.read_at,
-                    status: newMessage.status,
-                    message_type: newMessage.message_type,
-                    file_url: newMessage.file_url,
-                    file_name: newMessage.file_name,
-                    origem_resposta: newMessage.origem_resposta || 'manual',
-                  }],
-                  last_activity_at: newMessage.created_at
-                };
-
-                // Se é mensagem de contato, incrementar unread_count localmente
-                if (newMessage.sender_type === 'contact') {
-                  updatedConv.unread_count = (conv.unread_count || 0) + 1;
-                }
-
-                return updatedConv;
-              }
-              return conv;
-            }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
-          });
-        }
-      )
-      .on('postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          const updatedMessage = payload.new as any;
-          console.log('✏️ Mensagem atualizada via Realtime:', {
-            id: updatedMessage.id,
-            status: updatedMessage.status,
-            content: updatedMessage.content,
-            message_type: updatedMessage.message_type,
-            file_url: updatedMessage.file_url,
-            file_name: updatedMessage.file_name,
-          });
-          
-          setConversations(prev => prev.map(conv => {
-            // Só atualiza a conversa que contém a mensagem
-            const messageIndex = conv.messages.findIndex(m => m.id === updatedMessage.id);
-            if (messageIndex === -1) return conv;
-            
-            console.log('✅ Atualizando mensagem na conversa:', {
-              conversation_id: conv.id,
-              message_id: updatedMessage.id,
-              old_content: conv.messages[messageIndex].content,
-              new_content: updatedMessage.content
-            });
-            
-            return {
-              ...conv,
-              messages: conv.messages.map(msg => 
-                msg.id === updatedMessage.id 
-                  ? {
-                      ...msg,
-                      status: updatedMessage.status ?? msg.status,
-                      read_at: updatedMessage.read_at ?? msg.read_at,
-                      message_type: (updatedMessage.message_type as any) ?? msg.message_type,
-                      file_url: updatedMessage.file_url ?? msg.file_url,
-                      file_name: updatedMessage.file_name ?? msg.file_name,
-                      content: updatedMessage.content ?? msg.content,
-                    }
-                  : msg
-              )
-            };
-          }));
-        }
-      )
-      .on('postgres_changes',
-        { 
-          event: 'DELETE', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          const deletedMessageId = payload.old?.id;
-          console.log('🗑️ Mensagem deletada via Realtime:', deletedMessageId);
-          
-          if (deletedMessageId) {
-            setConversations(prev => prev.map(conv => ({
-              ...conv,
-              messages: conv.messages.filter(msg => msg.id !== deletedMessageId)
-            })));
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Status da subscription messagesChannel:', status);
-      });
-
-    // Subscription para mudanças em conversas com filtro por workspace
-    const conversationsChannel = supabase
-      .channel(`whatsapp-conversations-${selectedWorkspace.workspace_id}`)
-      .on('postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        async (payload) => {
-          const newConv = payload.new as any;
-          
-          // Só processar conversas do WhatsApp
-          if (newConv.canal !== 'whatsapp') return;
-          
-          console.log('🔔 Nova conversa criada via Realtime:', newConv);
-          
-          // Buscar dados completos da nova conversa
-          const { data: conversationData } = await supabase
-            .from('conversations')
-            .select(`
-              id,
-              agente_ativo,
-              status,
-              unread_count,
-              last_activity_at,
-              created_at,
-              evolution_instance,
-              contact_id,
-              contacts!inner (
-                id,
-                name,
-                phone,
-                email,
-                profile_image_url
-              )
-            `)
-            .eq('id', newConv.id)
-            .maybeSingle();
-
-          if (conversationData && conversationData.contacts) {
-            const newConversation: WhatsAppConversation = {
-              id: conversationData.id,
-              contact: {
-                id: conversationData.contacts.id,
-                name: conversationData.contacts.name,
-                phone: conversationData.contacts.phone,
-                email: conversationData.contacts.email,
-                profile_image_url: conversationData.contacts.profile_image_url,
-              },
-              agente_ativo: conversationData.agente_ativo,
-              status: conversationData.status as 'open' | 'closed' | 'pending',
-              unread_count: conversationData.unread_count,
-              last_activity_at: conversationData.last_activity_at,
-              created_at: conversationData.created_at,
-              evolution_instance: (conversationData as any).evolution_instance ?? null,
-              messages: [],
-            };
-
-            setConversations(prev => {
-              const exists = prev.some(conv => conv.id === newConversation.id);
-              if (exists) {
-                console.log('⚠️ Conversa duplicada ignorada:', newConversation.id);
-                return prev;
-              }
-              
-              console.log('✅ Adicionando nova conversa:', {
-                id: newConversation.id,
-                contact_name: newConversation.contact.name,
-                contact_phone: newConversation.contact.phone
-              });
-              
-              return [newConversation, ...prev].sort((a, b) => 
-                new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
-              );
-            });
-          }
-        }
-      )
-      .on('postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          console.log('🔄 Conversa atualizada via Realtime:', payload.new);
-          const updatedConv = payload.new as any;
-          
-          setConversations(prev => {
-            return prev.map(conv => 
-              conv.id === updatedConv.id
-                ? { 
-                    ...conv, 
-                    agente_ativo: updatedConv.agente_ativo,
-                    unread_count: updatedConv.unread_count,
-                    last_activity_at: updatedConv.last_activity_at,
-                    status: updatedConv.status,
-                    evolution_instance: (updatedConv as any).evolution_instance ?? conv.evolution_instance
-                  }
-                : conv
-            ).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Status da subscription conversationsChannel:', status);
-      });
-
-    // Verificar status das subscriptions após um tempo
-    setTimeout(() => {
-      console.log('⏰ Verificando subscriptions após 2 segundos:', {
-        messagesChannel: messagesChannel.topic,
-        conversationsChannel: conversationsChannel.topic,
-        isConnected: supabase.realtime.isConnected()
-      });
-    }, 2000);
-
-    return () => {
-      console.log('🧹 Limpando subscriptions real-time para workspace:', selectedWorkspace.workspace_id);
-      supabase.removeChannel(messagesChannel);
-      supabase.removeChannel(conversationsChannel);
-    };
-  }, [selectedWorkspace?.workspace_id]);
+    const cleanup = setupRealtimeSubscriptions();
+    return cleanup;
+  }, [setupRealtimeSubscriptions]);
 
   return {
     conversations,
