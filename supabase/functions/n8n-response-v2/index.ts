@@ -71,7 +71,7 @@ serve(async (req) => {
     const payload = await req.json();
     console.log(`📨 [${requestId}] Webhook received from ${requestSource}:`, JSON.stringify(payload, null, 2));
 
-    // If request is from Evolution API, process and forward to N8N
+    // If request is from Evolution API, process locally AND forward to N8N
     if (isValidEvolutionCall) {
       console.log(`🔄 [${requestId}] Processing Evolution webhook event`);
       
@@ -79,6 +79,7 @@ serve(async (req) => {
       let workspaceId = null;
       let webhookUrl = null;
       let webhookSecret = null;
+      let processedData = null;
 
       // Extract instance name from payload
       const instanceName = payload.instance || payload.instanceName;
@@ -114,64 +115,164 @@ serve(async (req) => {
         webhookSecret = Deno.env.get('N8N_WEBHOOK_TOKEN');
       }
 
-      if (!webhookUrl) {
-        console.error(`❌ [${requestId}] No webhook URL configured for workspace: ${workspaceId}`);
-        return new Response(JSON.stringify({
-          error: 'No webhook configured',
-          requestId
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-
-      // Forward to N8N
-      console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
-      
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (webhookSecret) {
-        headers['Authorization'] = `Bearer ${webhookSecret}`;
-      }
-
-      try {
-        const response = await fetch(webhookUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            ...payload,
-            workspace_id: workspaceId,
-            source: 'evolution-api',
-            forwarded_by: 'n8n-response-v2',
-            request_id: requestId
-          })
-        });
-
-        console.log(`✅ [${requestId}] N8N webhook called successfully, status: ${response.status}`);
+      // PROCESS MESSAGE LOCALLY FIRST
+      if (workspaceId && payload.data?.message) {
+        console.log(`📝 [${requestId}] Processing message locally before forwarding`);
         
-        return new Response(JSON.stringify({
-          success: true,
-          action: 'forwarded_to_n8n',
-          n8n_status: response.status,
-          requestId
-        }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        // Extract message data from Evolution webhook
+        const messageData = payload.data;
+        const phoneNumber = messageData.key?.remoteJid?.replace('@s.whatsapp.net', '') || '';
+        const messageContent = messageData.message?.conversation || 
+                              messageData.message?.extendedTextMessage?.text || 
+                              messageData.message?.imageMessage?.caption ||
+                              messageData.message?.videoMessage?.caption ||
+                              messageData.message?.documentMessage?.caption ||
+                              '📎 Arquivo';
+        
+        const sanitizedPhone = phoneNumber.replace(/\D/g, '');
+        
+        if (sanitizedPhone && messageContent) {
+          // Find or create contact
+          let contactId: string;
+          const { data: existingContact } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('phone', sanitizedPhone)
+            .eq('workspace_id', workspaceId)
+            .maybeSingle();
 
-      } catch (error) {
-        console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
-        return new Response(JSON.stringify({
-          error: 'Failed to forward to N8N',
-          details: error.message,
-          requestId
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+          if (existingContact) {
+            contactId = existingContact.id;
+          } else {
+            const { data: newContact } = await supabase
+              .from('contacts')
+              .insert({
+                phone: sanitizedPhone,
+                name: messageData.pushName || sanitizedPhone,
+                workspace_id: workspaceId
+              })
+              .select('id')
+              .single();
+            contactId = newContact?.id;
+          }
+
+          // Find or create conversation
+          let conversationId: string;
+          const { data: existingConversation } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('contact_id', contactId)
+            .eq('workspace_id', workspaceId)
+            .maybeSingle();
+
+          if (existingConversation) {
+            conversationId = existingConversation.id;
+          } else {
+            const { data: newConversation } = await supabase
+              .from('conversations')
+              .insert({
+                contact_id: contactId,
+                workspace_id: workspaceId,
+                status: 'open'
+              })
+              .select('id')
+              .single();
+            conversationId = newConversation?.id;
+          }
+
+          // Create message with generated ID
+          const messageId = crypto.randomUUID();
+          const { data: newMessage } = await supabase
+            .from('messages')
+            .insert({
+              id: messageId,
+              conversation_id: conversationId,
+              workspace_id: workspaceId,
+              content: messageContent,
+              message_type: messageData.message?.imageMessage ? 'image' : 
+                           messageData.message?.videoMessage ? 'video' :
+                           messageData.message?.documentMessage ? 'document' : 'text',
+              sender_type: 'contact',
+              status: 'received',
+              origem_resposta: 'automatica',
+              external_id: messageData.key?.id,
+              metadata: {
+                source: 'evolution-webhook',
+                evolution_data: messageData,
+                request_id: requestId
+              }
+            })
+            .select('id')
+            .single();
+
+          // Update conversation timestamp
+          await supabase
+            .from('conversations')
+            .update({ 
+              last_activity_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', conversationId);
+
+          processedData = {
+            message_id: messageId,
+            workspace_id: workspaceId,
+            conversation_id: conversationId,
+            contact_id: contactId,
+            phone_number: sanitizedPhone
+          };
+
+          console.log(`✅ [${requestId}] Message processed locally:`, processedData);
+        }
       }
+
+      // Forward to N8N with processed data
+      if (webhookUrl) {
+        console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
+        
+        const headers = {
+          'Content-Type': 'application/json',
+        };
+        
+        if (webhookSecret) {
+          headers['Authorization'] = `Bearer ${webhookSecret}`;
+        }
+
+        try {
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...payload,
+              workspace_id: workspaceId,
+              source: 'evolution-api',
+              forwarded_by: 'n8n-response-v2',
+              request_id: requestId,
+              processed_data: processedData
+            })
+          });
+
+          console.log(`✅ [${requestId}] N8N webhook called successfully, status: ${response.status}`);
+          
+        } catch (error) {
+          console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
+        }
+      }
+
+      // Always return processed data or basic structure
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'processed_and_forwarded',
+        message_id: processedData?.message_id || crypto.randomUUID(),
+        workspace_id: processedData?.workspace_id || workspaceId,
+        conversation_id: processedData?.conversation_id,
+        contact_id: processedData?.contact_id,
+        phone_number: processedData?.phone_number,
+        requestId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // N8N Response Processing - Only process if from N8N
