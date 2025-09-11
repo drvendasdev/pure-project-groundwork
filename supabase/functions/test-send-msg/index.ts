@@ -102,18 +102,27 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Contact found: ${contact.phone}`);
 
-    // Get N8N outbound webhook URL
-    const n8nWebhookUrl = Deno.env.get('N8N_OUTBOUND_WEBHOOK_URL');
+    // Get N8N webhook URL from workspace configuration
+    const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${conversation.workspace_id}`;
     
-    if (!n8nWebhookUrl) {
-      console.error(`❌ [${requestId}] N8N_OUTBOUND_WEBHOOK_URL not configured`);
+    const { data: webhookData, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')
+      .select('webhook_url')
+      .eq('workspace_id', conversation.workspace_id)
+      .eq('secret_name', workspaceWebhookSecretName)
+      .maybeSingle();
+
+    if (webhookError || !webhookData?.webhook_url) {
+      console.error(`❌ [${requestId}] N8N webhook not configured for workspace ${conversation.workspace_id}`);
       return new Response(JSON.stringify({
-        error: 'N8N outbound webhook not configured'
+        error: 'N8N webhook not configured for this workspace'
       }), {
-        status: 500,
+        status: 424,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    const n8nWebhookUrl = webhookData.webhook_url;
 
     // Generate external_id for tracking
     const external_id = crypto.randomUUID();
@@ -138,7 +147,7 @@ serve(async (req) => {
       request_id: requestId
     };
     
-    console.log(`📤 [${requestId}] Sending to N8N ONLY: ${n8nWebhookUrl.substring(0, 50)}...`);
+    console.log(`📤 [${requestId}] Sending to N8N workspace webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
     console.log(`📋 [${requestId}] N8N Payload:`, JSON.stringify(n8nPayload, null, 2));
 
     try {
