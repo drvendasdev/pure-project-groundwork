@@ -42,7 +42,7 @@ async function resolveConnectionId(
       .select('id')
       .eq('id', existingConnectionId)
       .eq('workspace_id', workspaceId)
-      .maybeSingle();
+      .single();
     
     if (existingConnection) {
       console.log(`✅ Using existing connection_id: ${existingConnectionId}`);
@@ -57,7 +57,7 @@ async function resolveConnectionId(
       .select('id')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', instanceName)
-      .maybeSingle();
+      .single();
     
     if (instanceConnection) {
       console.log(`✅ Found connection by instance name: ${instanceConnection.id}`);
@@ -73,7 +73,7 @@ async function resolveConnectionId(
     .eq('status', 'connected')
     .order('created_at', { ascending: true })
     .limit(1)
-    .maybeSingle();
+    .single();
   
   if (firstConnection) {
     console.log(`✅ Using first active connection: ${firstConnection.id}`);
@@ -87,7 +87,7 @@ async function resolveConnectionId(
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: true })
     .limit(1)
-    .maybeSingle();
+    .single();
   
   if (anyConnection) {
     console.log(`⚠️ Using fallback connection: ${anyConnection.id}`);
@@ -164,7 +164,7 @@ serve(async (req) => {
           .from('connections')
           .select('workspace_id')
           .eq('instance_name', instanceName)
-          .maybeSingle();
+          .single();
 
         if (connection) {
           workspaceId = connection.workspace_id;
@@ -174,7 +174,7 @@ serve(async (req) => {
             .from('workspace_webhook_settings')
             .select('webhook_url, webhook_secret')
             .eq('workspace_id', workspaceId)
-            .maybeSingle();
+            .single();
 
           if (webhookSettings) {
             webhookUrl = webhookSettings.webhook_url;
@@ -507,7 +507,7 @@ serve(async (req) => {
             .from('conversations')
             .select('contact_id')
             .eq('id', existingMessage.conversation_id)
-            .maybeSingle();
+            .single();
           
           return new Response(JSON.stringify({
             success: true,
@@ -561,7 +561,7 @@ serve(async (req) => {
           .from('conversations')
           .select('contact_id')
           .eq('id', existingMessage.conversation_id)
-          .maybeSingle();
+          .single();
         
         return new Response(JSON.stringify({
           success: true,
@@ -626,7 +626,7 @@ serve(async (req) => {
           .from('conversations')
           .select('contact_id')
           .eq('id', duplicateCheck.conversation_id)
-          .maybeSingle();
+          .single();
         
         return new Response(JSON.stringify({
           success: true,
@@ -849,7 +849,7 @@ serve(async (req) => {
         .from('conversations')
         .select('connection_id')
         .eq('id', conversationId)
-        .maybeSingle();
+        .single();
       
       if (convData?.connection_id) {
         resolvedConnectionId = convData.connection_id;
@@ -861,7 +861,7 @@ serve(async (req) => {
         .from('connections')
         .select('instance_name')
         .eq('id', resolvedConnectionId)
-        .maybeSingle();
+        .single();
       
       if (connectionData) {
         instanceInfo = connectionData.instance_name;
