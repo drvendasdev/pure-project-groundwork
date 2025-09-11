@@ -3,14 +3,32 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, range, cache-control',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS, HEAD',
+  'Access-Control-Expose-Headers': 'content-length, content-range, accept-ranges',
+  'Access-Control-Max-Age': '86400', // 24 hours
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Enhanced CORS preflight handling
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    console.log('🔄 CORS preflight request received');
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
+  }
+
+  // Handle HEAD requests for metadata
+  if (req.method === 'HEAD') {
+    console.log('📋 HEAD request received');
+    return new Response(null, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/octet-stream'
+      }
+    });
   }
 
   try {
@@ -28,9 +46,11 @@ serve(async (req) => {
     }
 
     const messageId = pathParts[1]
-    const fileName = pathParts[2]
+    const fileName = decodeURIComponent(pathParts[2]) // Handle encoded filenames
     
-    console.log(`Serving media for message ${messageId}: ${fileName}`)
+    console.log(`📂 Serving media for message ${messageId}: ${fileName}`)
+    console.log(`🔍 Full path requested: ${pathname}`)
+    console.log(`🌐 Request method: ${req.method}, URL: ${req.url}`)
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -68,13 +88,19 @@ serve(async (req) => {
 
       const fileBuffer = await fileData.arrayBuffer()
       
+      console.log(`✅ File found and served: ${fileName} (${fileBuffer.byteLength} bytes, ${contentType})`)
+      
       return new Response(fileBuffer, {
         status: 200,
         headers: {
           ...corsHeaders,
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000',
-          'Content-Length': fileBuffer.byteLength.toString()
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Content-Length': fileBuffer.byteLength.toString(),
+          'Accept-Ranges': 'bytes',
+          'Last-Modified': new Date().toUTCString(),
+          'ETag': `"${messageId}-${fileName}"`,
+          'Content-Disposition': `inline; filename="${fileName}"`
         }
       })
     } catch (error) {

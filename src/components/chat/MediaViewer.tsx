@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Image, Music, Video, AlertCircle } from 'lucide-react';
+import { Download, FileText, Image, Music, Video, AlertCircle, Loader2 } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
 import { ImageModal } from './ImageModal';
 
@@ -20,6 +20,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   
   // Enhanced debug logging
   console.log('MediaViewer render:', { 
@@ -71,38 +73,72 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
       return null;
     }
     
-    // Log URL validation
-    console.log('Validating URL:', {
-      url,
-      isSupabase: url.includes('supabase.co/storage/v1/object/public'),
-      isBlob: url.startsWith('blob:'),
-      isData: url.startsWith('data:'),
-      isHttps: url.startsWith('https://')
+    // Normalize URL for better handling
+    const normalizedUrl = url.trim();
+    
+    // Log detailed URL validation
+    console.log('🔍 URL Validation:', {
+      originalUrl: url,
+      normalizedUrl,
+      length: normalizedUrl.length,
+      isSupabasePublic: normalizedUrl.includes('supabase.co/storage/v1/object/public'),
+      isSupabaseGeneral: normalizedUrl.includes('supabase.co'),
+      isBlob: normalizedUrl.startsWith('blob:'),
+      isData: normalizedUrl.startsWith('data:'),
+      isHttps: normalizedUrl.startsWith('https://'),
+      isHttp: normalizedUrl.startsWith('http://'),
+      hasValidExtension: /\.(jpg|jpeg|png|gif|webp|mp4|mp3|ogg|pdf)$/i.test(normalizedUrl)
     });
     
-    // Supabase storage URLs
-    if (url.includes('supabase.co/storage/v1/object/public')) {
-      return url;
+    // Supabase storage URLs - Enhanced validation
+    if (normalizedUrl.includes('supabase.co/storage/v1/object/public')) {
+      console.log('✅ Valid Supabase public URL detected');
+      return normalizedUrl;
+    }
+    
+    // General Supabase URLs (might need transformation)
+    if (normalizedUrl.includes('supabase.co') && !normalizedUrl.includes('/storage/v1/object/public/')) {
+      console.log('⚠️ Supabase URL detected but not in public format, attempting to fix...');
+      // Try to fix malformed Supabase URLs
+      if (normalizedUrl.includes('/storage/v1/object/')) {
+        const fixedUrl = normalizedUrl.replace('/storage/v1/object/', '/storage/v1/object/public/');
+        console.log('🔧 Fixed Supabase URL:', fixedUrl);
+        return fixedUrl;
+      }
     }
     
     // Blob URLs
-    if (url.startsWith('blob:')) {
-      return url;
+    if (normalizedUrl.startsWith('blob:')) {
+      console.log('✅ Valid blob URL detected');
+      return normalizedUrl;
     }
     
     // Data URLs
-    if (url.startsWith('data:')) {
-      return url;
+    if (normalizedUrl.startsWith('data:')) {
+      console.log('✅ Valid data URL detected');
+      return normalizedUrl;
     }
     
     // External HTTPS URLs
-    if (url.startsWith('https://')) {
-      return url;
+    if (normalizedUrl.startsWith('https://')) {
+      console.log('✅ Valid HTTPS URL detected');
+      return normalizedUrl;
     }
     
-    // Log invalid URLs
-    console.warn('MediaViewer: Invalid or unsupported URL format:', url);
-    return url; // Return anyway to let browser handle it
+    // HTTP URLs (less secure but might work)
+    if (normalizedUrl.startsWith('http://')) {
+      console.log('⚠️ HTTP URL detected (not HTTPS)');
+      return normalizedUrl;
+    }
+    
+    // Relative or incomplete URLs
+    if (!normalizedUrl.startsWith('http') && !normalizedUrl.startsWith('blob:') && !normalizedUrl.startsWith('data:')) {
+      console.warn('❌ Relative or incomplete URL detected:', normalizedUrl);
+      return null;
+    }
+    
+    console.warn('❌ Unsupported URL format:', normalizedUrl);
+    return normalizedUrl; // Return anyway to let browser attempt
   }, []);
 
   // Força renderização como imagem se o arquivo terminar com extensões de imagem
@@ -162,25 +198,51 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
         return (
           <div className="relative group">
+            {/* Loading State */}
+            {isLoading && !hasLoaded && (
+              <div className="flex items-center justify-center max-w-[300px] max-h-[200px] rounded-lg bg-muted/20 border border-dashed border-muted-foreground/20">
+                <div className="flex flex-col items-center gap-2 p-6">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Carregando imagem...</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Main Image */}
             <img
               src={validImageUrl}
               alt={fileName || 'Imagem'}
-              className="max-w-[300px] max-h-[200px] rounded-lg object-cover cursor-pointer"
+              className={`max-w-[300px] max-h-[200px] rounded-lg object-cover cursor-pointer transition-opacity duration-200 ${
+                isLoading && !hasLoaded ? 'opacity-0 absolute' : 'opacity-100'
+              }`}
               onClick={() => setIsImageModalOpen(true)}
-              onError={(e) => handleImageError(e, 'Image load failed')}
+              onError={(e) => {
+                setIsLoading(false);
+                handleImageError(e, 'Image load failed');
+              }}
               onLoad={() => {
                 console.log('✅ Image loaded successfully:', validImageUrl);
                 setImageError(null);
                 setRetryCount(0);
+                setIsLoading(false);
+                setHasLoaded(true);
+              }}
+              onLoadStart={() => {
+                console.log('🔄 Image load started:', validImageUrl);
+                setIsLoading(true);
+                setHasLoaded(false);
               }}
               loading="lazy"
               crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
             />
+            
+            {/* Error Fallback */}
             <div 
-              className="hidden flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors" 
+              className={`${imageError ? 'flex' : 'hidden'} items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border border-destructive/20`}
               onClick={handleDownload}
             >
-              <AlertCircle className="h-8 w-8 text-destructive" />
+              <AlertCircle className="h-8 w-8 text-destructive flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">
                   {fileName || 'Imagem'}
@@ -188,22 +250,34 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                 <p className="text-xs text-destructive">
                   Erro ao carregar - Clique para baixar
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  URL: {validImageUrl?.substring(0, 40)}...
+                </p>
                 {imageError && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Debug: {imageError.substring(0, 80)}...
-                  </p>
+                  <details className="mt-2">
+                    <summary className="text-xs text-muted-foreground cursor-pointer">
+                      Ver detalhes do erro
+                    </summary>
+                    <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {imageError}
+                    </p>
+                  </details>
                 )}
               </div>
-              <Download className="h-4 w-4 text-muted-foreground" />
+              <Download className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleDownload}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+            
+            {/* Download Button */}
+            {hasLoaded && !imageError && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={handleDownload}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         );
 
