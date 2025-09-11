@@ -49,7 +49,7 @@ serve(async (req) => {
       success: response.ok,
       status: response.status,
       response: result,
-      message: response.ok ? 'Webhook configurado com sucesso' : 'Erro ao configurar webhook'
+      message: response.ok ? 'Webhook configurado corretamente para evolution-webhook' : 'Erro ao configurar webhook'
     }), { 
       status: 200, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
