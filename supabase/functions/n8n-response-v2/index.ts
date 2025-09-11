@@ -331,6 +331,7 @@ serve(async (req) => {
 
     // N8N Response Processing - Only process if from N8N
     console.log(`🎯 [${requestId}] Processing N8N response payload`);
+    console.log(`📋 [${requestId}] Full payload structure:`, JSON.stringify(payload, null, 2));
     
     // 🎯 STRICT PAYLOAD VALIDATION - N8N must send normalized payload
     const { 
@@ -348,6 +349,8 @@ serve(async (req) => {
       contact_name,       // Optional
       metadata = {}
     } = payload;
+    
+    console.log(`📋 [${requestId}] Extracted fields: direction=${direction}, external_id=${external_id}, content="${content}", workspace_id=${workspace_id}`);
 
     // Validate required fields
     if (!direction || !['inbound', 'outbound'].includes(direction)) {
@@ -401,7 +404,13 @@ serve(async (req) => {
 
       if (!existingMessage) {
         console.log(`⚠️ [${requestId}] Message not found for update: ${external_id}, treating as new message`);
-        // Fall through to creation logic (this might be a bot response without prior message)
+        // If no content provided for new message, create placeholder message
+        if (!content && !file_url && direction === 'outbound') {
+          console.log(`📝 [${requestId}] Creating placeholder message for external_id: ${external_id}`);
+          // Set default content for placeholder messages
+          content = 'Mensagem em processamento...';
+        }
+        // Fall through to creation logic
       } else {
         // Check if this is an inbound message being processed again (prevent duplicate processing)
         if (existingMessage.sender_type === 'contact' && direction === 'inbound' && 
@@ -484,17 +493,23 @@ serve(async (req) => {
       }
     }
 
-    // CREATE NEW MESSAGE
-    if (!content && !file_url) {
+    // CREATE NEW MESSAGE - só exigir content se não for atualização e não for outbound com external_id
+    if (!content && !file_url && !external_id) {
       console.error(`❌ [${requestId}] Missing content for new message`);
       return new Response(JSON.stringify({
         error: 'Missing content',
-        message: 'content or file_url is required for new messages',
+        message: 'content, file_url, or external_id is required for messages',
         requestId
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    }
+    
+    // Se não tem content mas tem external_id e é outbound, criar content padrão
+    if (!content && !file_url && external_id && direction === 'outbound') {
+      content = 'Mensagem em processamento...';
+      console.log(`📝 [${requestId}] Using default content for outbound message with external_id`);
     }
 
     if (!workspace_id) {
