@@ -69,8 +69,114 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log(`📨 [${requestId}] N8N Response webhook received:`, JSON.stringify(payload, null, 2));
+    console.log(`📨 [${requestId}] Webhook received from ${requestSource}:`, JSON.stringify(payload, null, 2));
 
+    // If request is from Evolution API, process and forward to N8N
+    if (isValidEvolutionCall) {
+      console.log(`🔄 [${requestId}] Processing Evolution webhook event`);
+      
+      // Get workspace_id and webhook details from database
+      let workspaceId = null;
+      let webhookUrl = null;
+      let webhookSecret = null;
+
+      // Extract instance name from payload
+      const instanceName = payload.instance || payload.instanceName;
+      
+      if (instanceName) {
+        // Get workspace_id from connections table
+        const { data: connection } = await supabase
+          .from('connections')
+          .select('workspace_id')
+          .eq('instance_name', instanceName)
+          .single();
+
+        if (connection) {
+          workspaceId = connection.workspace_id;
+          
+          // Get webhook settings for this workspace
+          const { data: webhookSettings } = await supabase
+            .from('workspace_webhook_settings')
+            .select('webhook_url, webhook_secret')
+            .eq('workspace_id', workspaceId)
+            .single();
+
+          if (webhookSettings) {
+            webhookUrl = webhookSettings.webhook_url;
+            webhookSecret = webhookSettings.webhook_secret;
+          }
+        }
+      }
+
+      // If no webhook configured, use fallback
+      if (!webhookUrl) {
+        webhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
+        webhookSecret = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
+      }
+
+      if (!webhookUrl) {
+        console.error(`❌ [${requestId}] No webhook URL configured for workspace: ${workspaceId}`);
+        return new Response(JSON.stringify({
+          error: 'No webhook configured',
+          requestId
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Forward to N8N
+      console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
+      
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (webhookSecret) {
+        headers['Authorization'] = `Bearer ${webhookSecret}`;
+      }
+
+      try {
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            ...payload,
+            workspace_id: workspaceId,
+            source: 'evolution-api',
+            forwarded_by: 'n8n-response-v2',
+            request_id: requestId
+          })
+        });
+
+        console.log(`✅ [${requestId}] N8N webhook called successfully, status: ${response.status}`);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          action: 'forwarded_to_n8n',
+          n8n_status: response.status,
+          requestId
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+      } catch (error) {
+        console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
+        return new Response(JSON.stringify({
+          error: 'Failed to forward to N8N',
+          details: error.message,
+          requestId
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // N8N Response Processing - Only process if from N8N
+    console.log(`🎯 [${requestId}] Processing N8N response payload`);
+    
     // 🎯 STRICT PAYLOAD VALIDATION - N8N must send normalized payload
     const { 
       direction,           // 'inbound' or 'outbound' 
