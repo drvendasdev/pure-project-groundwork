@@ -26,7 +26,7 @@ function sanitizePhoneNumber(phone: string): string {
 
 serve(async (req) => {
   const requestId = generateRequestId();
-  
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -45,25 +45,27 @@ serve(async (req) => {
   // 🔐 SECURITY: Accept calls from Evolution or N8N
   const authHeader = req.headers.get('Authorization');
   const secretHeader = req.headers.get('X-Secret');
-  const expectedAuth = `Bearer ${Deno.env.get('N8N_WEBHOOK_TOKEN')}`;
-  const expectedSecret = 'supabase-evolution-webhook';
-  
-  // Allow Evolution API calls with X-Secret header OR N8N calls with Authorization header
+
+  // ✅ Unificar AUTH: use SUPABASE_FUNCTIONS_WEBHOOK para chamadas do N8N
+  const expectedAuth = `Bearer ${Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK')}`;
+  // ✅ Secret do Evolution via env (fallback para o valor padrão se não setado)
+  const expectedSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') ?? 'supabase-evolution-webhook';
+
   const isValidEvolutionCall = secretHeader === expectedSecret;
   const isValidN8NCall = authHeader === expectedAuth;
-  
+
   if (!isValidEvolutionCall && !isValidN8NCall) {
     console.log(`❌ [${requestId}] Unauthorized access attempt - missing valid auth`);
-    return new Response(JSON.stringify({ 
-      error: 'Unauthorized', 
+    return new Response(JSON.stringify({
+      error: 'Unauthorized',
       message: 'This endpoint accepts calls from Evolution API (X-Secret) or N8N (Authorization)',
-      requestId 
+      requestId
     }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-  
+
   const requestSource = isValidEvolutionCall ? 'Evolution API' : 'N8N';
   console.log(`✅ [${requestId}] Authorization verified - request from ${requestSource}`);
 
@@ -71,21 +73,20 @@ serve(async (req) => {
     const payload = await req.json();
     console.log(`📨 [${requestId}] Webhook received from ${requestSource}:`, JSON.stringify(payload, null, 2));
 
-    // If request is from Evolution API, process locally AND forward to N8N
+    // ------------------------
+    // BRANCH: Evolution API
+    // ------------------------
     if (isValidEvolutionCall) {
       console.log(`🔄 [${requestId}] Processing Evolution webhook event`);
-      
-      // Get workspace_id and webhook details from database
-      let workspaceId = null;
-      let webhookUrl = null;
-      let webhookSecret = null;
-      let processedData = null;
 
-      // Extract instance name from payload
+      let workspaceId: string | null = null;
+      let webhookUrl: string | null = null;
+      let webhookSecret: string | null = null;
+      let processedData: any = null;
+
       const instanceName = payload.instance || payload.instanceName;
-      
+
       if (instanceName) {
-        // Get workspace_id from connections table
         const { data: connection } = await supabase
           .from('connections')
           .select('workspace_id')
@@ -94,8 +95,7 @@ serve(async (req) => {
 
         if (connection) {
           workspaceId = connection.workspace_id;
-          
-          // Get webhook settings for this workspace
+
           const { data: webhookSettings } = await supabase
             .from('workspace_webhook_settings')
             .select('webhook_url, webhook_secret')
@@ -109,22 +109,20 @@ serve(async (req) => {
         }
       }
 
-      // If no webhook configured, use fallback
       if (!webhookUrl) {
-        webhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
-        webhookSecret = Deno.env.get('N8N_WEBHOOK_TOKEN');
+        webhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL') ?? null;
+        webhookSecret = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK') ?? null; // usa o mesmo token como bearer para n8n (se configurado assim)
       }
 
-      // PROCESS MESSAGE LOCALLY FIRST (Only for inbound messages from contacts)
+      // Processamento local de inbound (somente mensagens de contato)
       if (workspaceId && payload.data?.message && payload.data?.key?.fromMe === false) {
         console.log(`📝 [${requestId}] Processing inbound message locally before forwarding`);
-        
-        // Extract message data from Evolution webhook
+
         const messageData = payload.data;
         const phoneNumber = messageData.key?.remoteJid?.replace('@s.whatsapp.net', '') || '';
         const evolutionMessageId = messageData.key?.id;
-        
-        // Check if this message already exists (prevent duplicates)
+
+        // evita duplicidade por external_id (Evolution)
         const { data: existingMessage } = await supabase
           .from('messages')
           .select('id, conversation_id')
@@ -143,17 +141,18 @@ serve(async (req) => {
             duplicate_skipped: true
           };
         } else {
-          const messageContent = messageData.message?.conversation || 
-                                messageData.message?.extendedTextMessage?.text || 
-                                messageData.message?.imageMessage?.caption ||
-                                messageData.message?.videoMessage?.caption ||
-                                messageData.message?.documentMessage?.caption ||
-                                '📎 Arquivo';
-          
+          const messageContent =
+            messageData.message?.conversation ??
+            messageData.message?.extendedTextMessage?.text ??
+            messageData.message?.imageMessage?.caption ??
+            messageData.message?.videoMessage?.caption ??
+            messageData.message?.documentMessage?.caption ??
+            '📎 Arquivo';
+
           const sanitizedPhone = phoneNumber.replace(/\D/g, '');
-          
+
           if (sanitizedPhone && messageContent) {
-            // Find or create contact
+            // contato
             let contactId: string;
             const { data: existingContact } = await supabase
               .from('contacts')
@@ -177,20 +176,20 @@ serve(async (req) => {
               contactId = newContact?.id;
             }
 
-            // Get connection_id for proper conversation association
-            let resolvedConnectionId = null;
+            // connection_id
+            let resolvedConnectionId: string | null = null;
             const { data: connectionData } = await supabase
               .from('connections')
               .select('id')
               .eq('workspace_id', workspaceId)
               .eq('instance_name', instanceName)
               .single();
-            
+
             if (connectionData) {
               resolvedConnectionId = connectionData.id;
             }
 
-            // Find existing conversation for this contact and workspace (any connection)
+            // conversa (reusar a última)
             let conversationId: string;
             const { data: existingConversation } = await supabase
               .from('conversations')
@@ -203,8 +202,7 @@ serve(async (req) => {
 
             if (existingConversation) {
               conversationId = existingConversation.id;
-              
-              // Update connection_id if it's different (link conversation to current connection)
+
               if (resolvedConnectionId && existingConversation.connection_id !== resolvedConnectionId) {
                 await supabase
                   .from('conversations')
@@ -212,7 +210,6 @@ serve(async (req) => {
                   .eq('id', conversationId);
               }
             } else {
-              // Create new conversation only if none exists for this contact
               const { data: newConversation } = await supabase
                 .from('conversations')
                 .insert({
@@ -226,7 +223,7 @@ serve(async (req) => {
               conversationId = newConversation?.id;
             }
 
-            // Create message with Evolution message ID as external_id
+            // mensagem
             const messageId = crypto.randomUUID();
             const { data: newMessage } = await supabase
               .from('messages')
@@ -235,9 +232,9 @@ serve(async (req) => {
                 conversation_id: conversationId,
                 workspace_id: workspaceId,
                 content: messageContent,
-                message_type: messageData.message?.imageMessage ? 'image' : 
-                             messageData.message?.videoMessage ? 'video' :
-                             messageData.message?.documentMessage ? 'document' : 'text',
+                message_type: messageData.message?.imageMessage ? 'image' :
+                              messageData.message?.videoMessage ? 'video' :
+                              messageData.message?.documentMessage ? 'document' : 'text',
                 sender_type: 'contact',
                 status: 'received',
                 origem_resposta: 'automatica',
@@ -252,10 +249,9 @@ serve(async (req) => {
               .select('id')
               .single();
 
-            // Update conversation timestamp
             await supabase
               .from('conversations')
-              .update({ 
+              .update({
                 last_activity_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
@@ -278,17 +274,12 @@ serve(async (req) => {
         console.log(`📤 [${requestId}] Outbound message detected, skipping local processing (will be handled by N8N response)`);
       }
 
-      // Forward to N8N with processed data
+      // encaminhar ao N8N
       if (webhookUrl) {
         console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
-        
-        const headers = {
-          'Content-Type': 'application/json',
-        };
-        
-        if (webhookSecret) {
-          headers['Authorization'] = `Bearer ${webhookSecret}`;
-        }
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (webhookSecret) headers['Authorization'] = `Bearer ${webhookSecret}`;
 
         try {
           const response = await fetch(webhookUrl, {
@@ -305,13 +296,11 @@ serve(async (req) => {
           });
 
           console.log(`✅ [${requestId}] N8N webhook called successfully, status: ${response.status}`);
-          
         } catch (error) {
           console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
         }
       }
 
-      // Always return processed data or basic structure  
       return new Response(JSON.stringify({
         success: true,
         action: 'processed_and_forwarded',
@@ -329,27 +318,41 @@ serve(async (req) => {
       });
     }
 
-    // N8N Response Processing - Only process if from N8N
+    // ------------------------
+    // BRANCH: N8N
+    // ------------------------
     console.log(`🎯 [${requestId}] Processing N8N response payload`);
-    
-    // 🎯 STRICT PAYLOAD VALIDATION - N8N must send normalized payload
-    const { 
-      direction,           // 'inbound' or 'outbound' 
-      external_id,         // Required for message updates
+
+    // 🛡️ Anti-eco: inbound deve nascer do Evolution. Se N8N mandar inbound, ignore.
+    if (payload?.direction === 'inbound') {
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'ignored_inbound_from_n8n',
+        reason: 'Inbound must originate from Evolution only',
+        requestId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const {
+      direction,           // 'inbound' or 'outbound'
+      external_id,         // Evolution id ou id que represente atualização
       phone_number,        // Required
-      content,            // Required for new messages
+      content,             // Required for new messages (or file_url)
       message_type = 'text',
-      sender_type,        // 'contact' or 'agent'
+      sender_type,         // 'contact' or 'agent'
       file_url,
       file_name,
       mime_type,
-      workspace_id,       // Required for new conversations
-      connection_id,      // Optional for inbound
-      contact_name,       // Optional
+      workspace_id,        // Required for new messages
+      connection_id,       // Optional
+      contact_name,
       metadata = {}
     } = payload;
 
-    // Validate required fields
+    // validações
     if (!direction || !['inbound', 'outbound'].includes(direction)) {
       console.error(`❌ [${requestId}] Invalid or missing direction: ${direction}`);
       return new Response(JSON.stringify({
@@ -376,15 +379,14 @@ serve(async (req) => {
     const sanitizedPhone = sanitizePhoneNumber(phone_number);
     console.log(`📱 [${requestId}] Processing ${direction} message for phone: ${sanitizedPhone}`);
 
+    // 🔄 UPDATE EXISTING by external_id (corrigido: usar external_id, não id)
     if (external_id) {
-      // UPDATE EXISTING MESSAGE (for N8N responses updating previously created messages)
-      console.log(`🔄 [${requestId}] Updating existing message: ${external_id}`);
-      
-      // Check if this is a duplicate N8N response (same external_id and content)
+      console.log(`🔄 [${requestId}] Attempting update for external_id: ${external_id}`);
+
       const { data: existingMessage, error: findError } = await supabase
         .from('messages')
         .select('id, conversation_id, workspace_id, content, file_url, file_name, mime_type, metadata, sender_type')
-        .eq('id', external_id)
+        .eq('external_id', external_id)
         .maybeSingle();
 
       if (findError) {
@@ -399,26 +401,23 @@ serve(async (req) => {
         });
       }
 
-      if (!existingMessage) {
-        console.log(`⚠️ [${requestId}] Message not found for update: ${external_id}, treating as new message`);
-        // Fall through to creation logic (this might be a bot response without prior message)
-      } else {
-        // Check if this is an inbound message being processed again (prevent duplicate processing)
-        if (existingMessage.sender_type === 'contact' && direction === 'inbound' && 
+      if (existingMessage) {
+        // evitar reprocessar inbound original
+        if (existingMessage.sender_type === 'contact' &&
+            direction === 'inbound' &&
             existingMessage.metadata?.message_flow === 'inbound_original') {
           console.log(`⚠️ [${requestId}] Duplicate inbound message detected, skipping: ${external_id}`);
-          
-          // Get contact_id from conversation
+
           const { data: conversation } = await supabase
             .from('conversations')
             .select('contact_id')
             .eq('id', existingMessage.conversation_id)
             .single();
-          
+
           return new Response(JSON.stringify({
             success: true,
             action: 'duplicate_skipped',
-            message_id: external_id,
+            message_id: existingMessage.id,
             workspace_id: existingMessage.workspace_id,
             conversation_id: existingMessage.conversation_id,
             contact_id: conversation?.contact_id,
@@ -429,15 +428,14 @@ serve(async (req) => {
           });
         }
 
-        // Update existing message (typically bot responses)
         const updateData: any = {};
         if (content !== undefined) updateData.content = content;
         if (file_url !== undefined) updateData.file_url = file_url;
         if (file_name !== undefined) updateData.file_name = file_name;
         if (mime_type !== undefined) updateData.mime_type = mime_type;
         if (Object.keys(metadata).length > 0) {
-          updateData.metadata = { 
-            ...existingMessage.metadata, 
+          updateData.metadata = {
+            ...existingMessage.metadata,
             ...metadata,
             message_flow: 'n8n_response_update'
           };
@@ -446,7 +444,7 @@ serve(async (req) => {
         const { error: updateError } = await supabase
           .from('messages')
           .update(updateData)
-          .eq('id', external_id);
+          .eq('external_id', external_id);
 
         if (updateError) {
           console.error(`❌ [${requestId}] Error updating message:`, updateError);
@@ -460,19 +458,18 @@ serve(async (req) => {
           });
         }
 
-        console.log(`✅ [${requestId}] Message updated successfully: ${external_id}`);
-        
-        // Get contact_id from conversation
+        console.log(`✅ [${requestId}] Message updated successfully by external_id: ${external_id}`);
+
         const { data: conversation } = await supabase
           .from('conversations')
           .select('contact_id')
           .eq('id', existingMessage.conversation_id)
           .single();
-        
+
         return new Response(JSON.stringify({
           success: true,
           action: 'updated',
-          message_id: external_id,
+          message_id: existingMessage.id,
           workspace_id: existingMessage.workspace_id,
           conversation_id: existingMessage.conversation_id,
           contact_id: conversation?.contact_id,
@@ -482,6 +479,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+      // Se não achou por external_id, cai para criação abaixo (alguns bots enviados pelo N8N não têm external_id prévio)
     }
 
     // CREATE NEW MESSAGE
@@ -509,7 +507,7 @@ serve(async (req) => {
       });
     }
 
-    // Check for duplicate messages by external_id before creating new
+    // evita duplicados se vier external_id na criação
     if (external_id) {
       const { data: duplicateCheck } = await supabase
         .from('messages')
@@ -520,14 +518,13 @@ serve(async (req) => {
 
       if (duplicateCheck) {
         console.log(`⚠️ [${requestId}] Message with external_id already exists, skipping creation: ${external_id}`);
-        
-        // Get contact_id from conversation
+
         const { data: conversation } = await supabase
           .from('conversations')
           .select('contact_id')
           .eq('id', duplicateCheck.conversation_id)
           .single();
-        
+
         return new Response(JSON.stringify({
           success: true,
           action: 'duplicate_prevented',
@@ -545,7 +542,7 @@ serve(async (req) => {
 
     console.log(`🆕 [${requestId}] Creating new ${direction} message`);
 
-    // Find or create contact
+    // contato
     let contactId: string;
     const { data: existingContact, error: contactFindError } = await supabase
       .from('contacts')
@@ -570,7 +567,6 @@ serve(async (req) => {
       contactId = existingContact.id;
       console.log(`✅ [${requestId}] Found existing contact: ${contactId}`);
     } else {
-      // Create new contact
       const { data: newContact, error: contactCreateError } = await supabase
         .from('contacts')
         .insert({
@@ -597,7 +593,7 @@ serve(async (req) => {
       console.log(`✅ [${requestId}] Created new contact: ${contactId}`);
     }
 
-    // Find existing conversation for this contact and workspace (prioritize reusing any existing conversation)
+    // conversa (reusar a última)
     let conversationId: string;
     const { data: existingConversation, error: conversationFindError } = await supabase
       .from('conversations')
@@ -622,9 +618,7 @@ serve(async (req) => {
 
     if (existingConversation) {
       conversationId = existingConversation.id;
-      console.log(`✅ [${requestId}] Found existing conversation: ${conversationId}`);
-      
-      // Update connection_id if provided and different (link conversation to current connection)
+
       if (connection_id && existingConversation.connection_id !== connection_id) {
         await supabase
           .from('conversations')
@@ -633,7 +627,6 @@ serve(async (req) => {
         console.log(`🔗 [${requestId}] Updated conversation connection_id: ${connection_id}`);
       }
     } else {
-      // Create new conversation only if none exists for this contact
       const { data: newConversation, error: conversationCreateError } = await supabase
         .from('conversations')
         .insert({
@@ -661,7 +654,7 @@ serve(async (req) => {
       console.log(`✅ [${requestId}] Created new conversation: ${conversationId}`);
     }
 
-    // Create message
+    // mensagem (criação)
     const messageData = {
       id: external_id || crypto.randomUUID(),
       conversation_id: conversationId,
@@ -704,10 +697,9 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Message created successfully: ${newMessage.id}`);
 
-    // Update conversation timestamp (triggers will handle unread_count)
     const { error: conversationUpdateError } = await supabase
       .from('conversations')
-      .update({ 
+      .update({
         last_activity_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -717,18 +709,17 @@ serve(async (req) => {
       console.warn(`⚠️ [${requestId}] Failed to update conversation timestamp:`, conversationUpdateError);
     }
 
-    // Get connection details for response
-    let instanceInfo = null;
-    if (resolvedConnectionId) {
-      const { data: connectionData } = await supabase
+    // recuperar info de conexão para resposta (do ramo N8N)
+    let responseConnectionId: string | null = connection_id ?? null;
+    let instanceInfo: string | null = null;
+
+    if (responseConnectionId) {
+      const { data: connRow } = await supabase
         .from('connections')
         .select('instance_name')
-        .eq('id', resolvedConnectionId)
+        .eq('id', responseConnectionId)
         .single();
-      
-      if (connectionData) {
-        instanceInfo = connectionData.instance_name;
-      }
+      if (connRow) instanceInfo = connRow.instance_name;
     }
 
     return new Response(JSON.stringify({
@@ -738,7 +729,7 @@ serve(async (req) => {
       workspace_id: workspace_id,
       conversation_id: conversationId,
       contact_id: contactId,
-      connection_id: resolvedConnectionId,
+      connection_id: responseConnectionId,
       instance: instanceInfo,
       phone_number: phone_number,
       requestId
@@ -747,11 +738,11 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(`❌ [${requestId}] Unexpected error:`, error);
     return new Response(JSON.stringify({
       error: 'Internal server error',
-      details: error.message,
+      details: error?.message ?? String(error),
       requestId
     }), {
       status: 500,
