@@ -34,10 +34,16 @@ serve(async (req) => {
     
     const { conversation_id, content, message_type = 'text', sender_id, sender_type, file_url, file_name } = body;
 
-    if (!conversation_id || !content) {
-      console.log(`❌ [${requestId}] Missing required fields`);
+    // Para mensagens de mídia, content pode ser vazio (apenas o arquivo)
+    const isMediaMessage = message_type && message_type !== 'text';
+    const effectiveContent = content || (isMediaMessage ? '' : null);
+
+    if (!conversation_id || (!effectiveContent && !isMediaMessage)) {
+      console.log(`❌ [${requestId}] Missing required fields - conversation_id: ${!!conversation_id}, content: ${!!content}, message_type: ${message_type}`);
       return new Response(JSON.stringify({
-        error: 'Missing required fields: conversation_id, content'
+        error: isMediaMessage 
+          ? 'Missing required field: conversation_id' 
+          : 'Missing required fields: conversation_id, content'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -198,7 +204,7 @@ serve(async (req) => {
       external_id: external_id,
       message_id: external_id, // Add message_id field
       phone_number: contact.phone,
-      content: content,
+      content: effectiveContent,
       message_type: message_type,
       sender_type: sender_type || 'agent',
       sender_id: sender_id,
