@@ -175,7 +175,7 @@ serve(async (req) => {
       // Determine sender type from fromMe field
       const senderType = data.data?.key?.fromMe ? 'agent' : 'contact';
       
-      // Extract message content
+      // Extract message content and ID
       const messageData = data.data?.message || data.message || {};
       const content = messageData.conversation || 
                      messageData.extendedTextMessage?.text || 
@@ -184,6 +184,15 @@ serve(async (req) => {
                      messageData.documentMessage?.caption ||
                      '📱 Mensagem recebida';
 
+      // Extract message ID from various possible locations
+      const messageId = data.data?.key?.id || 
+                       data.key?.id || 
+                       data.data?.messageId || 
+                       data.messageId ||
+                       data.id;
+
+      console.log(`📋 [${requestId}] Extracted message ID: ${messageId}`);
+
       // Prepare N8N payload
       const n8nPayload = {
         direction: 'inbound',
@@ -191,6 +200,7 @@ serve(async (req) => {
         content: content,
         sender_type: senderType,
         message_type: 'text', // Default, N8N can enhance this
+        message_id: messageId, // Include message ID
         instance_name: instanceName,
         workspace_id: connectionData.workspace_id,
         source: 'evolution-webhook',
