@@ -181,35 +181,17 @@ serve(async (req) => {
       )
     }
 
-    // Fetch workspace webhook configuration with fallback to secrets
-    console.log('Fetching workspace webhook configuration...')
-    let { data: webhookConfig, error: webhookError } = await supabase
-      .from('workspace_webhook_settings')
-      .select('webhook_url, webhook_secret')
-      .eq('workspace_id', workspaceId)
-      .maybeSingle()
-
-    if (webhookError) {
-      console.error('Error fetching webhook config:', webhookError)
-    }
-
-    // Fallback to workspace_webhook_secrets if no settings found
-    if (!webhookConfig?.webhook_url) {
-      console.log('No webhook settings found, checking secrets...')
-      const { data: secretsData } = await supabase
-        .from('workspace_webhook_secrets')
-        .select('webhook_url')
-        .eq('workspace_id', workspaceId)
-        .eq('secret_name', 'default_webhook')
-        .maybeSingle()
-
-      if (secretsData?.webhook_url) {
-        console.log('Found webhook URL in secrets:', secretsData.webhook_url)
-        webhookConfig = {
-          webhook_url: secretsData.webhook_url,
-          webhook_secret: null
-        }
-      }
+    // Use fixed n8n-response-v2 webhook URL for Evolution instances
+    console.log('Using fixed n8n-response-v2 webhook for Evolution instance...')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const fixedWebhookUrl = `${supabaseUrl}/functions/v1/n8n-response-v2`
+    const fixedWebhookSecret = 'supabase-evolution-webhook'
+    
+    console.log('Fixed webhook URL for Evolution:', fixedWebhookUrl)
+    
+    const webhookConfig = {
+      webhook_url: fixedWebhookUrl,
+      webhook_secret: fixedWebhookSecret
     }
 
     // Build Evolution payload
@@ -220,43 +202,39 @@ serve(async (req) => {
       integration: "WHATSAPP-BAILEYS"
     }
 
-    // Add webhook configuration if available
-    if (webhookConfig?.webhook_url) {
-      console.log('Using workspace webhook configuration:', webhookConfig.webhook_url)
-      evolutionPayload.webhook = {
-        url: webhookConfig.webhook_url,
-        byEvents: true,
-        base64: true,
-        headers: {
-          "X-Secret": webhookConfig.webhook_secret,
-          "Content-Type": "application/json"
-        },
-        events: [
-          "MESSAGES_UPSERT",
-          "QRCODE_UPDATED"
-        ]
-      }
-
-      // Set use_workspace_default to true for new connections with webhook
-      await supabase
-        .from('connections')
-        .update({ use_workspace_default: true })
-        .eq('id', connection.id)
-    } else {
-      console.log('No webhook configuration found for workspace, creating instance without webhook')
-      
-      // Log this event for tracking
-      await supabase
-        .from('provider_logs')
-        .insert({
-          correlation_id: crypto.randomUUID(),
-          connection_id: connection.id,
-          event_type: 'INSTANCE_CREATED_NO_WEBHOOK',
-          level: 'warn',
-          message: `Instance ${instanceName} created without webhook - no workspace webhook configuration found`,
-          metadata: { workspaceId, instanceName }
-        })
+    // Always add fixed webhook configuration for Evolution instances
+    console.log('Adding fixed n8n-response-v2 webhook configuration for Evolution')
+    evolutionPayload.webhook = {
+      url: webhookConfig.webhook_url,
+      byEvents: true,
+      base64: true,
+      headers: {
+        "X-Secret": webhookConfig.webhook_secret,
+        "Content-Type": "application/json"
+      },
+      events: [
+        "MESSAGES_UPSERT",
+        "QRCODE_UPDATED"
+      ]
     }
+
+    // Set use_workspace_default to false since we're using fixed webhook
+    await supabase
+      .from('connections')
+      .update({ use_workspace_default: false })
+      .eq('id', connection.id)
+      
+    // Log that we're using fixed webhook
+    await supabase
+      .from('provider_logs')
+      .insert({
+        correlation_id: crypto.randomUUID(),
+        connection_id: connection.id,
+        event_type: 'INSTANCE_CREATED_FIXED_WEBHOOK',
+        level: 'info',
+        message: `Instance ${instanceName} created with fixed n8n-response-v2 webhook`,
+        metadata: { workspaceId, instanceName, webhookUrl: webhookConfig.webhook_url }
+      })
 
     console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))
 

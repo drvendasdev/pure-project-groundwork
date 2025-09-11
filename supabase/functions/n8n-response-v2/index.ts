@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-secret',
 };
 
 function generateRequestId(): string {
@@ -42,15 +42,21 @@ serve(async (req) => {
     });
   }
 
-  // 🔐 SECURITY: Require authorization from N8N only
+  // 🔐 SECURITY: Accept calls from Evolution or N8N
   const authHeader = req.headers.get('Authorization');
+  const secretHeader = req.headers.get('X-Secret');
   const expectedAuth = `Bearer ${Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK')}`;
+  const expectedSecret = 'supabase-evolution-webhook';
   
-  if (!authHeader || authHeader !== expectedAuth) {
-    console.log(`❌ [${requestId}] Unauthorized access attempt`);
+  // Allow Evolution API calls with X-Secret header OR N8N calls with Authorization header
+  const isValidEvolutionCall = secretHeader === expectedSecret;
+  const isValidN8NCall = authHeader === expectedAuth;
+  
+  if (!isValidEvolutionCall && !isValidN8NCall) {
+    console.log(`❌ [${requestId}] Unauthorized access attempt - missing valid auth`);
     return new Response(JSON.stringify({ 
       error: 'Unauthorized', 
-      message: 'This endpoint only accepts calls from N8N with proper authorization',
+      message: 'This endpoint accepts calls from Evolution API (X-Secret) or N8N (Authorization)',
       requestId 
     }), {
       status: 401,
@@ -58,7 +64,8 @@ serve(async (req) => {
     });
   }
   
-  console.log(`✅ [${requestId}] Authorization verified - request from N8N`);
+  const requestSource = isValidEvolutionCall ? 'Evolution API' : 'N8N';
+  console.log(`✅ [${requestId}] Authorization verified - request from ${requestSource}`);
 
   try {
     const payload = await req.json();
