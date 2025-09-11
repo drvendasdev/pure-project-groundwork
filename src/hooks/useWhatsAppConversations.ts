@@ -444,21 +444,24 @@ export const useWhatsAppConversations = () => {
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
 
   useEffect(() => {
-    // Get current user from localStorage
-    const userData = localStorage.getItem('currentUser');
-    const currentUserData = userData ? JSON.parse(userData) : null;
-    
-    if (!currentUserData?.id) {
+    if (!selectedWorkspace?.workspace_id) {
       return;
     }
 
-    // Subscription para novas mensagens
+    console.log('🔄 Configurando subscriptions Realtime para workspace:', selectedWorkspace.workspace_id);
+
+    // Subscription para novas mensagens com filtro por workspace
     const messagesChannel = supabase
-      .channel('whatsapp-messages')
+      .channel(`whatsapp-messages-${selectedWorkspace.workspace_id}`)
       .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
-          console.log('🔔 Nova mensagem recebida:', payload.new);
+          console.log('🔔 Nova mensagem recebida via Realtime:', payload.new);
           const newMessage = payload.new as any;
           
           setConversations(prev => {
@@ -466,7 +469,17 @@ export const useWhatsAppConversations = () => {
               if (conv.id === newMessage.conversation_id) {
                 // Verificar se mensagem já existe para evitar duplicatas
                 const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
-                if (messageExists) return conv;
+                if (messageExists) {
+                  console.log('⚠️ Mensagem duplicada ignorada:', newMessage.id);
+                  return conv;
+                }
+
+                console.log('✅ Adicionando nova mensagem à conversa:', {
+                  conversation_id: conv.id,
+                  message_id: newMessage.id,
+                  content: newMessage.content,
+                  sender_type: newMessage.sender_type
+                });
 
                 const updatedConv = {
                   ...conv,
@@ -485,9 +498,9 @@ export const useWhatsAppConversations = () => {
                   last_activity_at: newMessage.created_at
                 };
 
-                // Se é mensagem de contato, incrementar unread_count localmente (triggers do DB fazem isso também)
+                // Se é mensagem de contato, incrementar unread_count localmente
                 if (newMessage.sender_type === 'contact') {
-                  updatedConv.unread_count = conv.unread_count + 1;
+                  updatedConv.unread_count = (conv.unread_count || 0) + 1;
                 }
 
                 return updatedConv;
@@ -498,12 +511,18 @@ export const useWhatsAppConversations = () => {
         }
       )
       .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
           const updatedMessage = payload.new as any;
-          console.log('✏️ Mensagem atualizada:', {
+          console.log('✏️ Mensagem atualizada via Realtime:', {
             id: updatedMessage.id,
             status: updatedMessage.status,
+            content: updatedMessage.content,
             message_type: updatedMessage.message_type,
             file_url: updatedMessage.file_url,
             file_name: updatedMessage.file_name,
@@ -511,7 +530,16 @@ export const useWhatsAppConversations = () => {
           
           setConversations(prev => prev.map(conv => {
             // Só atualiza a conversa que contém a mensagem
-            if (!conv.messages.some(m => m.id === updatedMessage.id)) return conv;
+            const messageIndex = conv.messages.findIndex(m => m.id === updatedMessage.id);
+            if (messageIndex === -1) return conv;
+            
+            console.log('✅ Atualizando mensagem na conversa:', {
+              conversation_id: conv.id,
+              message_id: updatedMessage.id,
+              old_content: conv.messages[messageIndex].content,
+              new_content: updatedMessage.content
+            });
+            
             return {
               ...conv,
               messages: conv.messages.map(msg => 
@@ -547,18 +575,23 @@ export const useWhatsAppConversations = () => {
       )
       .subscribe();
 
-    // Subscription para mudanças em conversas
+    // Subscription para mudanças em conversas com filtro por workspace
     const conversationsChannel = supabase
-      .channel('whatsapp-conversations')
+      .channel(`whatsapp-conversations-${selectedWorkspace.workspace_id}`)
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'conversations' },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'conversations',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         async (payload) => {
           const newConv = payload.new as any;
           
           // Só processar conversas do WhatsApp
           if (newConv.canal !== 'whatsapp') return;
           
-          console.log('🔔 Nova conversa criada:', newConv);
+          console.log('🔔 Nova conversa criada via Realtime:', newConv);
           
           // Buscar dados completos da nova conversa
           const { data: conversationData } = await supabase
@@ -581,7 +614,7 @@ export const useWhatsAppConversations = () => {
               )
             `)
             .eq('id', newConv.id)
-            .single();
+            .maybeSingle();
 
           if (conversationData && conversationData.contacts) {
             const newConversation: WhatsAppConversation = {
@@ -604,7 +637,16 @@ export const useWhatsAppConversations = () => {
 
             setConversations(prev => {
               const exists = prev.some(conv => conv.id === newConversation.id);
-              if (exists) return prev;
+              if (exists) {
+                console.log('⚠️ Conversa duplicada ignorada:', newConversation.id);
+                return prev;
+              }
+              
+              console.log('✅ Adicionando nova conversa:', {
+                id: newConversation.id,
+                contact_name: newConversation.contact.name,
+                contact_phone: newConversation.contact.phone
+              });
               
               return [newConversation, ...prev].sort((a, b) => 
                 new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
@@ -614,9 +656,14 @@ export const useWhatsAppConversations = () => {
         }
       )
       .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'conversations' },
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'conversations',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
-          console.log('🔄 Conversa atualizada:', payload.new);
+          console.log('🔄 Conversa atualizada via Realtime:', payload.new);
           const updatedConv = payload.new as any;
           
           setConversations(prev => {
@@ -638,11 +685,11 @@ export const useWhatsAppConversations = () => {
       .subscribe();
 
     return () => {
-      console.log('🧹 Limpando subscriptions real-time');
+      console.log('🧹 Limpando subscriptions real-time para workspace:', selectedWorkspace.workspace_id);
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, []);
+  }, [selectedWorkspace?.workspace_id]);
 
   return {
     conversations,
