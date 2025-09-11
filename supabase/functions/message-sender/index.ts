@@ -113,6 +113,13 @@ serve(async (req) => {
         }
       });
 
+      console.log(`🔍 [${requestId}] N8N response:`, { 
+        hasError: !!n8nError, 
+        error: n8nError,
+        resultSuccess: n8nResult?.success,
+        result: n8nResult 
+      });
+
       if (!n8nError && n8nResult?.success !== false) {
         console.log(`✅ [${requestId}] N8N send successful`);
         return new Response(JSON.stringify({
