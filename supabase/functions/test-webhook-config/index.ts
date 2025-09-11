@@ -29,15 +29,17 @@ serve(async (req) => {
         'apikey': token
       },
       body: JSON.stringify({
-        url: webhookUrl,
-        webhook_by_events: false,
-        events: [
-          'QRCODE_UPDATED',
-          'CONNECTION_UPDATE', 
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'SEND_MESSAGE'
-        ]
+        webhook: {
+          url: webhookUrl,
+          webhook_by_events: false,
+          events: [
+            'QRCODE_UPDATED',
+            'CONNECTION_UPDATE', 
+            'MESSAGES_UPSERT',
+            'MESSAGES_UPDATE',
+            'SEND_MESSAGE'
+          ]
+        }
       })
     });
 
