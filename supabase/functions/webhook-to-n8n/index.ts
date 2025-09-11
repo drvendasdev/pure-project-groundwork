@@ -79,6 +79,23 @@ serve(async (req) => {
       }
     }
 
+    // Buscar configuração do webhook do workspace
+    const { data: webhookConfig, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')
+      .select('webhook_url, secret_name')
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (webhookError || !webhookConfig) {
+      console.error('❌ Configuração de webhook não encontrada para workspace:', workspaceId);
+      return new Response(JSON.stringify({
+        error: 'Webhook configuration not found for workspace'
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Enriquecer dados do webhook
     const enrichedData = {
       ...webhookData,
@@ -87,35 +104,54 @@ serve(async (req) => {
       processed_at: new Date().toISOString()
     };
 
-    console.log(`📤 Enviando para n8n-response-v2 com workspace_id: ${workspaceId}, conversation_id: ${conversationId}`);
+    console.log(`📤 Enviando para N8N: ${webhookConfig.webhook_url} com workspace_id: ${workspaceId}, conversation_id: ${conversationId}`);
 
-    // Chamar n8n-response-v2
-    const { data: n8nResponse, error: n8nError } = await supabase.functions.invoke('n8n-response-v2', {
-      body: enrichedData
-    });
+    try {
+      // Enviar para N8N
+      const n8nResponse = await fetch(webhookConfig.webhook_url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(webhookConfig.secret_name ? { 'X-Webhook-Secret': webhookConfig.secret_name } : {})
+        },
+        body: JSON.stringify(enrichedData)
+      });
 
-    if (n8nError) {
-      console.error('❌ Erro ao chamar n8n-response-v2:', n8nError);
+      if (!n8nResponse.ok) {
+        console.error(`❌ Erro ao enviar para N8N: ${n8nResponse.status} ${n8nResponse.statusText}`);
+        return new Response(JSON.stringify({
+          error: 'Failed to send to N8N',
+          status: n8nResponse.status,
+          statusText: n8nResponse.statusText
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const n8nResponseData = await n8nResponse.text();
+      console.log('✅ Webhook enviado para N8N com sucesso:', n8nResponseData);
+
       return new Response(JSON.stringify({
-        error: 'Failed to process webhook',
+        success: true,
+        workspace_id: workspaceId,
+        conversation_id: conversationId,
+        message: 'Webhook processado e enviado para N8N',
+        n8n_response: n8nResponseData
+      }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
+    } catch (n8nError) {
+      console.error('❌ Erro ao conectar com N8N:', n8nError);
+      return new Response(JSON.stringify({
+        error: 'Failed to connect to N8N',
         details: n8nError.message
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-
-    console.log('✅ Webhook processado e enviado para N8N via n8n-response-v2');
-
-    return new Response(JSON.stringify({
-      success: true,
-      workspace_id: workspaceId,
-      conversation_id: conversationId,
-      message: 'Webhook processado e enviado para N8N',
-      n8n_response: n8nResponse
-    }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
 
   } catch (error) {
     console.error('❌ Erro:', error);
