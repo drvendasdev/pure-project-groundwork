@@ -734,12 +734,13 @@ serve(async (req) => {
 
     // Get connection details for response
     let instanceInfo = null;
-    if (resolvedConnectionId) {
+    const finalConnectionId = connection_id || (existingConversation ? existingConversation.connection_id : null);
+    if (finalConnectionId) {
       const { data: connectionData } = await supabase
         .from('connections')
         .select('instance_name')
-        .eq('id', resolvedConnectionId)
-        .single();
+        .eq('id', finalConnectionId)
+        .maybeSingle();
       
       if (connectionData) {
         instanceInfo = connectionData.instance_name;
@@ -753,7 +754,7 @@ serve(async (req) => {
       workspace_id: workspace_id,
       conversation_id: conversationId,
       contact_id: contactId,
-      connection_id: resolvedConnectionId,
+      connection_id: finalConnectionId,
       instance: instanceInfo,
       phone_number: phone_number,
       requestId
