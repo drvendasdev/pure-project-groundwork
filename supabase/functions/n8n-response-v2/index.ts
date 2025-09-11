@@ -45,7 +45,7 @@ serve(async (req) => {
   // 🔐 SECURITY: Accept calls from Evolution or N8N
   const authHeader = req.headers.get('Authorization');
   const secretHeader = req.headers.get('X-Secret');
-  const expectedAuth = `Bearer ${Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK')}`;
+  const expectedAuth = `Bearer ${Deno.env.get('N8N_WEBHOOK_TOKEN')}`;
   const expectedSecret = 'supabase-evolution-webhook';
   
   // Allow Evolution API calls with X-Secret header OR N8N calls with Authorization header
@@ -111,7 +111,7 @@ serve(async (req) => {
       // If no webhook configured, use fallback
       if (!webhookUrl) {
         webhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
-        webhookSecret = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
+        webhookSecret = Deno.env.get('N8N_WEBHOOK_TOKEN');
       }
 
       if (!webhookUrl) {
