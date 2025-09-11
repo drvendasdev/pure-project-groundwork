@@ -445,10 +445,13 @@ export const useWhatsAppConversations = () => {
 
   useEffect(() => {
     if (!selectedWorkspace?.workspace_id) {
+      console.log('❌ Sem workspace selecionado, não configurando subscriptions');
       return;
     }
 
     console.log('🔄 Configurando subscriptions Realtime para workspace:', selectedWorkspace.workspace_id);
+    console.log('🔍 Estado atual das conversas:', conversations.length);
+    console.log('📊 Estado do Supabase Realtime:', supabase.realtime.isConnected());
 
     // Subscription para novas mensagens com filtro por workspace
     const messagesChannel = supabase
@@ -465,6 +468,21 @@ export const useWhatsAppConversations = () => {
           const newMessage = payload.new as any;
           
           setConversations(prev => {
+            // Primeiro, verificar se a conversa existe na lista
+            const conversationExists = prev.some(conv => conv.id === newMessage.conversation_id);
+            
+            if (!conversationExists) {
+              console.log('⚠️ Mensagem recebida para conversa não encontrada na lista atual:', {
+                conversation_id: newMessage.conversation_id,
+                current_conversations: prev.map(c => c.id),
+                message_id: newMessage.id
+              });
+              
+              // Se a conversa não existe, buscar novamente as conversas
+              fetchConversations();
+              return prev;
+            }
+            
             return prev.map(conv => {
               if (conv.id === newMessage.conversation_id) {
                 // Verificar se mensagem já existe para evitar duplicatas
@@ -560,10 +578,15 @@ export const useWhatsAppConversations = () => {
         }
       )
       .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'messages' },
+        { 
+          event: 'DELETE', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
           const deletedMessageId = payload.old?.id;
-          console.log('🗑️ Mensagem deletada:', deletedMessageId);
+          console.log('🗑️ Mensagem deletada via Realtime:', deletedMessageId);
           
           if (deletedMessageId) {
             setConversations(prev => prev.map(conv => ({
@@ -573,7 +596,9 @@ export const useWhatsAppConversations = () => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Status da subscription messagesChannel:', status);
+      });
 
     // Subscription para mudanças em conversas com filtro por workspace
     const conversationsChannel = supabase
@@ -682,7 +707,18 @@ export const useWhatsAppConversations = () => {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Status da subscription conversationsChannel:', status);
+      });
+
+    // Verificar status das subscriptions após um tempo
+    setTimeout(() => {
+      console.log('⏰ Verificando subscriptions após 2 segundos:', {
+        messagesChannel: messagesChannel.topic,
+        conversationsChannel: conversationsChannel.topic,
+        isConnected: supabase.realtime.isConnected()
+      });
+    }, 2000);
 
     return () => {
       console.log('🧹 Limpando subscriptions real-time para workspace:', selectedWorkspace.workspace_id);
