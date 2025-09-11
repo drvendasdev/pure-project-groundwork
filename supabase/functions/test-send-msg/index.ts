@@ -212,7 +212,20 @@ serve(async (req) => {
         }
         
         const imageArrayBuffer = await imageResponse.arrayBuffer();
-        const imageBase64 = btoa(String.fromCharCode(...new Uint8Array(imageArrayBuffer)));
+        
+        // Converter para base64 usando método seguro para imagens grandes
+        const uint8Array = new Uint8Array(imageArrayBuffer);
+        let binaryString = '';
+        const chunkSize = 8192; // Processar em chunks para evitar stack overflow
+        
+        for (let i = 0; i < uint8Array.length; i += chunkSize) {
+          const chunk = uint8Array.slice(i, i + chunkSize);
+          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        
+        const imageBase64 = btoa(binaryString);
+        
+        console.log(`✅ [${requestId}] Image converted to base64 safely (${imageBase64.length} chars, original: ${uint8Array.length} bytes)`);
         
         // Detectar mimeType da resposta ou usar padrão
         const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
