@@ -734,6 +734,21 @@ serve(async (req) => {
 
     // Get connection details for response
     let instanceInfo = null;
+    let resolvedConnectionId = null;
+    
+    // Try to resolve connection_id from conversation or contact
+    if (conversationId) {
+      const { data: convData } = await supabase
+        .from('conversations')
+        .select('connection_id')
+        .eq('id', conversationId)
+        .single();
+      
+      if (convData?.connection_id) {
+        resolvedConnectionId = convData.connection_id;
+      }
+    }
+    
     if (resolvedConnectionId) {
       const { data: connectionData } = await supabase
         .from('connections')
