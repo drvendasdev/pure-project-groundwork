@@ -70,17 +70,16 @@ serve(async (req) => {
 
     const workspaceToUse = workspace_id || connectionData.workspace_id;
 
-    // Get Evolution API token for this workspace/instance
+    // Get Evolution API token for this connection
     const { data: tokenData, error: tokenError } = await supabase
-      .from('evolution_instance_tokens')
+      .from('connection_secrets')
       .select('token, evolution_url')
-      .eq('instance_name', instance_name)
-      .eq('workspace_id', workspaceToUse)
+      .eq('connection_id', connectionData.id)
       .maybeSingle();
 
     if (tokenError || !tokenData) {
-      console.error(`❌ [${requestId}] Evolution token not found:`, tokenError);
-      return new Response('Evolution token not found', { 
+      console.error(`❌ [${requestId}] Connection secret not found:`, tokenError);
+      return new Response('Connection secret not found', { 
         status: 404, 
         headers: corsHeaders 
       });
