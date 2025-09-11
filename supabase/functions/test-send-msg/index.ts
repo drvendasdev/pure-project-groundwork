@@ -204,7 +204,6 @@ serve(async (req) => {
       external_id: external_id,
       message_id: external_id, // Add message_id field
       phone_number: contact.phone,
-      content: effectiveContent,
       message_type: message_type,
       sender_type: sender_type || 'agent',
       sender_id: sender_id,
@@ -219,6 +218,11 @@ serve(async (req) => {
       timestamp: new Date().toISOString(),
       request_id: requestId
     };
+
+    // Só incluir content se não estiver vazio
+    if (effectiveContent && effectiveContent.trim() !== '') {
+      n8nPayload.content = effectiveContent;
+    }
     
     console.log(`📤 [${requestId}] Sending to N8N workspace webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
     console.log(`📋 [${requestId}] N8N Payload:`, JSON.stringify(n8nPayload, null, 2));
