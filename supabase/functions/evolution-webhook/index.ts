@@ -197,14 +197,7 @@ serve(async (req) => {
       console.log(`🔍 [${requestId}] data.key:`, JSON.stringify(data.key));
       console.log(`📋 [${requestId}] Extracted message ID: ${messageId}`);
 
-      // Prepare N8N payload - sanitize raw_data to prevent JSON issues
-      const sanitizedRawData = JSON.parse(JSON.stringify(data, (key, value) => {
-        // Remove undefined values and circular references
-        if (value === undefined) return null;
-        if (typeof value === 'function') return '[Function]';
-        return value;
-      }));
-
+      // Prepare N8N payload
       const n8nPayload = {
         direction: 'inbound',
         phone_number: phoneNumber,
@@ -215,7 +208,7 @@ serve(async (req) => {
         instance_name: instanceName,
         workspace_id: connectionData.workspace_id,
         source: 'evolution-webhook',
-        raw_data: sanitizedRawData, // Use sanitized data
+        raw_data: data, // Include original data for N8N processing
         timestamp: new Date().toISOString(),
         request_id: requestId
       };
@@ -224,10 +217,6 @@ serve(async (req) => {
       console.log(`📤 [${requestId}] Forwarding to webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
       
       try {
-        // Validate JSON before sending
-        const payloadString = JSON.stringify(n8nPayload);
-        console.log(`✅ [${requestId}] JSON validation passed, payload size: ${payloadString.length} chars`);
-        
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
@@ -240,34 +229,16 @@ serve(async (req) => {
         const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
           headers,
-          body: payloadString
+          body: JSON.stringify(n8nPayload)
         });
 
         if (!response.ok) {
           console.error(`❌ [${requestId}] N8N webhook failed: ${response.status}`);
-          const errorText = await response.text();
-          console.error(`❌ [${requestId}] N8N response: ${errorText}`);
         } else {
           console.log(`✅ [${requestId}] Successfully forwarded to N8N`);
         }
       } catch (error) {
         console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
-        if (error instanceof SyntaxError) {
-          console.error(`❌ [${requestId}] JSON serialization error - removing raw_data and retrying`);
-          // Retry without raw_data if JSON serialization fails
-          const simplePayload = { ...n8nPayload };
-          delete simplePayload.raw_data;
-          try {
-            await fetch(n8nWebhookUrl, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(simplePayload)
-            });
-            console.log(`✅ [${requestId}] Retry without raw_data succeeded`);
-          } catch (retryError) {
-            console.error(`❌ [${requestId}] Retry also failed:`, retryError);
-          }
-        }
       }
     }
 
