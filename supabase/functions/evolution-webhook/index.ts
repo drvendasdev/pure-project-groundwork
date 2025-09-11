@@ -113,31 +113,117 @@ serve(async (req) => {
       }
     }
 
-    // Handle message events - forward to N8N response handler
+    // Handle message events - forward to workspace-specific webhook
     if (data.data?.key?.remoteJid || data.key?.remoteJid) {
-      console.log(`📱 [${requestId}] Message event detected, forwarding to n8n-response-v2`);
+      console.log(`📱 [${requestId}] Message event detected, finding workspace webhook`);
+      
+      const phoneNumber = extractPhoneFromRemoteJid(
+        data.data?.key?.remoteJid || data.key?.remoteJid
+      );
+      
+      if (!phoneNumber) {
+        console.error(`❌ [${requestId}] Could not extract phone number from remoteJid`);
+        return new Response('Invalid phone number', { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+
+      // Find workspace for this instance
+      const { data: connectionData, error: connectionError } = await supabase
+        .from('connections')
+        .select('workspace_id')
+        .eq('instance_name', instanceName)
+        .maybeSingle();
+
+      if (connectionError || !connectionData) {
+        console.error(`❌ [${requestId}] Could not find workspace for instance ${instanceName}:`, connectionError);
+        return new Response('Instance not found', { 
+          status: 404, 
+          headers: corsHeaders 
+        });
+      }
+
+      // Get workspace webhook configuration
+      const { data: webhookConfig, error: webhookError } = await supabase
+        .from('workspace_webhook_settings')
+        .select('webhook_url, webhook_secret')
+        .eq('workspace_id', connectionData.workspace_id)
+        .maybeSingle();
+
+      let n8nWebhookUrl = null;
+      let webhookSecret = null;
+
+      if (webhookConfig && !webhookError) {
+        n8nWebhookUrl = webhookConfig.webhook_url;
+        webhookSecret = webhookConfig.webhook_secret;
+        console.log(`🎯 [${requestId}] Using workspace-specific webhook for workspace ${connectionData.workspace_id}`);
+      } else {
+        // Fallback to global N8N webhook
+        n8nWebhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
+        console.log(`🔄 [${requestId}] Using global N8N webhook as fallback`);
+      }
+      
+      if (!n8nWebhookUrl) {
+        console.error(`❌ [${requestId}] No webhook URL configured (workspace or global)`);
+        return new Response('No webhook configured', { 
+          status: 500, 
+          headers: corsHeaders 
+        });
+      }
+
+      // Determine sender type from fromMe field
+      const senderType = data.data?.key?.fromMe ? 'agent' : 'contact';
+      
+      // Extract message content
+      const messageData = data.data?.message || data.message || {};
+      const content = messageData.conversation || 
+                     messageData.extendedTextMessage?.text || 
+                     messageData.imageMessage?.caption ||
+                     messageData.videoMessage?.caption ||
+                     messageData.documentMessage?.caption ||
+                     '📱 Mensagem recebida';
+
+      // Prepare N8N payload
+      const n8nPayload = {
+        direction: 'inbound',
+        phone_number: phoneNumber,
+        content: content,
+        sender_type: senderType,
+        message_type: 'text', // Default, N8N can enhance this
+        instance_name: instanceName,
+        workspace_id: connectionData.workspace_id,
+        source: 'evolution-webhook',
+        raw_data: data, // Include original data for N8N processing
+        timestamp: new Date().toISOString(),
+        request_id: requestId
+      };
+
+      console.log(`📤 [${requestId}] Forwarding to webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
       
       try {
-        // Forward to n8n-response-v2 function with proper authentication
-        const response = await fetch(`${supabaseUrl}/functions/v1/n8n-response-v2`, {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add webhook secret if available
+        if (webhookSecret) {
+          headers['X-Webhook-Secret'] = webhookSecret;
+        }
+        
+        const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceRoleKey}`,
-            'X-Secret': Deno.env.get('EVOLUTION_WEBHOOK_SECRET') ?? 'supabase-evolution-webhook'
-          },
-          body: JSON.stringify(data)
+          headers,
+          body: JSON.stringify(n8nPayload)
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`❌ [${requestId}] Failed to forward to n8n-response-v2: ${response.status} - ${errorText}`);
+          console.error(`❌ [${requestId}] N8N webhook failed: ${response.status}`);
         } else {
-          const result = await response.text();
-          console.log(`✅ [${requestId}] Successfully forwarded to n8n-response-v2: ${result}`);
+          console.log(`✅ [${requestId}] Successfully forwarded to N8N`);
         }
       } catch (error) {
-        console.error(`❌ [${requestId}] Error forwarding to n8n-response-v2:`, error);
+        console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
       }
     }
 

@@ -44,7 +44,7 @@ serve(async (req) => {
 
   // 🔐 SECURITY: Accept calls from Evolution or N8N
   const authHeader = req.headers.get('Authorization');
-  const secretHeader = req.headers.get('X-Secret') || req.headers.get('x-evo-secret');
+  const secretHeader = req.headers.get('X-Secret');
 
   // ✅ Unificar AUTH: use SUPABASE_FUNCTIONS_WEBHOOK para chamadas do N8N
   const expectedAuth = `Bearer ${Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK')}`;
@@ -54,17 +54,8 @@ serve(async (req) => {
   const isValidEvolutionCall = secretHeader === expectedSecret;
   const isValidN8NCall = authHeader === expectedAuth;
 
-  // ⚠️ TEMPORÁRIO: Permitir calls sem auth para debug
-  const allowUnauthenticated = Deno.env.get('ALLOW_UNAUTHENTICATED') === 'true';
-
-  if (!isValidEvolutionCall && !isValidN8NCall && !allowUnauthenticated) {
+  if (!isValidEvolutionCall && !isValidN8NCall) {
     console.log(`❌ [${requestId}] Unauthorized access attempt - missing valid auth`);
-    console.log(`🔍 [${requestId}] Headers check:`, {
-      authHeader: authHeader ? 'present' : 'missing',
-      secretHeader: secretHeader ? 'present' : 'missing',
-      expectedAuth: expectedAuth ? 'configured' : 'missing',
-      expectedSecret: expectedSecret ? 'configured' : 'missing'
-    });
     return new Response(JSON.stringify({
       error: 'Unauthorized',
       message: 'This endpoint accepts calls from Evolution API (X-Secret) or N8N (Authorization)',
@@ -75,7 +66,7 @@ serve(async (req) => {
     });
   }
 
-  const requestSource = isValidEvolutionCall ? 'Evolution API' : (isValidN8NCall ? 'N8N' : 'Debug Mode');
+  const requestSource = isValidEvolutionCall ? 'Evolution API' : 'N8N';
   console.log(`✅ [${requestId}] Authorization verified - request from ${requestSource}`);
 
   try {
@@ -286,40 +277,28 @@ serve(async (req) => {
       // encaminhar ao N8N
       if (webhookUrl) {
         console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
-        console.log(`🔑 [${requestId}] Using webhook secret: ${webhookSecret ? 'present' : 'none'}`);
 
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (webhookSecret) headers['Authorization'] = `Bearer ${webhookSecret}`;
-
-        const forwardPayload = {
-          ...payload,
-          workspace_id: workspaceId,
-          source: 'evolution-api',
-          forwarded_by: 'n8n-response-v2',
-          request_id: requestId,
-          processed_data: processedData
-        };
-
-        console.log(`📤 [${requestId}] Payload being sent to N8N:`, JSON.stringify(forwardPayload, null, 2));
 
         try {
           const response = await fetch(webhookUrl, {
             method: 'POST',
             headers,
-            body: JSON.stringify(forwardPayload)
+            body: JSON.stringify({
+              ...payload,
+              workspace_id: workspaceId,
+              source: 'evolution-api',
+              forwarded_by: 'n8n-response-v2',
+              request_id: requestId,
+              processed_data: processedData
+            })
           });
 
-          const responseText = await response.text();
-          console.log(`✅ [${requestId}] N8N webhook response - Status: ${response.status}, Body: ${responseText}`);
-          
-          if (!response.ok) {
-            console.error(`❌ [${requestId}] N8N webhook failed with status ${response.status}: ${responseText}`);
-          }
+          console.log(`✅ [${requestId}] N8N webhook called successfully, status: ${response.status}`);
         } catch (error) {
           console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
         }
-      } else {
-        console.log(`⚠️ [${requestId}] No webhook URL configured for workspace ${workspaceId}`);
       }
 
       return new Response(JSON.stringify({
