@@ -156,14 +156,34 @@ serve(async (req) => {
             contactId = newContact?.id;
           }
 
-          // Find or create conversation
+          // Get connection_id for proper conversation association
+          let resolvedConnectionId = null;
+          const { data: connectionData } = await supabase
+            .from('connections')
+            .select('id')
+            .eq('workspace_id', workspaceId)
+            .eq('instance_name', instanceName)
+            .single();
+          
+          if (connectionData) {
+            resolvedConnectionId = connectionData.id;
+          }
+
+          // Find or create conversation with connection_id
           let conversationId: string;
-          const { data: existingConversation } = await supabase
+          let conversationQuery = supabase
             .from('conversations')
             .select('id')
             .eq('contact_id', contactId)
-            .eq('workspace_id', workspaceId)
-            .maybeSingle();
+            .eq('workspace_id', workspaceId);
+
+          if (resolvedConnectionId) {
+            conversationQuery = conversationQuery.eq('connection_id', resolvedConnectionId);
+          } else {
+            conversationQuery = conversationQuery.is('connection_id', null);
+          }
+
+          const { data: existingConversation } = await conversationQuery.maybeSingle();
 
           if (existingConversation) {
             conversationId = existingConversation.id;
@@ -173,6 +193,7 @@ serve(async (req) => {
               .insert({
                 contact_id: contactId,
                 workspace_id: workspaceId,
+                connection_id: resolvedConnectionId,
                 status: 'open'
               })
               .select('id')
@@ -219,6 +240,8 @@ serve(async (req) => {
             workspace_id: workspaceId,
             conversation_id: conversationId,
             contact_id: contactId,
+            connection_id: resolvedConnectionId,
+            instance: instanceName,
             phone_number: sanitizedPhone
           };
 
@@ -279,6 +302,21 @@ serve(async (req) => {
 
     // N8N Response Processing - Only process if from N8N
     console.log(`🎯 [${requestId}] Processing N8N response payload`);
+    
+    // 🔍 Check if this is a response to an Evolution webhook (inbound message)
+    // If so, don't create a new message to avoid duplication
+    if (payload.source === 'evolution-api' || payload.forwarded_by === 'n8n-response-v2') {
+      console.log(`🚫 [${requestId}] Skipping N8N response processing - already processed from Evolution webhook`);
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'skipped_duplicate',
+        message: 'Message already processed from Evolution webhook',
+        requestId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     
     // 🎯 STRICT PAYLOAD VALIDATION - N8N must send normalized payload
     const { 
