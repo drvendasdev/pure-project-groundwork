@@ -219,9 +219,9 @@ serve(async (req) => {
       request_id: requestId
     };
 
-    // Só incluir content se não estiver vazio
-    if (effectiveContent && effectiveContent.trim() !== '') {
-      n8nPayload.content = effectiveContent;
+    // Só incluir content se houver conteúdo válido
+    if (content && content.trim() !== '') {
+      n8nPayload.content = content.trim();
     }
     
     console.log(`📤 [${requestId}] Sending to N8N workspace webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
