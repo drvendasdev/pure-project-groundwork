@@ -101,11 +101,54 @@ serve(async (req) => {
       
       // Para mídia, verificar se temos URL ou precisamos enviar base64
       if (fileUrl) {
+        let processedFileUrl = fileUrl;
+        
+        // Check if the URL is from Supabase Storage and needs processing
+        if (fileUrl.includes('supabase.co/storage/v1/object/public/')) {
+          console.log(`🔄 [${messageId}] Processing Supabase Storage URL through media processor`);
+          
+          try {
+            // Call n8n-media-processor to handle the Supabase Storage URL
+            const mediaProcessorResponse = await supabase.functions.invoke('n8n-media-processor', {
+              body: {
+                messageId: messageId,
+                mediaUrl: fileUrl,
+                fileName: fileName,
+                mimeType: messageType === 'image' ? 'image/jpeg' : 'application/octet-stream',
+                direction: 'outbound'
+              }
+            });
+
+            if (mediaProcessorResponse.error) {
+              console.error(`❌ [${messageId}] Media processor error:`, mediaProcessorResponse.error);
+              return new Response(JSON.stringify({
+                success: false,
+                error: 'Failed to process media file',
+                details: mediaProcessorResponse.error
+              }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
+            if (mediaProcessorResponse.data?.data?.publicUrl) {
+              processedFileUrl = mediaProcessorResponse.data.data.publicUrl;
+              console.log(`✅ [${messageId}] Media processed successfully, using processed URL`);
+            } else {
+              console.log(`⚠️ [${messageId}] Media processor didn't return processed URL, using original`);
+            }
+          } catch (processorError) {
+            console.error(`❌ [${messageId}] Error calling media processor:`, processorError);
+            // Continue with original URL as fallback
+            console.log(`🔄 [${messageId}] Falling back to original URL`);
+          }
+        }
+
         payload = {
           number: phoneNumber,
           mediaMessage: {
             mediatype: messageType,
-            media: fileUrl,
+            media: processedFileUrl,
             caption: content || '',
             fileName: fileName || `file_${Date.now()}`
           }
