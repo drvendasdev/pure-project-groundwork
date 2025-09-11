@@ -328,10 +328,7 @@ serve(async (req) => {
       
       const { data: existingMessage, error: findError } = await supabase
         .from('messages')
-        .select(`
-          id, conversation_id, workspace_id, content, file_url, file_name, mime_type, metadata,
-          conversations(contact_id)
-        `)
+        .select('id, conversation_id, workspace_id, content, file_url, file_name, mime_type, metadata')
         .eq('id', external_id)
         .maybeSingle();
 
@@ -377,13 +374,21 @@ serve(async (req) => {
         }
 
         console.log(`✅ [${requestId}] Message updated successfully: ${external_id}`);
+        
+        // Get contact_id from conversation
+        const { data: conversation } = await supabase
+          .from('conversations')
+          .select('contact_id')
+          .eq('id', existingMessage.conversation_id)
+          .single();
+        
         return new Response(JSON.stringify({
           success: true,
           action: 'updated',
           message_id: external_id,
           workspace_id: existingMessage.workspace_id,
           conversation_id: existingMessage.conversation_id,
-          contact_id: existingMessage.conversations?.contact_id,
+          contact_id: conversation?.contact_id,
           requestId
         }), {
           status: 200,
