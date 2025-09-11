@@ -102,6 +102,27 @@ serve(async (req) => {
 
     console.log(`✅ [${requestId}] Contact found: ${contact.phone}`);
 
+    // Fetch connection details to get instance_name
+    console.log(`🔍 [${requestId}] Fetching connection: ${conversation.connection_id}`);
+    const { data: connection, error: connectionError } = await supabase
+      .from('connections')
+      .select('instance_name')
+      .eq('id', conversation.connection_id)
+      .single();
+
+    if (connectionError || !connection) {
+      console.log(`❌ [${requestId}] Connection error:`, connectionError);
+      return new Response(JSON.stringify({
+        error: 'Connection not found',
+        details: connectionError?.message
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`✅ [${requestId}] Connection found: ${connection.instance_name}`);
+
     // Get N8N webhook URL from workspace configuration
     const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${conversation.workspace_id}`;
     
@@ -142,6 +163,7 @@ serve(async (req) => {
       conversation_id: conversation_id,
       connection_id: conversation.connection_id,
       contact_id: conversation.contact_id,
+      instance: connection.instance_name,
       source: 'test-send-msg',
       timestamp: new Date().toISOString(),
       request_id: requestId
