@@ -113,9 +113,9 @@ serve(async (req) => {
       }
     }
 
-    // Handle message events - forward to N8N only
+    // Handle message events - forward to workspace-specific webhook
     if (data.data?.key?.remoteJid || data.key?.remoteJid) {
-      console.log(`📱 [${requestId}] Message event detected, forwarding to N8N`);
+      console.log(`📱 [${requestId}] Message event detected, finding workspace webhook`);
       
       const phoneNumber = extractPhoneFromRemoteJid(
         data.data?.key?.remoteJid || data.key?.remoteJid
@@ -129,12 +129,44 @@ serve(async (req) => {
         });
       }
 
-      // Get N8N inbound webhook URL
-      const n8nWebhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
+      // Find workspace for this instance
+      const { data: connectionData, error: connectionError } = await supabase
+        .from('connections')
+        .select('workspace_id')
+        .eq('instance_name', instanceName)
+        .maybeSingle();
+
+      if (connectionError || !connectionData) {
+        console.error(`❌ [${requestId}] Could not find workspace for instance ${instanceName}:`, connectionError);
+        return new Response('Instance not found', { 
+          status: 404, 
+          headers: corsHeaders 
+        });
+      }
+
+      // Get workspace webhook configuration
+      const { data: webhookConfig, error: webhookError } = await supabase
+        .from('workspace_webhook_settings')
+        .select('webhook_url, webhook_secret')
+        .eq('workspace_id', connectionData.workspace_id)
+        .maybeSingle();
+
+      let n8nWebhookUrl = null;
+      let webhookSecret = null;
+
+      if (webhookConfig && !webhookError) {
+        n8nWebhookUrl = webhookConfig.webhook_url;
+        webhookSecret = webhookConfig.webhook_secret;
+        console.log(`🎯 [${requestId}] Using workspace-specific webhook for workspace ${connectionData.workspace_id}`);
+      } else {
+        // Fallback to global N8N webhook
+        n8nWebhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
+        console.log(`🔄 [${requestId}] Using global N8N webhook as fallback`);
+      }
       
       if (!n8nWebhookUrl) {
-        console.error(`❌ [${requestId}] N8N_INBOUND_WEBHOOK_URL not configured`);
-        return new Response('N8N webhook not configured', { 
+        console.error(`❌ [${requestId}] No webhook URL configured (workspace or global)`);
+        return new Response('No webhook configured', { 
           status: 500, 
           headers: corsHeaders 
         });
@@ -160,20 +192,28 @@ serve(async (req) => {
         sender_type: senderType,
         message_type: 'text', // Default, N8N can enhance this
         instance_name: instanceName,
+        workspace_id: connectionData.workspace_id,
         source: 'evolution-webhook',
         raw_data: data, // Include original data for N8N processing
         timestamp: new Date().toISOString(),
         request_id: requestId
       };
 
-      console.log(`📤 [${requestId}] Forwarding to N8N: ${n8nWebhookUrl.substring(0, 50)}...`);
+      console.log(`📤 [${requestId}] Forwarding to webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
       
       try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add webhook secret if available
+        if (webhookSecret) {
+          headers['X-Webhook-Secret'] = webhookSecret;
+        }
+        
         const response = await fetch(n8nWebhookUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify(n8nPayload)
         });
 
