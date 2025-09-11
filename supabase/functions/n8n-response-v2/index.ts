@@ -169,25 +169,29 @@ serve(async (req) => {
             resolvedConnectionId = connectionData.id;
           }
 
-          // Find or create conversation with connection_id
+          // Find existing conversation for this contact and workspace (any connection)
           let conversationId: string;
-          let conversationQuery = supabase
+          const { data: existingConversation } = await supabase
             .from('conversations')
-            .select('id')
+            .select('id, connection_id')
             .eq('contact_id', contactId)
-            .eq('workspace_id', workspaceId);
-
-          if (resolvedConnectionId) {
-            conversationQuery = conversationQuery.eq('connection_id', resolvedConnectionId);
-          } else {
-            conversationQuery = conversationQuery.is('connection_id', null);
-          }
-
-          const { data: existingConversation } = await conversationQuery.maybeSingle();
+            .eq('workspace_id', workspaceId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
           if (existingConversation) {
             conversationId = existingConversation.id;
+            
+            // Update connection_id if it's different (link conversation to current connection)
+            if (resolvedConnectionId && existingConversation.connection_id !== resolvedConnectionId) {
+              await supabase
+                .from('conversations')
+                .update({ connection_id: resolvedConnectionId })
+                .eq('id', conversationId);
+            }
           } else {
+            // Create new conversation only if none exists for this contact
             const { data: newConversation } = await supabase
               .from('conversations')
               .insert({
@@ -302,21 +306,6 @@ serve(async (req) => {
 
     // N8N Response Processing - Only process if from N8N
     console.log(`🎯 [${requestId}] Processing N8N response payload`);
-    
-    // 🔍 Check if this is a response to an Evolution webhook (inbound message)
-    // If so, don't create a new message to avoid duplication
-    if (payload.source === 'evolution-api' || payload.forwarded_by === 'n8n-response-v2') {
-      console.log(`🚫 [${requestId}] Skipping N8N response processing - already processed from Evolution webhook`);
-      return new Response(JSON.stringify({
-        success: true,
-        action: 'skipped_duplicate',
-        message: 'Message already processed from Evolution webhook',
-        requestId
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
     
     // 🎯 STRICT PAYLOAD VALIDATION - N8N must send normalized payload
     const { 
@@ -516,43 +505,16 @@ serve(async (req) => {
       console.log(`✅ [${requestId}] Created new contact: ${contactId}`);
     }
 
-    // Find or create conversation
+    // Find existing conversation for this contact and workspace (prioritize reusing any existing conversation)
     let conversationId: string;
-    
-    // For inbound messages without explicit connection_id, try to get it from instance
-    let resolvedConnectionId = connection_id;
-    
-    if (!resolvedConnectionId && direction === 'inbound') {
-      // Try to find connection_id from the instance that received the message
-      // This could come from the Evolution webhook payload or be inferred from the workspace
-      const { data: connectionData } = await supabase
-        .from('connections')
-        .select('id')
-        .eq('workspace_id', workspace_id)
-        .eq('status', 'connected')
-        .limit(1)
-        .single();
-      
-      if (connectionData) {
-        resolvedConnectionId = connectionData.id;
-        console.log(`🔗 [${requestId}] Resolved connection_id from workspace: ${resolvedConnectionId}`);
-      }
-    }
-    
-    let conversationQuery = supabase
+    const { data: existingConversation, error: conversationFindError } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, connection_id')
       .eq('contact_id', contactId)
-      .eq('workspace_id', workspace_id);
-
-    if (resolvedConnectionId) {
-      conversationQuery = conversationQuery.eq('connection_id', resolvedConnectionId);
-    } else {
-      // If no connection_id, look for conversations without connection_id
-      conversationQuery = conversationQuery.is('connection_id', null);
-    }
-
-    const { data: existingConversation, error: conversationFindError } = await conversationQuery.maybeSingle();
+      .eq('workspace_id', workspace_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (conversationFindError) {
       console.error(`❌ [${requestId}] Error finding conversation:`, conversationFindError);
@@ -569,14 +531,23 @@ serve(async (req) => {
     if (existingConversation) {
       conversationId = existingConversation.id;
       console.log(`✅ [${requestId}] Found existing conversation: ${conversationId}`);
+      
+      // Update connection_id if provided and different (link conversation to current connection)
+      if (connection_id && existingConversation.connection_id !== connection_id) {
+        await supabase
+          .from('conversations')
+          .update({ connection_id: connection_id })
+          .eq('id', conversationId);
+        console.log(`🔗 [${requestId}] Updated conversation connection_id: ${connection_id}`);
+      }
     } else {
-      // Create new conversation
+      // Create new conversation only if none exists for this contact
       const { data: newConversation, error: conversationCreateError } = await supabase
         .from('conversations')
         .insert({
           contact_id: contactId,
           workspace_id: workspace_id,
-          connection_id: resolvedConnectionId,
+          connection_id: connection_id,
           status: 'open'
         })
         .select('id')
