@@ -259,7 +259,7 @@ serve(async (req) => {
         }
       }
 
-      // Always return processed data or basic structure
+      // Always return processed data or basic structure  
       return new Response(JSON.stringify({
         success: true,
         action: 'processed_and_forwarded',
@@ -267,6 +267,8 @@ serve(async (req) => {
         workspace_id: processedData?.workspace_id || workspaceId,
         conversation_id: processedData?.conversation_id,
         contact_id: processedData?.contact_id,
+        connection_id: processedData?.connection_id,
+        instance: processedData?.instance,
         phone_number: processedData?.phone_number,
         requestId
       }), {
@@ -613,6 +615,20 @@ serve(async (req) => {
       console.warn(`⚠️ [${requestId}] Failed to update conversation timestamp:`, conversationUpdateError);
     }
 
+    // Get connection details for response
+    let instanceInfo = null;
+    if (resolvedConnectionId) {
+      const { data: connectionData } = await supabase
+        .from('connections')
+        .select('instance_name')
+        .eq('id', resolvedConnectionId)
+        .single();
+      
+      if (connectionData) {
+        instanceInfo = connectionData.instance_name;
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       action: 'created',
@@ -620,6 +636,9 @@ serve(async (req) => {
       workspace_id: workspace_id,
       conversation_id: conversationId,
       contact_id: contactId,
+      connection_id: resolvedConnectionId,
+      instance: instanceInfo,
+      phone_number: phone_number,
       requestId
     }), {
       status: 201,
