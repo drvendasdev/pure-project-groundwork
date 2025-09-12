@@ -121,7 +121,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     }
     
     // More permissive - try to use any URL that looks like a file
-    if (normalizedUrl.length > 10 && /\.(jpg|jpeg|png|gif|webp|mp4|mp3|ogg|pdf)$/i.test(normalizedUrl)) {
+    if (normalizedUrl.length > 10 && /\.(jpg|jpeg|png|gif|webp|mp4|mp3|ogg|pdf|avi|mov|wmv)$/i.test(normalizedUrl)) {
       console.log('⚠️ File-like URL detected - attempting to use:', normalizedUrl);
       return normalizedUrl;
     }
@@ -132,7 +132,17 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
   // Força renderização como imagem se o arquivo terminar com extensões de imagem
   const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
-  const effectiveMessageType = (messageType === 'document' && isImageFile) ? 'image' : messageType;
+  const isVideoFile = /\.(mp4|avi|mov|wmv|webm|mkv)$/i.test(fileName || '') || /\.(mp4|avi|mov|wmv|webm|mkv)$/i.test(fileUrl);
+  
+  // Força renderização baseada na extensão do arquivo
+  let effectiveMessageType = messageType;
+  if (messageType === 'document') {
+    if (isImageFile) {
+      effectiveMessageType = 'image';
+    } else if (isVideoFile) {
+      effectiveMessageType = 'video';
+    }
+  }
   
   // Verifica se URL é válida antes de renderizar
   const validImageUrl = getValidImageUrl(fileUrl);
@@ -147,13 +157,15 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     document.body.removeChild(link);
   };
   
-  console.log('MediaViewer renderização:', {
+  console.log('📹 MediaViewer renderização:', {
     originalType: messageType,
     effectiveType: effectiveMessageType,
     fileName,
     fileUrl,
     isImageFile,
-    validImageUrl
+    validImageUrl,
+    isVideoType: effectiveMessageType === 'video',
+    hasValidUrl: !!validImageUrl
   });
 
   const renderMediaContent = () => {
@@ -271,6 +283,32 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         );
 
       case 'video':
+        console.log('🎥 Renderizando vídeo:', {
+          validImageUrl,
+          fileUrl,
+          finalUrl: validImageUrl || fileUrl,
+          hasValidUrl: !!(validImageUrl || fileUrl)
+        });
+        
+        if (!validImageUrl && !fileUrl) {
+          return (
+            <div className="flex items-center gap-3 p-3 bg-destructive/10 rounded-lg max-w-[300px] border border-destructive/20">
+              <Video className="h-8 w-8 text-destructive" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm text-destructive">
+                  {fileName || 'Vídeo'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  URL não encontrada
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={handleDownload}>
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        }
+        
         return (
           <div className="relative group max-w-[300px]">
             <video
@@ -278,6 +316,18 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
               controls
               className="w-full rounded-lg"
               style={{ maxHeight: '200px' }}
+              onError={(e) => {
+                console.error('❌ Erro ao carregar vídeo:', {
+                  src: validImageUrl || fileUrl,
+                  error: e
+                });
+              }}
+              onLoadStart={() => {
+                console.log('🔄 Carregando vídeo:', validImageUrl || fileUrl);
+              }}
+              onCanPlay={() => {
+                console.log('✅ Vídeo pronto para reproduzir');
+              }}
             >
               Seu navegador não suporta o elemento de vídeo.
             </video>
