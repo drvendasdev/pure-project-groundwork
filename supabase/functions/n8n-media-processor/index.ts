@@ -145,6 +145,8 @@ serve(async (req) => {
       'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/webm',
       // Documentos
       'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-powerpoint',
       'text/plain', 'application/json', 'application/zip'
     ];
 
