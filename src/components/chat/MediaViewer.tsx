@@ -134,13 +134,20 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     return normalizedUrl; // Return anyway - let browser/network handle the failure
   }, []);
 
-  // Detectar tipos de arquivos baseado na extensão
+  // Detectar tipos de arquivos baseado na extensão ou conteúdo da URL
   const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
-  const isPdfFile = /\.pdf$/i.test(fileName || '') || /\.pdf$/i.test(fileUrl);
+  const isPdfFile = /\.pdf$/i.test(fileName || '') || /\.pdf$/i.test(fileUrl) || fileName?.toLowerCase().includes('pdf') || fileUrl?.toLowerCase().includes('pdf');
   const isExcelFile = /\.(xlsx|xls)$/i.test(fileName || '') || /\.(xlsx|xls)$/i.test(fileUrl);
   const isWordFile = /\.(docx|doc)$/i.test(fileName || '') || /\.(docx|doc)$/i.test(fileUrl);
   const isPowerPointFile = /\.(pptx|ppt)$/i.test(fileName || '') || /\.(pptx|ppt)$/i.test(fileUrl);
-  const effectiveMessageType = (messageType === 'document' && isImageFile) ? 'image' : messageType;
+  
+  // Lógica de tipo efetivo mais robusta
+  let effectiveMessageType = messageType;
+  if (messageType === 'document' && isImageFile) {
+    effectiveMessageType = 'image';
+  } else if ((messageType === 'document' || messageType === 'file') && isPdfFile) {
+    effectiveMessageType = 'document'; // Garantir que PDFs sejam tratados como document
+  }
   
   // Verifica se URL é válida antes de renderizar
   const validImageUrl = getValidImageUrl(fileUrl);
@@ -167,6 +174,22 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     isPowerPointFile,
     validImageUrl
   });
+
+  // Log específico para debug de PDFs
+  if (isPdfFile || messageType === 'document' || fileName?.includes('.pdf') || fileUrl?.includes('.pdf')) {
+    console.log('🔍 PDF DEBUG:', {
+      messageType,
+      fileName,
+      fileUrl,
+      isPdfFile,
+      isPdfFileByName: /\.pdf$/i.test(fileName || ''),
+      isPdfFileByUrl: /\.pdf$/i.test(fileUrl || ''),
+      messageTypeIsDocument: messageType === 'document',
+      messageTypeIsFile: messageType === 'file',
+      effectiveMessageType,
+      willRenderAsPdf: (messageType === 'document' || messageType === 'file') && isPdfFile
+    });
+  }
 
   const renderMediaContent = () => {
 
