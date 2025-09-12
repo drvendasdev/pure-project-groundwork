@@ -141,8 +141,8 @@ serve(async (req) => {
       'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml',
       // Vídeos
       'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/3gpp',
-      // Áudios
-      'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/opus', 'audio/webm',
+      // Áudios - OGG não é suportado pelo Supabase Storage
+      'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/webm',
       // Documentos
       'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain', 'application/json', 'application/zip'
@@ -159,6 +159,13 @@ serve(async (req) => {
     if (mimeType) {
       finalMimeType = normalizeMimeType(mimeType);
       console.log('✅ MIME type normalizado:', finalMimeType);
+      
+      // Converter OGG para M4A pois Supabase não suporta OGG
+      if (finalMimeType === 'audio/ogg' || finalMimeType === 'audio/opus') {
+        console.log('🔄 Convertendo audio/ogg para audio/mp4 (compatível com Supabase)');
+        finalMimeType = 'audio/mp4';
+        fileExtension = 'm4a';
+      }
     }
 
     // Estratégia de detecção hierárquica
@@ -173,7 +180,7 @@ serve(async (req) => {
       else if (finalMimeType.includes('webp')) fileExtension = 'webp';
       else if (finalMimeType.includes('mp4')) fileExtension = 'mp4';
       else if (finalMimeType.includes('quicktime')) fileExtension = 'mov';
-      else if (finalMimeType.includes('ogg') || finalMimeType.includes('opus')) fileExtension = 'ogg';
+      else if (finalMimeType.includes('ogg') || finalMimeType.includes('opus')) fileExtension = 'm4a'; // Convertido para compatibilidade
       else if (finalMimeType.includes('mpeg') && finalMimeType.startsWith('audio/')) fileExtension = 'mp3';
       else if (finalMimeType.includes('wav')) fileExtension = 'wav';
       else if (finalMimeType.includes('aac')) fileExtension = 'aac';
