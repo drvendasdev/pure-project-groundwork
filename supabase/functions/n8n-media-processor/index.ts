@@ -206,41 +206,9 @@ serve(async (req) => {
       }
     }
 
-    // Validação final do MIME type - mais permissiva
-    // Aceita automaticamente tipos que começam com image/, video/ ou audio/
-    const isValidMime = finalMimeType.startsWith('image/') || 
-                       finalMimeType.startsWith('video/') || 
-                       finalMimeType.startsWith('audio/') ||
-                       supportedMimeTypes.includes(finalMimeType);
-    
-    console.log('🔍 Validação MIME - DEBUG COMPLETO:', {
-      finalMimeType,
-      originalMimeType: mimeType,
-      startsWithImage: finalMimeType.startsWith('image/'),
-      startsWithVideo: finalMimeType.startsWith('video/'),
-      startsWithAudio: finalMimeType.startsWith('audio/'),
-      inSupportedList: supportedMimeTypes.includes(finalMimeType),
-      isValidMime,
-      supportedMimeTypes: supportedMimeTypes,
-      xlsxInList: supportedMimeTypes.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
-      exactMatch: finalMimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    });
-    
-    if (!isValidMime) {
-      console.error('❌ MIME type rejeitado - DEBUG DETALHADO:', {
-        original: mimeType,
-        normalized: finalMimeType,
-        fileName,
-        isValidChecks: {
-          startsWithImage: finalMimeType.startsWith('image/'),
-          startsWithVideo: finalMimeType.startsWith('video/'),
-          startsWithAudio: finalMimeType.startsWith('audio/'),
-          inSupportedList: supportedMimeTypes.includes(finalMimeType)
-        },
-        supportedListContent: supportedMimeTypes
-      });
-      throw new Error(`mime type ${finalMimeType} is not supported`);
-    }
+    // Remover validação de MIME type - deixar o Supabase Storage decidir
+    // O Supabase Storage aceita qualquer tipo de arquivo
+    console.log('📁 MIME type que será usado:', finalMimeType, 'para arquivo:', fileName);
 
     console.log('✅ MIME type final:', finalMimeType, 'Extensão:', fileExtension);
 
