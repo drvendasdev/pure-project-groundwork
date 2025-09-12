@@ -201,9 +201,9 @@ serve(async (req) => {
                 const { token, evolution_url } = connectionData.connection_secrets[0];
                 
                 // Fetch profile image from Evolution API
-                console.log(`🔗 [${requestId}] Fetching profile from: ${evolution_url}/chat/fetchProfile/${instance}`);
+                console.log(`🔗 [${requestId}] Fetching profile from: ${evolution_url}/chat/findProfile/${instance}`);
                 
-                const profileResponse = await fetch(`${evolution_url}/chat/fetchProfile/${instance}`, {
+                const profileResponse = await fetch(`${evolution_url}/chat/findProfile/${instance}`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
