@@ -4,6 +4,7 @@ import { Download, FileText, Image, Music, Video, AlertCircle, Loader2, Eye } fr
 import { AudioPlayer } from './AudioPlayer';
 import { ImageModal } from './ImageModal';
 import { PdfModal } from './PdfModal';
+import { VideoModal } from './VideoModal';
 
 interface MediaViewerProps {
   fileUrl: string;
@@ -20,6 +21,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 }) => {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -286,8 +288,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             <video
               src={validImageUrl || fileUrl}
               controls
-              className="w-full rounded-lg"
+              className="w-full rounded-lg cursor-pointer"
               style={{ maxHeight: '200px' }}
+              onClick={() => setIsVideoModalOpen(true)}
             >
               Seu navegador não suporta o elemento de vídeo.
             </video>
@@ -295,7 +298,10 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
               size="sm"
               variant="secondary"
               className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleDownload}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload();
+              }}
             >
               <Download className="h-4 w-4" />
             </Button>
@@ -493,6 +499,12 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         isOpen={isPdfModalOpen}
         onClose={() => setIsPdfModalOpen(false)}
         pdfUrl={validImageUrl || fileUrl}
+        fileName={fileName}
+      />
+      <VideoModal
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        videoUrl={validImageUrl || fileUrl}
         fileName={fileName}
       />
     </div>
