@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messageId, mediaUrl, base64, fileName, mimeType, conversationId, phoneNumber, direction = 'inbound' } = await req.json();
+    const { messageId, mediaUrl, base64, fileName, mimeType, conversationId, phoneNumber, workspaceId, direction = 'inbound' } = await req.json();
     console.log('N8N Media Processor - Processando mídia:', { messageId, hasMediaUrl: !!mediaUrl, hasBase64: !!base64, fileName, mimeType, direction });
 
     const supabase = createClient(
@@ -319,8 +319,12 @@ serve(async (req) => {
       const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
       
       let updateQuery;
+      let updateKey = isValidUUID ? 'id' : 'external_id';
+      
+      console.log(`Usando campo ${updateKey} para buscar mensagem`);
+      
+      // Primeiro, tentar atualizar a mensagem existente
       if (isValidUUID) {
-        console.log('MessageId é um UUID válido, usando campo id');
         updateQuery = supabase
           .from('messages')
           .update({ 
@@ -336,7 +340,6 @@ serve(async (req) => {
           })
           .eq('id', messageId);
       } else {
-        console.log('MessageId não é UUID válido, usando campo external_id');
         updateQuery = supabase
           .from('messages')
           .update({ 
@@ -355,18 +358,51 @@ serve(async (req) => {
 
       const { data: updateData, error: updateError } = await updateQuery;
 
-      if (updateError) {
-        console.error('Erro ao atualizar mensagem:', updateError);
-        console.log('Tentando buscar mensagem para debug...');
+      if (updateError || !updateData || updateData.length === 0) {
+        console.log('❌ Mensagem não encontrada para atualização, tentando criar nova...');
         
-        // Debug: tentar encontrar a mensagem
-        const { data: searchData, error: searchError } = await supabase
-          .from('messages')
-          .select('id, external_id, message_type, file_url')
-          .eq('external_id', messageId)
-          .limit(5);
+        // Se a mensagem não existe e temos dados suficientes, criar uma nova
+        if (conversationId && workspaceId) {
+          console.log('💡 Criando nova mensagem pois não foi encontrada...');
           
-        console.log('Resultado da busca de debug:', { searchData, searchError, messageId });
+          const newMessageData = {
+            id: isValidUUID ? messageId : undefined,
+            external_id: isValidUUID ? undefined : messageId,
+            content: `📎 ${computedMessageType === 'document' ? 'Documento' : 'Arquivo'}`,
+            message_type: computedMessageType,
+            file_url: publicUrl,
+            file_name: finalFileName,
+            mime_type: finalMimeType,
+            sender_type: 'contact',
+            conversation_id: conversationId,
+            workspace_id: workspaceId,
+            metadata: {
+              original_url: mediaUrl,
+              storage_path: storagePath,
+              processed_by: 'n8n',
+              created_by_processor: true
+            }
+          };
+          
+          const { data: insertData, error: insertError } = await supabase
+            .from('messages')
+            .insert(newMessageData)
+            .select();
+            
+          if (insertError) {
+            console.error('❌ Erro ao criar nova mensagem:', insertError);
+            throw new Error(`Erro ao criar mensagem: ${insertError.message}`);
+          } else {
+            console.log('✅ Nova mensagem criada com sucesso:', insertData[0]?.id);
+          }
+        } else {
+          console.log('⚠️ AVISO: Não foi possível criar mensagem - faltam conversationId ou workspaceId no payload');
+          console.log('Dados necessários:', { conversationId, workspaceId, messageId });
+          
+          if (updateError) {
+            console.error('Erro original de atualização:', updateError);
+          }
+        }
       } else {
         console.log('✅ Mensagem atualizada com sucesso - campos atualizados:', {
           messageId,
