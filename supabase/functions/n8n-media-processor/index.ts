@@ -222,6 +222,15 @@ serve(async (req) => {
 
     console.log('✅ MIME type final:', finalMimeType, 'Extensão:', fileExtension);
 
+    // Função para sanitizar nome do arquivo
+    const sanitizeFileName = (name: string) => {
+      return name
+        .replace(/[^\w\s.-]/g, '') // Remove caracteres especiais, emojis, etc
+        .replace(/\s+/g, '_') // Substitui espaços por underscore
+        .replace(/_{2,}/g, '_') // Remove underscores duplicados
+        .trim();
+    };
+
     // Gerar nome único para evitar conflitos
     const timestamp = Date.now();
     const randomId = crypto.randomUUID().split('-')[0]; // Primeiros 8 caracteres do UUID
@@ -231,7 +240,7 @@ serve(async (req) => {
       // Extrair extensão do arquivo original
       const fileParts = fileName.split('.');
       const extension = fileParts.length > 1 ? fileParts.pop() : fileExtension;
-      const baseName = fileParts.join('.') || 'file';
+      const baseName = sanitizeFileName(fileParts.join('.')) || 'file';
       finalFileName = `${timestamp}_${randomId}_${baseName}.${extension}`;
     } else {
       finalFileName = `${timestamp}_${randomId}.${fileExtension}`;
