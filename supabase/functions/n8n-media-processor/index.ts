@@ -160,11 +160,11 @@ serve(async (req) => {
       finalMimeType = normalizeMimeType(mimeType);
       console.log('✅ MIME type normalizado:', finalMimeType);
       
-      // Converter OGG para M4A pois Supabase não suporta OGG
+      // Converter OGG para MP3 pois Supabase não suporta OGG
       if (finalMimeType === 'audio/ogg' || finalMimeType === 'audio/opus') {
-        console.log('🔄 Convertendo audio/ogg para audio/mp4 (compatível com Supabase)');
-        finalMimeType = 'audio/mp4';
-        fileExtension = 'm4a';
+        console.log('🔄 Convertendo audio/ogg para audio/mpeg (MP3)');
+        finalMimeType = 'audio/mpeg';
+        fileExtension = 'mp3';
       }
     }
 
@@ -180,7 +180,7 @@ serve(async (req) => {
       else if (finalMimeType.includes('webp')) fileExtension = 'webp';
       else if (finalMimeType.includes('mp4')) fileExtension = 'mp4';
       else if (finalMimeType.includes('quicktime')) fileExtension = 'mov';
-      else if (finalMimeType.includes('ogg') || finalMimeType.includes('opus')) fileExtension = 'm4a'; // Convertido para compatibilidade
+      else if (finalMimeType.includes('ogg') || finalMimeType.includes('opus')) fileExtension = 'mp3'; // Convertido para MP3
       else if (finalMimeType.includes('mpeg') && finalMimeType.startsWith('audio/')) fileExtension = 'mp3';
       else if (finalMimeType.includes('wav')) fileExtension = 'wav';
       else if (finalMimeType.includes('aac')) fileExtension = 'aac';
