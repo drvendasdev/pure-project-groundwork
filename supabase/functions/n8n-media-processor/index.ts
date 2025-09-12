@@ -73,49 +73,140 @@ serve(async (req) => {
     
     console.log('Arquivo obtido com sucesso - Tamanho:', uint8Array.length, 'bytes');
 
+    // Função para normalizar MIME type removendo parâmetros extras
+    function normalizeMimeType(mimeType: string): string {
+      if (!mimeType) return '';
+      // Remove parâmetros como "codecs=opus", "boundary=xxx", etc.
+      return mimeType.split(';')[0].trim().toLowerCase();
+    }
+
     // Função para detectar MIME type correto baseado na extensão
     function getMimeTypeByExtension(filename: string): string {
       const ext = filename.toLowerCase().split('.').pop() || '';
       const mimeMap: { [key: string]: string } = {
+        // Imagens
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
         'png': 'image/png',
         'gif': 'image/gif',
         'webp': 'image/webp',
+        'bmp': 'image/bmp',
+        'svg': 'image/svg+xml',
+        'ico': 'image/x-icon',
+        
+        // Vídeos
         'mp4': 'video/mp4',
         'mov': 'video/quicktime',
         'avi': 'video/x-msvideo',
+        'mkv': 'video/x-matroska',
+        'webm': 'video/webm',
+        '3gp': 'video/3gpp',
+        'flv': 'video/x-flv',
+        'wmv': 'video/x-ms-wmv',
+        
+        // Áudios
         'mp3': 'audio/mpeg',
         'ogg': 'audio/ogg',
         'wav': 'audio/wav',
+        'm4a': 'audio/mp4',
+        'aac': 'audio/aac',
+        'flac': 'audio/flac',
+        'wma': 'audio/x-ms-wma',
+        'opus': 'audio/opus',
+        
+        // Documentos
         'pdf': 'application/pdf',
         'doc': 'application/msword',
         'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'txt': 'text/plain'
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint',
+        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'txt': 'text/plain',
+        'csv': 'text/csv',
+        'json': 'application/json',
+        'xml': 'text/xml',
+        'zip': 'application/zip',
+        'rar': 'application/x-rar-compressed',
+        '7z': 'application/x-7z-compressed'
       };
       return mimeMap[ext] || 'application/octet-stream';
     }
 
-    // Determinar MIME type correto e extensão
+    // Lista de MIME types suportados pelo Supabase Storage
+    const supportedMimeTypes = [
+      // Imagens
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml',
+      // Vídeos
+      'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/3gpp',
+      // Áudios
+      'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/opus',
+      // Documentos
+      'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain', 'application/json', 'application/zip'
+    ];
+
+    function validateMimeType(mimeType: string): boolean {
+      const normalized = normalizeMimeType(mimeType);
+      return supportedMimeTypes.includes(normalized) || normalized.startsWith('image/') || 
+             normalized.startsWith('video/') || normalized.startsWith('audio/');
+    }
+
+    // Determinar MIME type correto e extensão com lógica melhorada
     let finalMimeType = mimeType;
     let fileExtension = 'unknown';
+    
+    console.log('Processando MIME type - Original:', mimeType, 'Arquivo:', fileName);
 
-    if (mimeType && mimeType !== 'application/octet-stream') {
-      // Usar MIME type fornecido se não for o genérico
-      fileExtension = mimeType.split('/')[1] || 'unknown';
-      finalMimeType = mimeType;
+    // Primeiro, normalizar o MIME type removendo parâmetros
+    if (mimeType) {
+      finalMimeType = normalizeMimeType(mimeType);
+    }
+
+    // Estratégia de detecção hierárquica
+    if (finalMimeType && finalMimeType !== 'application/octet-stream' && validateMimeType(finalMimeType)) {
+      // MIME type fornecido é válido e suportado
+      console.log('✅ Usando MIME type fornecido (normalizado):', finalMimeType);
+      
+      // Detectar extensão baseada no MIME type
+      if (finalMimeType.includes('jpeg')) fileExtension = 'jpg';
+      else if (finalMimeType.includes('png')) fileExtension = 'png';
+      else if (finalMimeType.includes('gif')) fileExtension = 'gif';
+      else if (finalMimeType.includes('webp')) fileExtension = 'webp';
+      else if (finalMimeType.includes('mp4')) fileExtension = 'mp4';
+      else if (finalMimeType.includes('quicktime')) fileExtension = 'mov';
+      else if (finalMimeType.includes('ogg')) fileExtension = 'ogg';
+      else if (finalMimeType.includes('mpeg') && finalMimeType.startsWith('audio/')) fileExtension = 'mp3';
+      else if (finalMimeType.includes('wav')) fileExtension = 'wav';
+      else if (finalMimeType.includes('aac')) fileExtension = 'aac';
+      else if (finalMimeType.includes('opus')) fileExtension = 'ogg'; // Opus geralmente em container OGG
+      else fileExtension = finalMimeType.split('/')[1]?.split('+')[0] || 'unknown';
+      
     } else if (fileName && fileName.includes('.')) {
       // Detectar por extensão do arquivo
-      fileExtension = fileName.split('.').pop() || 'unknown';
+      console.log('🔍 Detectando por extensão do arquivo:', fileName);
+      fileExtension = fileName.split('.').pop()?.toLowerCase() || 'unknown';
       finalMimeType = getMimeTypeByExtension(fileName);
-    } else {
+      console.log('📁 MIME detectado por extensão:', finalMimeType);
+      
+    } else if (mediaUrl) {
       // Fallback baseado no URL se possível
+      console.log('🌐 Tentando detectar por URL:', mediaUrl);
       const urlParts = mediaUrl.split('.');
       if (urlParts.length > 1) {
-        fileExtension = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
+        fileExtension = urlParts[urlParts.length - 1].split('?')[0].toLowerCase(); // Remove query params
         finalMimeType = getMimeTypeByExtension(`file.${fileExtension}`);
+        console.log('🔗 MIME detectado por URL:', finalMimeType);
       }
     }
+
+    // Validação final do MIME type
+    if (!validateMimeType(finalMimeType)) {
+      console.warn('⚠️ MIME type não suportado ou inválido:', finalMimeType);
+      throw new Error(`mime type ${finalMimeType} is not supported`);
+    }
+
+    console.log('✅ MIME type final:', finalMimeType, 'Extensão:', fileExtension);
 
     // Gerar nome único para evitar conflitos
     const timestamp = Date.now();
