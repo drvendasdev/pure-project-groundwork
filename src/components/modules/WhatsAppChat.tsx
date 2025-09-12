@@ -948,6 +948,17 @@ const stopRecording = () => {
                       )}
                     >
                       {/* Renderizar conteúdo baseado no tipo */}
+                      {(() => {
+                        console.log('🔵 Mensagem completa:', {
+                          id: message.id,
+                          sender_type: message.sender_type,
+                          message_type: message.message_type,
+                          file_url: message.file_url,
+                          file_name: message.file_name,
+                          content: message.content
+                        });
+                        return null;
+                      })()}
                       {message.message_type !== 'text' && message.file_url ? (
                         <MediaViewer
                           fileUrl={message.file_url}

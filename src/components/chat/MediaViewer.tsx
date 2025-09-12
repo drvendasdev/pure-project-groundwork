@@ -27,10 +27,14 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [hasLoaded, setHasLoaded] = useState(false);
   
   // Log para debug
-  console.log('MediaViewer render:', { 
+  console.log('🟡 MediaViewer render:', { 
     fileUrl, 
     fileName, 
-    messageType
+    messageType,
+    isPdfByName: /\.pdf$/i.test(fileName || ''),
+    isPdfByUrl: /\.pdf$/i.test(fileUrl || ''),
+    containsPdfInName: fileName?.toLowerCase().includes('pdf'),
+    containsPdfInUrl: fileUrl?.toLowerCase().includes('pdf')
   });
 
   // Detectar tipos de arquivos
