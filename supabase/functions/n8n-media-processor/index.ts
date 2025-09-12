@@ -248,6 +248,8 @@ serve(async (req) => {
     });
 
     // Upload para Supabase Storage com MIME type correto e verificação de conflito
+    console.log('🔄 Tentando upload para Supabase Storage com:', { finalMimeType, fileExtension, storagePath });
+    
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('whatsapp-media')
       .upload(storagePath, uint8Array, {
@@ -281,7 +283,43 @@ serve(async (req) => {
         storagePath = newStoragePath;
         console.log(`✅ Upload realizado com nome alternativo: ${newFileName}`);
       } else {
-        throw new Error(`Erro no upload: ${uploadError.message}`);
+        console.error('❌ Erro no upload do Supabase Storage:', {
+          uploadError,
+          finalMimeType,
+          originalMimeType: mimeType,
+          storagePath,
+          errorMessage: uploadError.message
+        });
+        
+        // Se o erro for relacionado ao MIME type, tentar com um MIME type mais genérico
+        if (uploadError.message.includes('mime type') || uploadError.message.includes('not supported')) {
+          console.log('🔄 Tentando com MIME type genérico para áudio...');
+          
+          let fallbackMimeType = finalMimeType;
+          if (finalMimeType.startsWith('audio/')) {
+            fallbackMimeType = 'audio/mpeg'; // MP3 é amplamente suportado
+          } else if (finalMimeType.startsWith('video/')) {
+            fallbackMimeType = 'video/mp4'; // MP4 é amplamente suportado
+          }
+          
+          console.log('🔄 Tentando upload com MIME type fallback:', fallbackMimeType);
+          
+          const { data: fallbackUploadData, error: fallbackUploadError } = await supabase.storage
+            .from('whatsapp-media')
+            .upload(storagePath, uint8Array, {
+              contentType: fallbackMimeType,
+              upsert: false
+            });
+            
+          if (fallbackUploadError) {
+            throw new Error(`Erro no upload mesmo com fallback: ${fallbackUploadError.message}`);
+          }
+          
+          console.log('✅ Upload realizado com MIME type fallback:', fallbackMimeType);
+          finalMimeType = fallbackMimeType; // Atualizar para refletir o que foi usado
+        } else {
+          throw new Error(`Erro no upload: ${uploadError.message}`);
+        }
       }
     }
 
