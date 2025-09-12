@@ -77,7 +77,9 @@ serve(async (req) => {
     function normalizeMimeType(mimeType: string): string {
       if (!mimeType) return '';
       // Remove parâmetros como "codecs=opus", "boundary=xxx", etc.
-      return mimeType.split(';')[0].trim().toLowerCase();
+      const normalized = mimeType.split(';')[0].trim().toLowerCase();
+      console.log('🔧 Normalizando MIME:', mimeType, '→', normalized);
+      return normalized;
     }
 
     // Função para detectar MIME type correto baseado na extensão
@@ -148,8 +150,16 @@ serve(async (req) => {
 
     function validateMimeType(mimeType: string): boolean {
       const normalized = normalizeMimeType(mimeType);
-      return supportedMimeTypes.includes(normalized) || normalized.startsWith('image/') || 
-             normalized.startsWith('video/') || normalized.startsWith('audio/');
+      console.log('🔍 Validando MIME type:', mimeType, '→ normalizado:', normalized);
+      
+      // Validação mais permissiva para áudio, vídeo e imagem
+      const isValid = normalized.startsWith('image/') || 
+                     normalized.startsWith('video/') || 
+                     normalized.startsWith('audio/') ||
+                     supportedMimeTypes.includes(normalized);
+      
+      console.log('✅ MIME type válido:', isValid);
+      return isValid;
     }
 
     // Determinar MIME type correto e extensão com lógica melhorada
@@ -202,7 +212,13 @@ serve(async (req) => {
 
     // Validação final do MIME type
     if (!validateMimeType(finalMimeType)) {
-      console.warn('⚠️ MIME type não suportado ou inválido:', finalMimeType);
+      console.error('❌ MIME type rejeitado:', {
+        original: mimeType,
+        normalized: normalizeMimeType(mimeType || ''),
+        final: finalMimeType,
+        fileName,
+        supportedList: supportedMimeTypes.slice(0, 10) // primeiros 10 da lista
+      });
       throw new Error(`mime type ${finalMimeType} is not supported`);
     }
 
