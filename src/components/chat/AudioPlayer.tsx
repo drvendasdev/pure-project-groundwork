@@ -150,7 +150,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px]">
+    <div className="flex items-center gap-3 max-w-[300px]">
       <audio ref={audioRef} src={audioUrl} preload="metadata" crossOrigin="anonymous" />
       
       <Button
