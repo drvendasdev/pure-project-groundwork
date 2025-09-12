@@ -179,9 +179,8 @@ serve(async (req) => {
             }
 
             // 🖼️ Process profile image if available in messageData
-            console.log(`🔍 [${requestId}] Checking for profile image data:`, {
-              messageData: JSON.stringify(messageData, null, 2)
-            });
+            console.log(`🔍 [${requestId}] Full webhook payload structure:`, JSON.stringify(req, null, 2));
+            console.log(`🔍 [${requestId}] MessageData structure:`, JSON.stringify(messageData, null, 2));
             
             // Try multiple possible paths for profile image URL
             const profilePicThumbUrl = messageData.profilePicThumbUrl || 
