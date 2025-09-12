@@ -73,7 +73,10 @@ serve(async (req) => {
   try {
     const { phone, profileImageUrl, contactId } = await req.json();
     
+    console.log(`📥 Received request:`, { phone, profileImageUrl, contactId });
+    
     if (!phone || !profileImageUrl) {
+      console.log(`❌ Missing required parameters:`, { phone: !!phone, profileImageUrl: !!profileImageUrl });
       return new Response(
         JSON.stringify({ error: 'Missing phone or profileImageUrl' }),
         { 
@@ -83,7 +86,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🔍 Processing profile image for contact: ${phone}`);
+    console.log(`🔍 Processing profile image for contact: ${phone} with URL: ${profileImageUrl}`);
     
     // Download and save the profile image
     const savedImageUrl = await downloadAndSaveProfileImage(profileImageUrl, phone);

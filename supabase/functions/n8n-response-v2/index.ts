@@ -179,26 +179,42 @@ serve(async (req) => {
             }
 
             // 🖼️ Process profile image if available in messageData
-            const profilePicThumbUrl = messageData.message?.messageContextInfo?.participant?.profilePicThumbUrl || 
-                                     messageData.pushName?.profilePicThumbUrl ||
-                                     messageData.profilePicThumbUrl;
+            console.log(`🔍 [${requestId}] Checking for profile image data:`, {
+              messageData: JSON.stringify(messageData, null, 2)
+            });
+            
+            // Try multiple possible paths for profile image URL
+            const profilePicThumbUrl = messageData.profilePicThumbUrl || 
+                                     messageData.pushNameProfilePicUrl ||
+                                     messageData.message?.imageMessage?.jpegThumbnail ||
+                                     messageData.message?.messageContextInfo?.deviceListMetadata?.profilePicThumbUrl ||
+                                     messageData.data?.profilePicThumbUrl;
+            
+            console.log(`🔍 [${requestId}] Profile image URL found: ${profilePicThumbUrl}`);
             
             if (profilePicThumbUrl && contactId) {
               console.log(`🔄 [${requestId}] Processing profile image for contact ${sanitizedPhone}: ${profilePicThumbUrl}`);
               
               try {
-                await supabase.functions.invoke('fetch-whatsapp-profile', {
+                const { data: profileResult, error: profileError } = await supabase.functions.invoke('fetch-whatsapp-profile', {
                   body: {
                     phone: sanitizedPhone,
                     profileImageUrl: profilePicThumbUrl,
                     contactId: contactId
                   }
                 });
-                console.log(`✅ [${requestId}] Profile image processing initiated for ${sanitizedPhone}`);
+                
+                if (profileError) {
+                  console.log(`❌ [${requestId}] Profile image processing error:`, profileError);
+                } else {
+                  console.log(`✅ [${requestId}] Profile image processing result:`, profileResult);
+                }
               } catch (profileError) {
                 console.log(`⚠️ [${requestId}] Profile image processing failed for ${sanitizedPhone}:`, profileError);
                 // Don't fail the whole process if profile image fails
               }
+            } else {
+              console.log(`ℹ️ [${requestId}] No profile image URL found for contact ${sanitizedPhone}`);
             }
 
             // Get connection_id for proper conversation association
