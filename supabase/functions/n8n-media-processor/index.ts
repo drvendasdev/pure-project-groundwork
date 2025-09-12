@@ -213,15 +213,21 @@ serve(async (req) => {
                        finalMimeType.startsWith('audio/') ||
                        supportedMimeTypes.includes(finalMimeType);
     
-    console.log('🔍 Validação MIME:', {
+    console.log('🔍 Validação MIME - DEBUG COMPLETO:', {
       finalMimeType,
+      originalMimeType: mimeType,
+      startsWithImage: finalMimeType.startsWith('image/'),
+      startsWithVideo: finalMimeType.startsWith('video/'),
       startsWithAudio: finalMimeType.startsWith('audio/'),
       inSupportedList: supportedMimeTypes.includes(finalMimeType),
-      isValidMime
+      isValidMime,
+      supportedMimeTypes: supportedMimeTypes,
+      xlsxInList: supportedMimeTypes.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+      exactMatch: finalMimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
     
     if (!isValidMime) {
-      console.error('❌ MIME type rejeitado:', {
+      console.error('❌ MIME type rejeitado - DEBUG DETALHADO:', {
         original: mimeType,
         normalized: finalMimeType,
         fileName,
@@ -230,7 +236,8 @@ serve(async (req) => {
           startsWithVideo: finalMimeType.startsWith('video/'),
           startsWithAudio: finalMimeType.startsWith('audio/'),
           inSupportedList: supportedMimeTypes.includes(finalMimeType)
-        }
+        },
+        supportedListContent: supportedMimeTypes
       });
       throw new Error(`mime type ${finalMimeType} is not supported`);
     }
