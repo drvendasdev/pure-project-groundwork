@@ -308,7 +308,7 @@ serve(async (req) => {
       ? 'video'
       : finalMimeType.startsWith('audio/')
       ? 'audio'
-      : 'document';
+      : 'file'; // Usar 'file' em vez de 'document' para conformar com constraint
 
 
     // Se for mensagem de entrada, atualizar no banco
@@ -368,7 +368,7 @@ serve(async (req) => {
           const newMessageData = {
             id: isValidUUID ? messageId : undefined,
             external_id: isValidUUID ? undefined : messageId,
-            content: `📎 ${computedMessageType === 'document' ? 'Documento' : 'Arquivo'}`,
+            content: `📎 ${computedMessageType === 'file' && finalMimeType === 'application/pdf' ? 'Documento' : 'Arquivo'}`,
             message_type: computedMessageType,
             file_url: publicUrl,
             file_name: finalFileName,
