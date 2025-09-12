@@ -192,6 +192,45 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   }
 
   const renderMediaContent = () => {
+    // PRIMEIRO: Verificar se é PDF independentemente do messageType
+    if (isPdfFile) {
+      console.log('🔴 RENDERIZANDO PDF:', { fileName, fileUrl, messageType, isPdfFile });
+      return (
+        <div className="relative group">
+          <div 
+            className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-red-300" 
+            onClick={() => setIsPdfModalOpen(true)}
+          >
+            <div className="relative">
+              <FileText className="h-12 w-12 text-red-600" />
+              <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs px-1 rounded font-medium">
+                PDF
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">
+                {fileName || 'Documento PDF'}
+              </p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                Clique para visualizar
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDownload();
+            }}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    }
 
     switch (effectiveMessageType) {
       case 'image':
@@ -342,44 +381,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
       case 'document':
       case 'file':
-        // Renderizar baseado no tipo de arquivo
-        if (isPdfFile) {
-          return (
-            <div className="relative group">
-              <div 
-                className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-red-300" 
-                onClick={() => setIsPdfModalOpen(true)}
-              >
-                <div className="relative">
-                  <FileText className="h-12 w-12 text-red-600" />
-                  <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs px-1 rounded font-medium">
-                    PDF
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">
-                    {fileName || 'Documento PDF'}
-                  </p>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
-                    Clique para visualizar
-                  </p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownload();
-                }}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            </div>
-          );
-        } else if (isExcelFile) {
+        // Renderizar baseado no tipo de arquivo (PDF já foi tratado acima)
+        if (isExcelFile) {
           return (
             <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-green-300" 
                  onClick={handleDownload}>
