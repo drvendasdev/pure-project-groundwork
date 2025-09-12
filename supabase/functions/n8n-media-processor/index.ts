@@ -199,11 +199,18 @@ serve(async (req) => {
     }
 
     // Validação final do MIME type - mais permissiva
-    // finalMimeType já foi normalizado anteriormente, não precisa normalizar novamente
+    // Aceita automaticamente tipos que começam com image/, video/ ou audio/
     const isValidMime = finalMimeType.startsWith('image/') || 
                        finalMimeType.startsWith('video/') || 
                        finalMimeType.startsWith('audio/') ||
                        supportedMimeTypes.includes(finalMimeType);
+    
+    console.log('🔍 Validação MIME:', {
+      finalMimeType,
+      startsWithAudio: finalMimeType.startsWith('audio/'),
+      inSupportedList: supportedMimeTypes.includes(finalMimeType),
+      isValidMime
+    });
     
     if (!isValidMime) {
       console.error('❌ MIME type rejeitado:', {
