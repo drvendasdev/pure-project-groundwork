@@ -178,6 +178,29 @@ serve(async (req) => {
               contactId = newContact?.id;
             }
 
+            // 🖼️ Process profile image if available in messageData
+            const profilePicThumbUrl = messageData.message?.messageContextInfo?.participant?.profilePicThumbUrl || 
+                                     messageData.pushName?.profilePicThumbUrl ||
+                                     messageData.profilePicThumbUrl;
+            
+            if (profilePicThumbUrl && contactId) {
+              console.log(`🔄 [${requestId}] Processing profile image for contact ${sanitizedPhone}: ${profilePicThumbUrl}`);
+              
+              try {
+                await supabase.functions.invoke('fetch-whatsapp-profile', {
+                  body: {
+                    phone: sanitizedPhone,
+                    profileImageUrl: profilePicThumbUrl,
+                    contactId: contactId
+                  }
+                });
+                console.log(`✅ [${requestId}] Profile image processing initiated for ${sanitizedPhone}`);
+              } catch (profileError) {
+                console.log(`⚠️ [${requestId}] Profile image processing failed for ${sanitizedPhone}:`, profileError);
+                // Don't fail the whole process if profile image fails
+              }
+            }
+
             // Get connection_id for proper conversation association
             let resolvedConnectionId = null;
             const { data: connectionData } = await supabase
