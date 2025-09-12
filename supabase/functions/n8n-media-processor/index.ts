@@ -199,19 +199,23 @@ serve(async (req) => {
     }
 
     // Validação final do MIME type - mais permissiva
-    const normalized = normalizeMimeType(finalMimeType || '');
-    const isValidMime = normalized.startsWith('image/') || 
-                       normalized.startsWith('video/') || 
-                       normalized.startsWith('audio/') ||
-                       supportedMimeTypes.includes(normalized);
+    // finalMimeType já foi normalizado anteriormente, não precisa normalizar novamente
+    const isValidMime = finalMimeType.startsWith('image/') || 
+                       finalMimeType.startsWith('video/') || 
+                       finalMimeType.startsWith('audio/') ||
+                       supportedMimeTypes.includes(finalMimeType);
     
     if (!isValidMime) {
       console.error('❌ MIME type rejeitado:', {
         original: mimeType,
-        normalized: normalized,
-        final: finalMimeType,
+        normalized: finalMimeType,
         fileName,
-        supportedList: supportedMimeTypes.slice(0, 10) // primeiros 10 da lista
+        isValidChecks: {
+          startsWithImage: finalMimeType.startsWith('image/'),
+          startsWithVideo: finalMimeType.startsWith('video/'),
+          startsWithAudio: finalMimeType.startsWith('audio/'),
+          inSupportedList: supportedMimeTypes.includes(finalMimeType)
+        }
       });
       throw new Error(`mime type ${finalMimeType} is not supported`);
     }
