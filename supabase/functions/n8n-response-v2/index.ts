@@ -178,42 +178,76 @@ serve(async (req) => {
               contactId = newContact?.id;
             }
 
-            // 🖼️ Process profile image if available in messageData
-            console.log(`🔍 [${requestId}] Full webhook payload structure:`, JSON.stringify(req, null, 2));
-            console.log(`🔍 [${requestId}] MessageData structure:`, JSON.stringify(messageData, null, 2));
+            // 🖼️ Fetch profile image from Evolution API
+            console.log(`🖼️ [${requestId}] Attempting to fetch profile image for ${sanitizedPhone}`);
             
-            // Try multiple possible paths for profile image URL
-            const profilePicThumbUrl = messageData.profilePicThumbUrl || 
-                                     messageData.pushNameProfilePicUrl ||
-                                     messageData.message?.imageMessage?.jpegThumbnail ||
-                                     messageData.message?.messageContextInfo?.deviceListMetadata?.profilePicThumbUrl ||
-                                     messageData.data?.profilePicThumbUrl;
-            
-            console.log(`🔍 [${requestId}] Profile image URL found: ${profilePicThumbUrl}`);
-            
-            if (profilePicThumbUrl && contactId) {
-              console.log(`🔄 [${requestId}] Processing profile image for contact ${sanitizedPhone}: ${profilePicThumbUrl}`);
-              
-              try {
-                const { data: profileResult, error: profileError } = await supabase.functions.invoke('fetch-whatsapp-profile', {
-                  body: {
-                    phone: sanitizedPhone,
-                    profileImageUrl: profilePicThumbUrl,
-                    contactId: contactId
-                  }
-                });
+            try {
+              // Get connection secrets for this instance
+              const { data: connectionData } = await supabase
+                .from('connections')
+                .select(`
+                  id,
+                  instance_name,
+                  connection_secrets (
+                    token,
+                    evolution_url
+                  )
+                `)
+                .eq('instance_name', instance)
+                .eq('workspace_id', workspaceId)
+                .single();
+
+              if (connectionData?.connection_secrets?.[0]) {
+                const { token, evolution_url } = connectionData.connection_secrets[0];
                 
-                if (profileError) {
-                  console.log(`❌ [${requestId}] Profile image processing error:`, profileError);
+                // Fetch profile image from Evolution API
+                console.log(`🔗 [${requestId}] Fetching profile from: ${evolution_url}/chat/fetchProfile/${instance}`);
+                
+                const profileResponse = await fetch(`${evolution_url}/chat/fetchProfile/${instance}`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': token
+                  },
+                  body: JSON.stringify({
+                    number: sanitizedPhone
+                  })
+                });
+
+                if (profileResponse.ok) {
+                  const profileData = await profileResponse.json();
+                  console.log(`✅ [${requestId}] Profile data received:`, JSON.stringify(profileData, null, 2));
+                  
+                  const profileImageUrl = profileData?.profilePictureUrl || profileData?.picture;
+                  
+                  if (profileImageUrl && contactId) {
+                    console.log(`🖼️ [${requestId}] Found profile image URL: ${profileImageUrl}`);
+                    
+                    // Call the fetch-whatsapp-profile function
+                    const { error: profileError } = await supabase.functions.invoke('fetch-whatsapp-profile', {
+                      body: {
+                        phone: sanitizedPhone,
+                        profileImageUrl: profileImageUrl,
+                        contactId: contactId
+                      }
+                    });
+
+                    if (profileError) {
+                      console.error(`❌ [${requestId}] Failed to update profile image:`, profileError);
+                    } else {
+                      console.log(`✅ [${requestId}] Profile image update requested for ${sanitizedPhone}`);
+                    }
+                  } else {
+                    console.log(`ℹ️ [${requestId}] No profile image URL found in Evolution API response or no contactId`);
+                  }
                 } else {
-                  console.log(`✅ [${requestId}] Profile image processing result:`, profileResult);
+                  console.error(`❌ [${requestId}] Failed to fetch profile from Evolution API:`, profileResponse.status, await profileResponse.text());
                 }
-              } catch (profileError) {
-                console.log(`⚠️ [${requestId}] Profile image processing failed for ${sanitizedPhone}:`, profileError);
-                // Don't fail the whole process if profile image fails
+              } else {
+                console.log(`⚠️ [${requestId}] No connection secrets found for instance ${instance}`);
               }
-            } else {
-              console.log(`ℹ️ [${requestId}] No profile image URL found for contact ${sanitizedPhone}`);
+            } catch (error) {
+              console.error(`❌ [${requestId}] Error fetching profile image:`, error);
             }
 
             // Get connection_id for proper conversation association
