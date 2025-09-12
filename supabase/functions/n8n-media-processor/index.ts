@@ -261,9 +261,38 @@ serve(async (req) => {
       });
 
     if (uploadError) {
-      console.error('❌ Erro no upload:', uploadError);
-      // Se ainda houver conflito, tentar com timestamp mais específico
-      if (uploadError.message.includes('already exists') || uploadError.message.includes('resource already exists')) {
+      console.error('❌ Erro no upload - DETALHES COMPLETOS:', {
+        message: uploadError.message,
+        statusCode: uploadError.statusCode,
+        error: uploadError.error,
+        details: uploadError.details,
+        hint: uploadError.hint,
+        finalMimeType,
+        originalMimeType: mimeType,
+        storagePath,
+        fileSize: uint8Array.length,
+        fileName: finalFileName
+      });
+      
+      // Se o erro é sobre MIME type não suportado, vamos tentar com application/octet-stream
+      if (uploadError.message && uploadError.message.includes('mime type') && uploadError.message.includes('not supported')) {
+        console.log('🔄 Tentando upload com application/octet-stream como fallback...');
+        
+        const { data: retryUploadData, error: retryUploadError } = await supabase.storage
+          .from('whatsapp-media')
+          .upload(storagePath, uint8Array, {
+            contentType: 'application/octet-stream',
+            upsert: false
+          });
+          
+        if (retryUploadError) {
+          console.error('❌ Erro no upload com fallback:', retryUploadError);
+          throw new Error(`Erro no upload: ${uploadError.message} | Fallback também falhou: ${retryUploadError.message}`);
+        } else {
+          console.log('✅ Upload realizado com fallback application/octet-stream');
+          // Continuar com o resto do código usando o resultado do retry
+        }
+      } else if (uploadError.message.includes('already exists') || uploadError.message.includes('resource already exists')) {
         console.log(`⚠️ Conflito de nome detectado, tentando com nome mais específico...`);
         const specificTimestamp = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const newFileName = fileName ? 
@@ -287,18 +316,6 @@ serve(async (req) => {
         storagePath = newStoragePath;
         console.log(`✅ Upload realizado com nome alternativo: ${newFileName}`);
       } else {
-        // Log completo do erro para debug
-        console.error('❌ Erro detalhado do upload:', {
-          message: uploadError.message,
-          statusCode: uploadError.statusCode,
-          error: uploadError.error,
-          details: uploadError.details,
-          hint: uploadError.hint,
-          finalMimeType,
-          originalMimeType: mimeType,
-          storagePath,
-          fileSize: uint8Array.length
-        });
         throw new Error(`Erro no upload: ${uploadError.message}`);
       }
     }
