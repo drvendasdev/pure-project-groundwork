@@ -328,13 +328,20 @@ serve(async (req) => {
     console.log('Mídia salva com sucesso:', publicUrl);
 
     // Determinar message_type com base no MIME
-    const computedMessageType = finalMimeType.startsWith('image/')
-      ? 'image'
-      : finalMimeType.startsWith('video/')
-      ? 'video'
-      : finalMimeType.startsWith('audio/')
-      ? 'audio'
-      : 'file'; // Usar 'file' em vez de 'document' para conformar com constraint
+    let computedMessageType: string;
+    if (finalMimeType.startsWith('image/')) {
+      computedMessageType = 'image';
+    } else if (finalMimeType.startsWith('video/')) {
+      computedMessageType = 'video';
+    } else if (finalMimeType.startsWith('audio/') || finalMimeType === 'audio/webm' || finalMimeType === 'audio/ogg') {
+      computedMessageType = 'audio';
+    } else if (finalMimeType === 'application/pdf') {
+      computedMessageType = 'document';
+    } else {
+      computedMessageType = 'file';
+    }
+    
+    console.log(`📋 MIME final: ${finalMimeType} → Tipo de mensagem: ${computedMessageType}`);
 
 
     // Se for mensagem de entrada, atualizar no banco

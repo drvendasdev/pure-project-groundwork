@@ -31,33 +31,49 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     fileUrl, 
     fileName, 
     messageType,
-    isPdfByName: /\.pdf$/i.test(fileName || ''),
-    isPdfByUrl: /\.pdf$/i.test(fileUrl || ''),
-    containsPdfInName: fileName?.toLowerCase().includes('pdf'),
-    containsPdfInUrl: fileUrl?.toLowerCase().includes('pdf')
+    detectionsAfterPriority: {
+      isAudioFile: messageType === 'audio' || /\.(mp3|wav|ogg|aac|flac|webm|m4a|opus)$/i.test(fileName || fileUrl || ''),
+      isPdfFile: messageType === 'document' || /\.pdf$/i.test(fileName || fileUrl || ''),
+      isImageFile: messageType === 'image',
+      isVideoFile: messageType === 'video'
+    }
   });
 
-  // Detectar tipos de arquivos
-  const isPdfFile = /\.pdf$/i.test(fileName || '') || /\.pdf$/i.test(fileUrl) || fileName?.toLowerCase().includes('pdf') || fileUrl?.toLowerCase().includes('pdf');
-  const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
-  const isVideoFile = /\.(mp4|avi|mov|wmv|flv|webm)$/i.test(fileName || '') || /\.(mp4|avi|mov|wmv|flv|webm)$/i.test(fileUrl);
-  const isAudioFile = /\.(mp3|wav|ogg|aac|flac)$/i.test(fileName || '') || /\.(mp3|wav|ogg|aac|flac)$/i.test(fileUrl);
+  // Detectar tipos de arquivos - PRIORIZAR messageType
+  const isAudioFile = messageType === 'audio' ||
+                      (messageType !== 'document' && messageType !== 'image' && messageType !== 'video' && 
+                       /\.(mp3|wav|ogg|aac|flac|webm|m4a|opus)$/i.test(fileName || fileUrl || ''));
+                       
+  const isPdfFile = messageType === 'document' || 
+                    (messageType !== 'audio' && messageType !== 'image' && messageType !== 'video' &&
+                     (/\.pdf$/i.test(fileName || '') || /\.pdf$/i.test(fileUrl) || 
+                      fileName?.toLowerCase().includes('pdf') || fileUrl?.toLowerCase().includes('pdf')));
+                      
+  const isImageFile = messageType === 'image' ||
+                      (messageType !== 'audio' && messageType !== 'document' && messageType !== 'video' &&
+                       /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || fileUrl || ''));
+                       
+  const isVideoFile = messageType === 'video' ||
+                      (messageType !== 'audio' && messageType !== 'document' && messageType !== 'image' &&
+                       /\.(mp4|avi|mov|wmv|flv|webm)$/i.test(fileName || fileUrl || ''));
+                       
   const isExcelFile = /\.(xlsx|xls)$/i.test(fileName || '') || /\.(xlsx|xls)$/i.test(fileUrl);
   const isWordFile = /\.(docx|doc)$/i.test(fileName || '') || /\.(docx|doc)$/i.test(fileUrl);
   const isPowerPointFile = /\.(pptx|ppt)$/i.test(fileName || '') || /\.(pptx|ppt)$/i.test(fileUrl);
 
-  // Log específico para PDFs
-  if (isPdfFile || fileName?.includes('pdf') || fileUrl?.includes('pdf')) {
-    console.log('🔴 PDF DETECTADO:', {
-      fileName,
-      fileUrl,
-      messageType,
+  // Log específico para detecções
+  console.log('🔍 DETECÇÃO FINAL:', {
+    fileName,
+    fileUrl,
+    messageType,
+    finalDetections: {
+      isAudioFile,
       isPdfFile,
-      isPdfByName: /\.pdf$/i.test(fileName || ''),
-      isPdfByUrl: /\.pdf$/i.test(fileUrl || ''),
-      containsPdf: fileName?.toLowerCase().includes('pdf') || fileUrl?.toLowerCase().includes('pdf')
-    });
-  }
+      isImageFile,
+      isVideoFile
+    },
+    priorityUsed: 'messageType tem prioridade sobre extensão'
+  });
 
   const handleDownload = () => {
     const link = document.createElement('a');

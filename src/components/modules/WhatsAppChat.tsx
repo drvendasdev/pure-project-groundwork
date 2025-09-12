@@ -939,26 +939,17 @@ const stopRecording = () => {
                       </Avatar>
                     )}
                     
-                    <div 
+                     <div 
                       className={cn(
-                        "rounded-lg p-3 max-w-full",
+                        "rounded-lg max-w-full",
                         message.sender_type === 'contact' 
-                          ? "bg-muted" 
-                          : "bg-primary text-primary-foreground"
+                          ? "bg-muted p-3" 
+                          : message.message_type !== 'text' && message.file_url
+                            ? "bg-primary" 
+                            : "bg-primary text-primary-foreground p-3"
                       )}
                     >
                       {/* Renderizar conteúdo baseado no tipo */}
-                      {(() => {
-                        console.log('🔵 Mensagem completa:', {
-                          id: message.id,
-                          sender_type: message.sender_type,
-                          message_type: message.message_type,
-                          file_url: message.file_url,
-                          file_name: message.file_name,
-                          content: message.content
-                        });
-                        return null;
-                      })()}
                       {message.message_type !== 'text' && message.file_url ? (
                         <MediaViewer
                           fileUrl={message.file_url}
