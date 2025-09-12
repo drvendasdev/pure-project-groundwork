@@ -142,7 +142,7 @@ serve(async (req) => {
       // Vídeos
       'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/3gpp',
       // Áudios
-      'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/opus',
+      'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/opus', 'audio/webm',
       // Documentos
       'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain', 'application/json', 'application/zip'
@@ -173,11 +173,10 @@ serve(async (req) => {
       else if (finalMimeType.includes('webp')) fileExtension = 'webp';
       else if (finalMimeType.includes('mp4')) fileExtension = 'mp4';
       else if (finalMimeType.includes('quicktime')) fileExtension = 'mov';
-      else if (finalMimeType.includes('ogg')) fileExtension = 'ogg';
+      else if (finalMimeType.includes('ogg') || finalMimeType.includes('opus')) fileExtension = 'ogg';
       else if (finalMimeType.includes('mpeg') && finalMimeType.startsWith('audio/')) fileExtension = 'mp3';
       else if (finalMimeType.includes('wav')) fileExtension = 'wav';
       else if (finalMimeType.includes('aac')) fileExtension = 'aac';
-      else if (finalMimeType.includes('opus')) fileExtension = 'ogg'; // Opus geralmente em container OGG
       else fileExtension = finalMimeType.split('/')[1]?.split('+')[0] || 'unknown';
       
     } else if (fileName && fileName.includes('.')) {
@@ -264,6 +263,12 @@ serve(async (req) => {
     });
 
     // Upload para Supabase Storage com MIME type correto e verificação de conflito
+    console.log('🚀 Iniciando upload:', {
+      storagePath,
+      finalMimeType,
+      fileSize: uint8Array.length
+    });
+    
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('whatsapp-media')
       .upload(storagePath, uint8Array, {
@@ -272,6 +277,7 @@ serve(async (req) => {
       });
 
     if (uploadError) {
+      console.error('❌ Erro no upload:', uploadError);
       // Se ainda houver conflito, tentar com timestamp mais específico
       if (uploadError.message.includes('already exists') || uploadError.message.includes('resource already exists')) {
         console.log(`⚠️ Conflito de nome detectado, tentando com nome mais específico...`);
@@ -297,6 +303,18 @@ serve(async (req) => {
         storagePath = newStoragePath;
         console.log(`✅ Upload realizado com nome alternativo: ${newFileName}`);
       } else {
+        // Log completo do erro para debug
+        console.error('❌ Erro detalhado do upload:', {
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          error: uploadError.error,
+          details: uploadError.details,
+          hint: uploadError.hint,
+          finalMimeType,
+          originalMimeType: mimeType,
+          storagePath,
+          fileSize: uint8Array.length
+        });
         throw new Error(`Erro no upload: ${uploadError.message}`);
       }
     }
