@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Image, Music, Video, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, FileText, Image, Music, Video, AlertCircle, Loader2, Eye } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
 import { ImageModal } from './ImageModal';
+import { PdfModal } from './PdfModal';
 
 interface MediaViewerProps {
   fileUrl: string;
@@ -18,6 +19,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   className = ''
 }) => {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,8 +132,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     return normalizedUrl; // Return anyway - let browser/network handle the failure
   }, []);
 
-  // Força renderização como imagem se o arquivo terminar com extensões de imagem
+  // Detectar PDFs e outros documentos
   const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
+  const isPdfFile = /\.pdf$/i.test(fileName || '') || /\.pdf$/i.test(fileUrl) || messageType === 'file';
   const effectiveMessageType = (messageType === 'document' && isImageFile) ? 'image' : messageType;
   
   // Verifica se URL é válida antes de renderizar
@@ -153,6 +156,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     fileName,
     fileUrl,
     isImageFile,
+    isPdfFile,
     validImageUrl
   });
 
@@ -302,6 +306,47 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         );
 
       case 'document':
+      case 'file':
+        // Verificar se é PDF para mostrar preview diferente
+        if (isPdfFile) {
+          return (
+            <div className="relative group">
+              <div 
+                className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-red-300" 
+                onClick={() => setIsPdfModalOpen(true)}
+              >
+                <div className="relative">
+                  <FileText className="h-12 w-12 text-red-600" />
+                  <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs px-1 rounded font-medium">
+                    PDF
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">
+                    {fileName || 'Documento PDF'}
+                  </p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Eye className="h-3 w-3" />
+                    Clique para visualizar
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload();
+                }}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        }
+        
+        // Para outros tipos de arquivo
         return (
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={handleDownload}>
             <FileText className="h-8 w-8 text-muted-foreground" />
@@ -367,6 +412,12 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         isOpen={isImageModalOpen}
         onClose={() => setIsImageModalOpen(false)}
         imageUrl={validImageUrl || fileUrl}
+        fileName={fileName}
+      />
+      <PdfModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        pdfUrl={validImageUrl || fileUrl}
         fileName={fileName}
       />
     </div>
