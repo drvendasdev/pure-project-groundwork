@@ -148,19 +148,6 @@ serve(async (req) => {
       'text/plain', 'application/json', 'application/zip'
     ];
 
-    function validateMimeType(mimeType: string): boolean {
-      const normalized = normalizeMimeType(mimeType);
-      console.log('🔍 Validando MIME type:', mimeType, '→ normalizado:', normalized);
-      
-      // Validação mais permissiva para áudio, vídeo e imagem
-      const isValid = normalized.startsWith('image/') || 
-                     normalized.startsWith('video/') || 
-                     normalized.startsWith('audio/') ||
-                     supportedMimeTypes.includes(normalized);
-      
-      console.log('✅ MIME type válido:', isValid);
-      return isValid;
-    }
 
     // Determinar MIME type correto e extensão com lógica melhorada
     let finalMimeType = mimeType;
@@ -171,10 +158,11 @@ serve(async (req) => {
     // Primeiro, normalizar o MIME type removendo parâmetros
     if (mimeType) {
       finalMimeType = normalizeMimeType(mimeType);
+      console.log('✅ MIME type normalizado:', finalMimeType);
     }
 
     // Estratégia de detecção hierárquica
-    if (finalMimeType && finalMimeType !== 'application/octet-stream' && validateMimeType(finalMimeType)) {
+    if (finalMimeType && finalMimeType !== 'application/octet-stream') {
       // MIME type fornecido é válido e suportado
       console.log('✅ Usando MIME type fornecido (normalizado):', finalMimeType);
       
@@ -210,11 +198,17 @@ serve(async (req) => {
       }
     }
 
-    // Validação final do MIME type
-    if (!validateMimeType(finalMimeType)) {
+    // Validação final do MIME type - mais permissiva
+    const normalized = normalizeMimeType(finalMimeType || '');
+    const isValidMime = normalized.startsWith('image/') || 
+                       normalized.startsWith('video/') || 
+                       normalized.startsWith('audio/') ||
+                       supportedMimeTypes.includes(normalized);
+    
+    if (!isValidMime) {
       console.error('❌ MIME type rejeitado:', {
         original: mimeType,
-        normalized: normalizeMimeType(mimeType || ''),
+        normalized: normalized,
         final: finalMimeType,
         fileName,
         supportedList: supportedMimeTypes.slice(0, 10) // primeiros 10 da lista
