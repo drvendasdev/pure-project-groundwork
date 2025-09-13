@@ -945,7 +945,7 @@ const stopRecording = () => {
                         message.sender_type === 'contact' 
                           ? "bg-muted p-3" 
                           : message.message_type !== 'text' && message.file_url
-                            ? "bg-primary" 
+                            ? "bg-primary p-3" 
                             : "bg-primary text-primary-foreground p-3"
                       )}
                     >
