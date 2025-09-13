@@ -496,11 +496,11 @@ const stopRecording = () => {
                 variant="ghost" 
                 size="sm"
                 disabled={isUpdatingProfileImages}
-                className="text-blue-600 hover:bg-blue-50"
+                className="text-primary hover:bg-primary/10"
                 title="Atualizar todas as fotos de perfil"
               >
                 {isUpdatingProfileImages ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 ) : (
                  <RefreshCw className="h-4 w-4" />
                 )}
@@ -890,8 +890,8 @@ const stopRecording = () => {
                     className={cn(
                       "h-8 px-3 rounded-full text-sm font-medium transition-colors",
                       selectedConversation.agente_ativo 
-                        ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        ? "bg-primary/10 text-primary hover:bg-primary/20" 
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
                     )}
                     title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
                   >

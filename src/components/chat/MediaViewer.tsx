@@ -294,11 +294,11 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   if (isWordFile) {
     return (
       <div className={className}>
-        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-blue-300" 
+        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-primary/30" 
              onClick={handleDownload}>
           <div className="relative">
-            <FileText className="h-12 w-12 text-blue-600" />
-            <div className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs px-1 rounded font-medium">
+            <FileText className="h-12 w-12 text-primary" />
+            <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs px-1 rounded font-medium">
               DOC
             </div>
           </div>
