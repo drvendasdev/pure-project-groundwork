@@ -150,7 +150,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="flex items-center gap-3 max-w-[300px]">
+    <div className="flex items-center gap-3 max-w-[300px] p-3 bg-primary/10 rounded-lg border border-primary/20">{/* Adiciona padding e background */}
       <audio ref={audioRef} src={audioUrl} preload="metadata" crossOrigin="anonymous" />
       
       <Button
@@ -158,7 +158,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         variant="ghost"
         onClick={togglePlayPause}
         disabled={isLoading || hasError}
-        className="h-10 w-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        className="h-10 w-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex-shrink-0"
       >
         {hasError ? (
           <span className="text-xs">!</span>
@@ -171,9 +171,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         )}
       </Button>
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 space-y-1">{/* Adiciona espaçamento vertical */}
         <div 
-          className="w-full h-2 bg-muted-foreground/20 rounded-full cursor-pointer mb-1"
+          className="w-full h-2 bg-muted-foreground/20 rounded-full cursor-pointer"
           onClick={handleProgressClick}
         >
           <div 
@@ -200,7 +200,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           variant="ghost" 
           onClick={handleRetry}
           disabled={isRetrying}
-          className="text-orange-500 hover:text-orange-600"
+          className="text-orange-500 hover:text-orange-600 flex-shrink-0"
         >
           {isRetrying ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -211,7 +211,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       )}
 
       {onDownload && (
-        <Button size="sm" variant="ghost" onClick={onDownload}>
+        <Button size="sm" variant="ghost" onClick={onDownload} className="flex-shrink-0">
           <Download className="h-4 w-4" />
         </Button>
       )}
