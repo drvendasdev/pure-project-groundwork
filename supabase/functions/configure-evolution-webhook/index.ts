@@ -41,7 +41,7 @@ serve(async (req) => {
     console.log(`🔧 [${requestId}] Configure Evolution webhook started`);
     
     const data = await req.json();
-    const { instance_name, workspace_id } = data;
+    const { instance_name, workspace_id, webhookUrl: customWebhookUrl, events: customEvents } = data;
     
     if (!instance_name) {
       console.error(`❌ [${requestId}] Missing instance_name`);
@@ -86,10 +86,17 @@ serve(async (req) => {
     }
 
     // Configure webhook in Evolution API
-    const webhookUrl = `${publicAppUrl}/functions/v1/evolution-webhook`;
-    const webhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || 'default-secret';
+    const webhookUrl = customWebhookUrl || `${publicAppUrl}/functions/v1/evolution-webhook`;
+    const events = customEvents || [
+      'QRCODE_UPDATED',
+      'CONNECTION_UPDATE',
+      'MESSAGES_UPSERT',
+      'MESSAGES_UPDATE',
+      'SEND_MESSAGE'
+    ];
     
     console.log(`🔧 [${requestId}] Setting webhook URL: ${webhookUrl}`);
+    console.log(`🔧 [${requestId}] Setting events: ${events.join(', ')}`);
     
     const evolutionResponse = await fetch(`${tokenData.evolution_url}/webhook/set/${instance_name}`, {
       method: 'POST',
@@ -100,13 +107,7 @@ serve(async (req) => {
       body: JSON.stringify({
         url: webhookUrl,
         webhook_by_events: false,
-        events: [
-          'QRCODE_UPDATED',
-          'CONNECTION_UPDATE',
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'SEND_MESSAGE'
-        ]
+        events: events
       })
     });
 

@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star, Bug } from 'lucide-react';
+import { TestWebhookReceptionModal } from "@/components/modals/TestWebhookReceptionModal";
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -631,6 +632,10 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               </span>
             )}
           </p>
+        </div>
+        
+        <div className="flex gap-2">
+          <TestWebhookReceptionModal />
         </div>
         
         <Dialog open={isCreateModalOpen} onOpenChange={(open) => {
