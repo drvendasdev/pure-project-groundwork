@@ -6,16 +6,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets - FORCE CORRECT URL
-function getEvolutionConfig() {
-  // FORCE the correct Evolution URL regardless of what's in secrets
-  const url = 'https://evo.eventoempresalucrativa.com.br';
-  
-  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                 Deno.env.get('EVOLUTION_APIKEY') || 
-                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-  
-  return { url, apiKey };
+// Get Evolution API configuration from connection secrets
+async function getEvolutionConfig(connectionId: string, supabase: any) {
+  try {
+    // Get connection secrets
+    const { data: secretData, error: secretError } = await supabase
+      .from('connection_secrets')
+      .select('evolution_url, token')
+      .eq('connection_id', connectionId)
+      .single()
+
+    if (secretError || !secretData) {
+      console.error('No connection secrets found:', secretError)
+      throw new Error('Connection secrets not found')
+    }
+
+    return {
+      url: secretData.evolution_url,
+      apiKey: secretData.token
+    }
+  } catch (error) {
+    console.error('Error getting Evolution config:', error)
+    throw error
+  }
 }
 
 serve(async (req) => {
@@ -39,7 +52,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const evolutionConfig = getEvolutionConfig()
 
     // Get connection details
     const { data: connection, error } = await supabase
@@ -56,105 +68,70 @@ serve(async (req) => {
       )
     }
 
-    if (!evolutionConfig.apiKey) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Evolution API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const evolutionConfig = await getEvolutionConfig(connectionId, supabase)
 
-    console.log('Restarting instance to get fresh QR code:', connection.instance_name)
+    console.log('Getting QR code for instance:', connection.instance_name)
 
-    // Restart the instance to get a fresh QR code
-    const restartResponse = await fetch(`${evolutionConfig.url}/instance/restart/${connection.instance_name}`, {
-      method: 'PUT',
+    // Get QR code directly from the instance
+    const qrResponse = await fetch(`${evolutionConfig.url}/instance/connect/${connection.instance_name}`, {
+      method: 'GET',
       headers: {
         'apikey': evolutionConfig.apiKey,
         'Content-Type': 'application/json'
       }
     })
 
-    console.log('Restart response status:', restartResponse.status)
+    console.log('QR response status:', qrResponse.status)
 
-    if (!restartResponse.ok) {
-      const errorText = await restartResponse.text()
-      console.error('Evolution restart API error:', errorText)
-      
-      // If restart fails, try to just get current instance status
-      console.log('Restart failed, trying to fetch current instance...')
-      const fetchResponse = await fetch(`${evolutionConfig.url}/instance/fetchInstance/${connection.instance_name}`, {
-        method: 'GET',
-        headers: {
-          'apikey': evolutionConfig.apiKey
-        }
-      })
-
-      if (!fetchResponse.ok) {
-        const fetchErrorText = await fetchResponse.text()
-        console.error('Fetch instance also failed:', fetchErrorText)
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: `Failed to refresh QR code: ${errorText}` 
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      const fetchData = await fetchResponse.json()
-      console.log('Fetch instance response:', fetchData)
-
-      // Extract QR code from fetch response
-      const extractedQRCode = fetchData.qrcode?.base64 || fetchData.qrcode?.code || fetchData.qrcode || fetchData.qr
-      
-      if (!extractedQRCode) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: 'QR Code não encontrado na resposta da API' 
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      // Update connection with QR code from fetch
-      await supabase
-        .from('connections')
-        .update({ 
-          qr_code: extractedQRCode,
-          status: 'qr',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', connection.id)
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          qr_code: extractedQRCode
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Get the restart response data
-    const restartData = await restartResponse.json()
-    console.log('Restart response data:', restartData)
-
-    // Extract QR code from restart response
-    const extractedQRCode = restartData.qrcode?.base64 || restartData.qrcode?.code || restartData.qrcode || restartData.qr
-    
-    if (!extractedQRCode) {
-      console.error('No QR code in restart response, response:', restartData)
+    if (!qrResponse.ok) {
+      const errorText = await qrResponse.text()
+      console.error('Evolution QR API error:', errorText)
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'QR Code não encontrado na resposta do restart' 
+          error: `Failed to get QR code: ${errorText}` 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    const qrData = await qrResponse.json()
+    console.log('QR response data:', qrData)
+
+    // Extract QR code from response
+    let extractedQRCode = null;
     
-    // Update connection with new QR code
+    if (qrData.base64) {
+      extractedQRCode = qrData.base64;
+    } else if (qrData.code) {
+      extractedQRCode = qrData.code;
+    } else if (qrData.qrcode) {
+      if (typeof qrData.qrcode === 'string') {
+        extractedQRCode = qrData.qrcode;
+      } else if (qrData.qrcode.base64) {
+        extractedQRCode = qrData.qrcode.base64;
+      } else if (qrData.qrcode.code) {
+        extractedQRCode = qrData.qrcode.code;
+      }
+    }
+    
+    if (!extractedQRCode) {
+      console.error('No QR code found in response:', qrData)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'QR Code não encontrado na resposta da API' 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Ensure QR code is properly formatted as data URL
+    if (!extractedQRCode.startsWith('data:image/')) {
+      extractedQRCode = `data:image/png;base64,${extractedQRCode}`;
+    }
+
+    // Update connection with QR code
     await supabase
       .from('connections')
       .update({ 

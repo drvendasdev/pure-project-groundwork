@@ -796,56 +796,97 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         }
         setIsQRModalOpen(open);
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp - {selectedConnection?.instance_name}</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-primary mb-2">
+              Passos para conectar
+            </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
-            {selectedConnection?.qr_code ? (
-              <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 py-4">
+            {/* Instruções à esquerda */}
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium">Abra o <strong>WhatsApp</strong> no seu celular</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium">No Android toque em <strong>Menu</strong> : ou no iPhone em <strong>Ajustes</strong></p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  3
+                </div>
+                <div>
+                  <p className="font-medium">Toque em <strong>Dispositivos conectados</strong> e depois <strong>Conectar um dispositivo</strong></p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  4
+                </div>
+                <div>
+                  <p className="font-medium">Escaneie o QR Code à direita para confirmar</p>
+                </div>
+              </div>
+
+              {/* Botão para atualizar QR Code */}
+              <div className="pt-4">
+                <Button 
+                  onClick={() => selectedConnection && refreshQRCode(selectedConnection.id)}
+                  variant="outline" 
+                  size="sm"
+                  disabled={isRefreshing}
+                  className="w-full"
+                >
+                  {isRefreshing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                      Atualizando QR Code...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Atualizar QR Code
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* QR Code à direita */}
+            <div className="flex items-center justify-center">
+              {selectedConnection?.qr_code ? (
                 <div className="text-center space-y-4">
                   <img 
                     src={selectedConnection.qr_code} 
                     alt="QR Code" 
-                    className="mx-auto border border-border rounded-lg"
-                    style={{ maxWidth: '300px', maxHeight: '300px' }}
+                    className="mx-auto border border-border rounded-lg bg-white p-4"
+                    style={{ width: '280px', height: '280px' }}
                   />
-                  
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Escaneie o código QR com seu WhatsApp
-                    </p>
-                    
-                    <div className="flex gap-2 justify-center">
-                      <Button 
-                        onClick={() => selectedConnection && refreshQRCode(selectedConnection.id)}
-                        variant="outline" 
-                        size="sm"
-                        disabled={isRefreshing}
-                      >
-                        {isRefreshing ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                            Atualizando...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                            Atualizar QR
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-sm text-muted-foreground font-medium">
+                    {selectedConnection.instance_name}
+                  </p>
                 </div>
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Gerando QR Code...</p>
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-8">
+                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Gerando QR Code...</p>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
