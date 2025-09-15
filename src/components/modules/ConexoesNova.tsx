@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -68,6 +68,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSettingDefault, setIsSettingDefault] = useState(false);
   
   // Form states
   const [instanceName, setInstanceName] = useState('');
@@ -424,7 +425,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           loadConnections();
           
           toast({
-            title: 'Sucesso',
+            title: '✅ Conectado!',
             description: connectionStatus.phone_number ? 
               `WhatsApp conectado como ${connectionStatus.phone_number}!` : 
               'WhatsApp conectado com sucesso!',
@@ -533,6 +534,39 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       });
     } finally {
       setIsDisconnecting(false);
+    }
+  };
+
+  const setDefaultConnection = async (connection: Connection) => {
+    try {
+      setIsSettingDefault(true);
+      
+      const { error } = await supabase
+        .from('system_users')
+        .update({ default_channel: connection.id })
+        .eq('id', (await supabase.auth.getUser()).data.user?.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: `${connection.instance_name} definida como conexão padrão`,
+      });
+      
+      // Reload connections to update UI
+      loadConnections();
+      
+    } catch (error) {
+      console.error('Error setting default connection:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao definir conexão padrão',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSettingDefault(false);
     }
   };
 
@@ -714,6 +748,10 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                       </Button>
                     </DropdownMenuTrigger>
                      <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setDefaultConnection(connection)}>
+                        <Star className="mr-2 h-4 w-4" />
+                        Definir como Padrão
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => configureWebhook(connection)}>
                         <Webhook className="mr-2 h-4 w-4" />
                         Configurar Webhook
@@ -735,9 +773,21 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">
-                    Número: {formatPhoneNumberDisplay(connection.phone_number || '')}
+                  <div className="text-xs text-muted-foreground flex items-center justify-between">
+                    <span>Número: {formatPhoneNumberDisplay(connection.phone_number || '')}</span>
+                    {/* Star icon for default connection */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDefaultConnection(connection)}
+                      disabled={isSettingDefault}
+                      className="h-6 w-6 p-0"
+                      title="Definir como conexão padrão"
+                    >
+                      <Star className="w-3 h-3" />
+                    </Button>
                   </div>
+                  
                   <div className="flex gap-2">
                     {connection.status === 'connected' ? (
                       <Button
