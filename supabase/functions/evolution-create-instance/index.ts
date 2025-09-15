@@ -214,7 +214,7 @@ serve(async (req) => {
     console.log('Connection secrets stored')
 
     // Prepare Evolution API request
-    const webhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook`
+    const webhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook-v2`
     
     // Validate API key before proceeding
     if (!evolutionConfig.apiKey) {
