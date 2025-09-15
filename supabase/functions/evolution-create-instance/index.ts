@@ -25,7 +25,11 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
                    Deno.env.get('EVOLUTION_ADMIN_API_KEY');
     
     console.log('Evolution URL (from workspace config):', url);
-    console.log('Evolution API Key:', apiKey ? 'Present' : 'Missing');
+    console.log('Evolution API Key exists:', !!apiKey);
+    
+    if (!apiKey) {
+      throw new Error('No Evolution API key found in environment variables');
+    }
     
     return { url, apiKey };
   } catch (error) {
@@ -34,6 +38,11 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
     const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
                    Deno.env.get('EVOLUTION_APIKEY') || 
                    Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    
+    if (!apiKey) {
+      throw new Error('No Evolution API key found in environment variables (fallback)');
+    }
+    
     return { url, apiKey };
   }
 }
@@ -70,7 +79,7 @@ serve(async (req) => {
     
     const evolutionConfig = await getEvolutionConfig(workspaceId, supabase)
     console.log('Evolution URL:', evolutionConfig.url)
-    console.log('Evolution API Key:', evolutionConfig.apiKey ? 'Present' : 'Missing')
+    console.log('Evolution API Key exists:', !!evolutionConfig.apiKey)
 
     console.log('Creating instance for workspace:', workspaceId, 'instance:', instanceName)
 
@@ -283,10 +292,13 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Unexpected error in evolution-create-instance:', error)
+    console.error('Error stack:', error.stack)
+    console.error('Error details:', JSON.stringify(error, null, 2))
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: `Unexpected error: ${error.message}` 
+        error: `Unexpected error: ${error.message}`,
+        details: error.stack
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
