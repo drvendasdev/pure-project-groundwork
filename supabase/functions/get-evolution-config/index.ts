@@ -39,22 +39,19 @@ serve(async (req) => {
       .eq('instance_name', '_master_config')
       .maybeSingle();
 
-    let evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'; // Default fallback
+    let evolutionUrl = null;
     let apiKey = null;
     
     if (configData?.evolution_url) {
       evolutionUrl = configData.evolution_url;
+    } else {
+      throw new Error('Evolution URL not configured for workspace. Please configure it in the Evolution settings.');
     }
     
     if (configData?.token && configData.token !== 'config_only') {
       apiKey = configData.token; // Use workspace-specific API Key
-    }
-
-    // Fallback to environment variables if no workspace-specific API key
-    if (!apiKey) {
-      apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-               Deno.env.get('EVOLUTION_APIKEY') || 
-               Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    } else {
+      throw new Error('Evolution API key not configured for workspace. Please configure it in the Evolution settings.');
     }
 
     return new Response(JSON.stringify({ 
