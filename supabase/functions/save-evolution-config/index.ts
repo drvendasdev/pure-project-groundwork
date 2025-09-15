@@ -13,12 +13,12 @@ serve(async (req) => {
   }
 
   try {
-    const { workspaceId, evolutionUrl } = await req.json();
+    const { workspaceId, evolutionUrl, evolutionApiKey } = await req.json();
 
-    if (!workspaceId || !evolutionUrl) {
+    if (!workspaceId || !evolutionUrl || !evolutionApiKey) {
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'Workspace ID e Evolution URL são obrigatórios' 
+        error: 'Workspace ID, Evolution URL e API Key são obrigatórios' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -32,15 +32,16 @@ serve(async (req) => {
 
     console.log('💾 Saving Evolution config for workspace:', workspaceId);
     console.log('🔗 URL:', evolutionUrl);
+    console.log('🔑 API Key provided:', !!evolutionApiKey);
 
-    // Save or update the Evolution URL configuration
+    // Save or update the Evolution URL and API Key configuration
     const { data, error } = await supabase
       .from('evolution_instance_tokens')
       .upsert({
         workspace_id: workspaceId,
         instance_name: '_master_config',
         evolution_url: evolutionUrl,
-        token: 'config_only' // Placeholder token for config-only records
+        token: evolutionApiKey // Store the API Key in the token field
       })
       .select();
 

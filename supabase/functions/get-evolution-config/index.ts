@@ -34,21 +34,28 @@ serve(async (req) => {
     // Try to get workspace-specific Evolution API configuration
     const { data: configData, error } = await supabase
       .from('evolution_instance_tokens')
-      .select('evolution_url')
+      .select('evolution_url, token')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', '_master_config')
       .maybeSingle();
 
     let evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'; // Default fallback
+    let apiKey = null;
     
     if (configData?.evolution_url) {
       evolutionUrl = configData.evolution_url;
     }
+    
+    if (configData?.token && configData.token !== 'config_only') {
+      apiKey = configData.token; // Use workspace-specific API Key
+    }
 
-    // Get API key from secrets (still using environment for now)
-    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                   Deno.env.get('EVOLUTION_APIKEY') || 
-                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    // Fallback to environment variables if no workspace-specific API key
+    if (!apiKey) {
+      apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+               Deno.env.get('EVOLUTION_APIKEY') || 
+               Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 

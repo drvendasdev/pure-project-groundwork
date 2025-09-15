@@ -12,6 +12,7 @@ import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 
 export function EvolutionApiConfig() {
   const [evolutionUrl, setEvolutionUrl] = useState("");
+  const [evolutionApiKey, setEvolutionApiKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
@@ -46,6 +47,10 @@ export function EvolutionApiConfig() {
           // Set default URL if no configuration exists
           setEvolutionUrl('https://evo.eventoempresalucrativa.com.br');
         }
+        
+        if (data?.apiKey) {
+          setEvolutionApiKey(data.apiKey);
+        }
       } catch (error) {
         console.error('❌ Error loading evolution config:', error);
         // Set default URL on error
@@ -57,10 +62,10 @@ export function EvolutionApiConfig() {
   }, [selectedWorkspace?.workspace_id]);
 
   const testConnection = async () => {
-    if (!evolutionUrl.trim()) {
+    if (!evolutionUrl.trim() || !evolutionApiKey.trim()) {
       toast({
-        title: 'URL inválida',
-        description: 'Por favor, insira uma URL válida',
+        title: 'Configuração incompleta',
+        description: 'Por favor, insira URL e API Key válidas',
         variant: 'destructive'
       });
       return;
@@ -70,7 +75,7 @@ export function EvolutionApiConfig() {
     try {
       const headers = getHeaders();
       const { data, error } = await supabase.functions.invoke('test-evolution-api', {
-        body: { testUrl: evolutionUrl },
+        body: { testUrl: evolutionUrl, testApiKey: evolutionApiKey },
         headers
       });
 
@@ -105,10 +110,10 @@ export function EvolutionApiConfig() {
 
   const saveConfiguration = async () => {
     if (!selectedWorkspace?.workspace_id) return;
-    if (!evolutionUrl.trim()) {
+    if (!evolutionUrl.trim() || !evolutionApiKey.trim()) {
       toast({
-        title: 'URL inválida',
-        description: 'Por favor, insira uma URL válida',
+        title: 'Configuração incompleta',
+        description: 'Por favor, insira URL e API Key válidas',
         variant: 'destructive'
       });
       return;
@@ -124,7 +129,8 @@ export function EvolutionApiConfig() {
       const { data, error } = await supabase.functions.invoke('save-evolution-config', {
         body: { 
           workspaceId: selectedWorkspace.workspace_id,
-          evolutionUrl: evolutionUrl.trim()
+          evolutionUrl: evolutionUrl.trim(),
+          evolutionApiKey: evolutionApiKey.trim()
         },
         headers
       });
@@ -138,7 +144,7 @@ export function EvolutionApiConfig() {
 
       toast({
         title: 'Configuração salva',
-        description: 'URL da Evolution API atualizada com sucesso'
+        description: 'Configuração da Evolution API atualizada com sucesso'
       });
       
       // Reset connection status to trigger new test
@@ -188,32 +194,49 @@ export function EvolutionApiConfig() {
             <div>
               <CardTitle>Configuração da Evolution API</CardTitle>
               <CardDescription>
-                Configure a URL da Evolution API para este workspace
+                Configure a URL e API Key da Evolution API para este workspace
               </CardDescription>
             </div>
             {getStatusBadge()}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="evolution-url">URL da Evolution API</Label>
-            <Input
-              id="evolution-url"
-              type="url"
-              value={evolutionUrl}
-              onChange={(e) => setEvolutionUrl(e.target.value)}
-              placeholder="https://your-evolution-api.com"
-              className="w-full"
-            />
-            <p className="text-sm text-muted-foreground">
-              Insira a URL completa da sua instância da Evolution API (ex: https://api.exemplo.com)
-            </p>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="evolution-url">URL da Evolution API</Label>
+              <Input
+                id="evolution-url"
+                type="url"
+                value={evolutionUrl}
+                onChange={(e) => setEvolutionUrl(e.target.value)}
+                placeholder="https://your-evolution-api.com"
+                className="w-full"
+              />
+              <p className="text-sm text-muted-foreground">
+                Insira a URL completa da sua instância da Evolution API (ex: https://api.exemplo.com)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="evolution-api-key">API Key da Evolution API</Label>
+              <Input
+                id="evolution-api-key"
+                type="password"
+                value={evolutionApiKey}
+                onChange={(e) => setEvolutionApiKey(e.target.value)}
+                placeholder="Sua API Key da Evolution API"
+                className="w-full"
+              />
+              <p className="text-sm text-muted-foreground">
+                Insira a API Key para autenticação na Evolution API
+              </p>
+            </div>
           </div>
 
           <div className="flex gap-3">
             <Button 
               onClick={saveConfiguration} 
-              disabled={loading || !evolutionUrl.trim()}
+              disabled={loading || !evolutionUrl.trim() || !evolutionApiKey.trim()}
               className="flex-1"
             >
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -223,7 +246,7 @@ export function EvolutionApiConfig() {
             <Button 
               variant="outline" 
               onClick={testConnection}
-              disabled={testing || !evolutionUrl.trim()}
+              disabled={testing || !evolutionUrl.trim() || !evolutionApiKey.trim()}
             >
               {testing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Testar Conexão
@@ -234,8 +257,9 @@ export function EvolutionApiConfig() {
             <h4 className="text-sm font-medium mb-2">Informações importantes:</h4>
             <ul className="text-sm text-muted-foreground space-y-1">
               <li>• Esta configuração é específica para este workspace</li>
-              <li>• Todas as conexões Evolution deste workspace usarão esta URL</li>
-              <li>• Teste a conexão antes de salvar para verificar se a API está acessível</li>
+              <li>• Todas as conexões Evolution deste workspace usarão esta URL e API Key</li>
+              <li>• Teste a conexão antes de salvar para verificar se as credenciais estão corretas</li>
+              <li>• A API Key é armazenada de forma segura no banco de dados</li>
             </ul>
           </div>
         </CardContent>
