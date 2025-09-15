@@ -6,19 +6,35 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets - FORCE CORRECT URL
-function getEvolutionConfig() {
-  // FORCE the correct Evolution URL regardless of what's in secrets
-  const url = 'https://evo.eventoempresalucrativa.com.br';
-  
-  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                 Deno.env.get('EVOLUTION_APIKEY') || 
-                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-  
-  console.log('Evolution URL:', url);
-  console.log('Evolution API Key:', apiKey ? 'Present' : 'Missing');
-  
-  return { url, apiKey };
+// Get Evolution API configuration from workspace settings
+async function getEvolutionConfig(workspaceId: string, supabase: any) {
+  try {
+    // Try to get workspace-specific configuration first
+    const { data: configData } = await supabase
+      .from('evolution_instance_tokens')
+      .select('evolution_url')
+      .eq('workspace_id', workspaceId)
+      .eq('instance_name', '_master_config')
+      .single();
+
+    const url = configData?.evolution_url || 'https://evo.eventoempresalucrativa.com.br';
+    
+    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                   Deno.env.get('EVOLUTION_APIKEY') || 
+                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    
+    console.log('Evolution URL (from workspace config):', url);
+    console.log('Evolution API Key:', apiKey ? 'Present' : 'Missing');
+    
+    return { url, apiKey };
+  } catch (error) {
+    console.error('Error getting workspace config, using fallback:', error);
+    const url = 'https://evo.eventoempresalucrativa.com.br';
+    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                   Deno.env.get('EVOLUTION_APIKEY') || 
+                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    return { url, apiKey };
+  }
 }
 
 serve(async (req) => {
@@ -31,7 +47,20 @@ serve(async (req) => {
     const { instanceName, historyRecovery = 'none', workspaceId } = await req.json()
     console.log('Request params:', { instanceName, historyRecovery, workspaceId })
 
-    const evolutionConfig = getEvolutionConfig()
+    if (!instanceName || !workspaceId) {
+      console.error('Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing required fields: instanceName and workspaceId are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Initialize Supabase client first
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
+    const evolutionConfig = await getEvolutionConfig(workspaceId, supabase)
     console.log('Evolution URL:', evolutionConfig.url)
     console.log('Evolution API Key:', evolutionConfig.apiKey ? 'Present' : 'Missing')
 

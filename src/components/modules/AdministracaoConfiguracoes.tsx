@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
+import { EvolutionApiConfig } from "./EvolutionApiConfig";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
@@ -79,7 +80,7 @@ export function AdministracaoConfiguracoes() {
       
       <div className="bg-card rounded-lg shadow-sm border border-border">
         <Tabs defaultValue="opcoes" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
+          <TabsList className="grid w-full grid-cols-4 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
             <TabsTrigger 
               value="opcoes" 
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
@@ -91,6 +92,12 @@ export function AdministracaoConfiguracoes() {
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
             >
               Webhooks (Evolution)
+            </TabsTrigger>
+            <TabsTrigger 
+              value="evolution-api" 
+              className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
+            >
+              Evolution API
             </TabsTrigger>
             <TabsTrigger 
               value="whitelabel" 
@@ -228,6 +235,10 @@ export function AdministracaoConfiguracoes() {
 
           <TabsContent value="webhooks" className="p-0 mt-0">
             <WebhooksEvolutionConfig />
+          </TabsContent>
+
+          <TabsContent value="evolution-api" className="p-0 mt-0">
+            <EvolutionApiConfig />
           </TabsContent>
 
           <TabsContent value="whitelabel" className="p-6 mt-0">

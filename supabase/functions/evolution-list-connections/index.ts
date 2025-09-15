@@ -6,17 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
 }
 
-// Get Evolution API configuration from secrets
-function getEvolutionConfig() {
-  const url = Deno.env.get('EVOLUTION_API_URL') || 
-              Deno.env.get('EVOLUTION_URL') || 
-              'https://evo.eventoempresalucrativa.com.br';
-  
-  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                 Deno.env.get('EVOLUTION_APIKEY') || 
-                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-  
-  return { url, apiKey };
+// Get Evolution API configuration from workspace settings
+async function getEvolutionConfig(workspaceId: string, supabase: any) {
+  try {
+    // Try to get workspace-specific configuration first
+    const { data: configData } = await supabase
+      .from('evolution_instance_tokens')
+      .select('evolution_url')
+      .eq('workspace_id', workspaceId)
+      .eq('instance_name', '_master_config')
+      .single();
+
+    const url = configData?.evolution_url || 'https://evo.eventoempresalucrativa.com.br';
+    
+    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                   Deno.env.get('EVOLUTION_APIKEY') || 
+                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    
+    return { url, apiKey };
+  } catch (error) {
+    console.error('Error getting workspace config, using fallback:', error);
+    const url = 'https://evo.eventoempresalucrativa.com.br';
+    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                   Deno.env.get('EVOLUTION_APIKEY') || 
+                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    return { url, apiKey };
+  }
 }
 
 serve(async (req) => {
@@ -61,7 +76,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const evolutionConfig = getEvolutionConfig()
+    const evolutionConfig = await getEvolutionConfig(workspaceId, supabase)
 
     // Get workspace connection limit
     const { data: limitData } = await supabase

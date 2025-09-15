@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getWorkspaceHeaders } from "@/lib/workspaceHeaders";
 
 interface ConnectionCreateRequest {
   instanceName: string;
@@ -28,6 +29,46 @@ interface ConnectionsListResponse {
 }
 
 class EvolutionProvider {
+  private async getEvolutionConfig(workspaceId?: string) {
+    try {
+      const headers = workspaceId ? getWorkspaceHeaders(workspaceId) : this.getHeaders();
+      
+      const { data, error } = await supabase.functions.invoke('get-evolution-config', {
+        body: { workspaceId: headers['x-workspace-id'] },
+        headers
+      });
+
+      if (error) throw error;
+
+      return {
+        url: data?.url || 'https://evo.eventoempresalucrativa.com.br',
+        apiKey: data?.apiKey
+      };
+    } catch (error) {
+      console.error('Error getting evolution config:', error);
+      return {
+        url: 'https://evo.eventoempresalucrativa.com.br',
+        apiKey: null
+      };
+    }
+  }
+
+  private getHeaders() {
+    // Get current user from localStorage (custom auth system)
+    const userData = localStorage.getItem('currentUser');
+    const currentUserData = userData ? JSON.parse(userData) : null;
+    
+    if (!currentUserData?.id) {
+      throw new Error('Usuário não autenticado');
+    }
+
+    return {
+      'x-system-user-id': currentUserData.id,
+      'x-system-user-email': currentUserData.email || '',
+      'x-workspace-id': currentUserData.workspace_id || ''
+    };
+  }
+
   async listConnections(workspaceId: string): Promise<ConnectionsListResponse> {
     try {
       console.log('🔍 EvolutionProvider.listConnections called with workspaceId:', workspaceId);
