@@ -229,15 +229,21 @@ serve(async (req) => {
     const evolutionPayload = {
       instanceName: instanceName,
       qrcode: true,
-      webhook: webhookUrl,
-      events: [
-        "APPLICATION_STARTUP",
-        "QRCODE_UPDATED", 
-        "CONNECTION_UPDATE",
-        "MESSAGES_UPSERT",
-        "MESSAGES_UPDATE",
-        "SEND_MESSAGE"
-      ]
+      integration: "WHATSAPP-BAILEYS",
+      webhook: {
+        url: webhookUrl,
+        base64: true,
+        headers: {
+          "authorization": `Bearer ${evolutionConfig.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        events: [
+          "QRCODE_UPDATED",
+          "CONNECTION_UPDATE",
+          "MESSAGES_UPSERT",
+          "SEND_MESSAGE"
+        ]
+      }
     }
 
     console.log('🚀 Calling Evolution API to create instance');
