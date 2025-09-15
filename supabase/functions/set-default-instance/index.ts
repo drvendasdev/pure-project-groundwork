@@ -61,6 +61,11 @@ serve(async (req) => {
       });
     }
 
+    // Instead of updating a single user, we'll store this as the workspace default
+    // This will be used for users who don't have a specific connection assigned
+    // For now, we'll update the current user as requested, but this could be expanded
+    // to a workspace-level default connection setting
+    
     // Update user's default channel
     const { error: updateError } = await supabase
       .from('system_users')

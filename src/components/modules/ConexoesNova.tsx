@@ -541,8 +541,23 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     try {
       setIsSettingDefault(true);
       
+      // Get user data for headers (same pattern as EvolutionProvider)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': workspaceId
+      };
+      
       const { data, error } = await supabase.functions.invoke('set-default-instance', {
-        body: { connectionId: connection.id }
+        body: { connectionId: connection.id },
+        headers
       });
 
       if (error) {
