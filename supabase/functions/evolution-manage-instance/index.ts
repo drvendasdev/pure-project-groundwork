@@ -25,7 +25,9 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🚀 evolution-manage-instance started')
     const { action, connectionId, instanceName } = await req.json()
+    console.log('📋 Request body:', { action, connectionId, instanceName })
 
     if (!action || (!connectionId && !instanceName)) {
       return new Response(
@@ -86,28 +88,53 @@ serve(async (req) => {
         break
 
       case 'delete':
+        console.log(`🗑️ Deleting instance: ${connection.instance_name}`)
+        
         response = await fetch(`${evolutionConfig.url}/instance/delete/${connection.instance_name}`, {
           method: 'DELETE',
           headers: { 'apikey': evolutionConfig.apiKey }
         })
         
+        console.log(`📡 Evolution API delete response status: ${response.status}`)
+        
         // Check if deletion was successful or if instance doesn't exist (404)
         if (response.ok || response.status === 404) {
+          console.log('✅ Evolution API deletion successful, removing from database')
+          
           // Remove from our database regardless of Evolution API response
-          await supabase
+          const { error: secretsError } = await supabase
             .from('connection_secrets')
             .delete()
             .eq('connection_id', connection.id)
+          
+          if (secretsError) {
+            console.error('❌ Error deleting connection secrets:', secretsError)
+          } else {
+            console.log('✅ Connection secrets deleted')
+          }
 
-          await supabase
+          const { error: connectionError } = await supabase
             .from('connections')
             .delete()
             .eq('id', connection.id)
-
+          
+          if (connectionError) {
+            console.error('❌ Error deleting connection:', connectionError)
+            return new Response(
+              JSON.stringify({ success: false, error: `Database deletion failed: ${connectionError.message}` }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+          
+          console.log('✅ Connection deleted from database successfully')
           return new Response(
             JSON.stringify({ success: true, message: 'Connection deleted successfully' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
+        } else {
+          console.error(`❌ Evolution API deletion failed with status: ${response.status}`)
+          const errorData = await response.json().catch(() => ({}))
+          console.error('❌ Evolution API error details:', errorData)
         }
         break
 

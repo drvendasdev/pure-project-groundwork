@@ -164,11 +164,42 @@ class EvolutionProvider {
   }
 
   async deleteConnection(connectionId: string): Promise<{ success: boolean }> {
-    const { data } = await supabase.functions.invoke('evolution-manage-instance', {
-      body: { action: 'delete', connectionId }
-    });
-    
-    return { success: data?.success || false };
+    try {
+      console.log('🗑️ EvolutionProvider.deleteConnection called with connectionId:', connectionId);
+      
+      // Get user data for headers
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': currentUserData.workspace_id || ''
+      };
+      
+      console.log('📤 Calling evolution-manage-instance delete with headers:', headers);
+
+      const { data, error } = await supabase.functions.invoke('evolution-manage-instance', {
+        body: { action: 'delete', connectionId },
+        headers
+      });
+      
+      console.log('📥 Delete response:', { data, error });
+      
+      if (error) {
+        console.error('❌ Supabase function error:', error);
+        throw new Error(error.message || 'Erro ao chamar função de exclusão');
+      }
+      
+      return { success: data?.success || false };
+    } catch (error) {
+      console.error('❌ Error in deleteConnection:', error);
+      throw error;
+    }
   }
 
   async getLogs(connectionId: string, limit: number = 100): Promise<{
