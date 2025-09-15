@@ -20,18 +20,39 @@ export function AdministracaoConfiguracoes() {
       if (!selectedWorkspace?.workspace_id) return;
       
       try {
-        // Get workspace limits
-        const { data: limitsData } = await supabase
-          .from('workspace_limits')
-          .select('connection_limit')
-          .eq('workspace_id', selectedWorkspace.workspace_id)
-          .single();
+        console.log('🔍 Loading workspace limits for workspace:', selectedWorkspace.workspace_id);
+        
+        // Use edge function to get workspace limits to avoid RLS issues
+        const userData = localStorage.getItem('currentUser');
+        const currentUserData = userData ? JSON.parse(userData) : null;
+        
+        if (!currentUserData?.id) {
+          console.error('❌ User not authenticated');
+          return;
+        }
 
-        if (limitsData) {
-          setConnectionLimit(limitsData.connection_limit.toString());
+        const headers = {
+          'x-system-user-id': currentUserData.id,
+          'x-system-user-email': currentUserData.email || '',
+          'x-workspace-id': selectedWorkspace.workspace_id
+        };
+
+        const { data, error } = await supabase.functions.invoke('get-workspace-limits', {
+          body: { workspaceId: selectedWorkspace.workspace_id },
+          headers
+        });
+
+        if (error) {
+          console.error('❌ Error getting workspace limits:', error);
+          throw error;
+        }
+
+        if (data?.connection_limit) {
+          setConnectionLimit(data.connection_limit.toString());
+          console.log('✅ Loaded connection limit:', data.connection_limit);
         }
       } catch (error) {
-        console.error('Error loading settings:', error);
+        console.error('❌ Error loading settings:', error);
       }
     };
     
@@ -45,14 +66,37 @@ export function AdministracaoConfiguracoes() {
     try {
       const numericValue = value === "unlimited" ? 999 : parseInt(value);
       
-      const { error } = await supabase
-        .from('workspace_limits')
-        .upsert({
-          workspace_id: selectedWorkspace.workspace_id,
-          connection_limit: numericValue
-        });
+      console.log('💾 Updating connection limit for workspace:', selectedWorkspace.workspace_id);
+      console.log('🔢 New limit:', numericValue);
+      
+      // Use edge function to update limits to avoid RLS issues
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
 
-      if (error) throw error;
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': selectedWorkspace.workspace_id
+      };
+
+      const { data, error } = await supabase.functions.invoke('update-workspace-limits', {
+        body: { 
+          workspaceId: selectedWorkspace.workspace_id,
+          connectionLimit: numericValue 
+        },
+        headers
+      });
+
+      if (error) {
+        console.error('❌ Error updating workspace limits:', error);
+        throw error;
+      }
+
+      console.log('✅ Connection limit updated successfully:', data);
 
       setConnectionLimit(value);
       toast({
@@ -60,7 +104,7 @@ export function AdministracaoConfiguracoes() {
         description: 'Limite de conexões atualizado com sucesso'
       });
     } catch (error: any) {
-      console.error('Error updating connection limit:', error);
+      console.error('❌ Error updating connection limit:', error);
       toast({
         title: 'Erro ao atualizar',
         description: error.message,

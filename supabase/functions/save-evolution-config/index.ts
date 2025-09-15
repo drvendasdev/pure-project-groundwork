@@ -12,13 +12,12 @@ serve(async (req) => {
   }
 
   try {
-    const workspaceId = req.headers.get('x-workspace-id') || 
-                       (await req.json().catch(() => ({})))?.workspaceId;
+    const { workspaceId, evolutionUrl } = await req.json();
 
-    if (!workspaceId) {
+    if (!workspaceId || !evolutionUrl) {
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'Workspace ID is required' 
+        error: 'Workspace ID e Evolution URL são obrigatórios' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -30,35 +29,37 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Try to get workspace-specific Evolution API configuration
-    const { data: configData, error } = await supabase
-      .from('evolution_instance_tokens')
-      .select('evolution_url')
-      .eq('workspace_id', workspaceId)
-      .eq('instance_name', '_master_config')
-      .maybeSingle();
+    console.log('💾 Saving Evolution config for workspace:', workspaceId);
+    console.log('🔗 URL:', evolutionUrl);
 
-    let evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'; // Default fallback
-    
-    if (configData?.evolution_url) {
-      evolutionUrl = configData.evolution_url;
+    // Save or update the Evolution URL configuration
+    const { data, error } = await supabase
+      .from('evolution_instance_tokens')
+      .upsert({
+        workspace_id: workspaceId,
+        instance_name: '_master_config',
+        evolution_url: evolutionUrl,
+        token: 'config_only' // Placeholder token for config-only records
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Database error saving evolution config:', error);
+      throw error;
     }
 
-    // Get API key from secrets (still using environment for now)
-    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                   Deno.env.get('EVOLUTION_APIKEY') || 
-                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    console.log('✅ Evolution config saved successfully:', data);
 
     return new Response(JSON.stringify({ 
       success: true, 
-      url: evolutionUrl,
-      apiKey: apiKey 
+      message: 'Configuração salva com sucesso',
+      data: data 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Error getting evolution config:', error);
+    console.error('❌ Error saving evolution config:', error);
     return new Response(JSON.stringify({ 
       success: false, 
       error: error.message 

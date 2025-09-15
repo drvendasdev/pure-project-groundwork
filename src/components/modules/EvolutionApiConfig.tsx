@@ -24,22 +24,30 @@ export function EvolutionApiConfig() {
       if (!selectedWorkspace?.workspace_id) return;
       
       try {
-        // Get current Evolution URL configuration
-        const { data: configData } = await supabase
-          .from('evolution_instance_tokens')
-          .select('evolution_url')
-          .eq('workspace_id', selectedWorkspace.workspace_id)
-          .eq('instance_name', '_master_config')
-          .single();
+        console.log('🔍 Loading Evolution config for workspace:', selectedWorkspace.workspace_id);
+        
+        // Use the edge function to get configuration instead of direct DB access
+        const headers = getHeaders();
+        const { data, error } = await supabase.functions.invoke('get-evolution-config', {
+          body: { workspaceId: selectedWorkspace.workspace_id },
+          headers
+        });
 
-        if (configData?.evolution_url) {
-          setEvolutionUrl(configData.evolution_url);
+        if (error) {
+          console.error('❌ Error from get-evolution-config:', error);
+          throw error;
+        }
+
+        console.log('✅ Evolution config response:', data);
+
+        if (data?.url) {
+          setEvolutionUrl(data.url);
         } else {
           // Set default URL if no configuration exists
           setEvolutionUrl('https://evo.eventoempresalucrativa.com.br');
         }
       } catch (error) {
-        console.error('Error loading evolution config:', error);
+        console.error('❌ Error loading evolution config:', error);
         // Set default URL on error
         setEvolutionUrl('https://evo.eventoempresalucrativa.com.br');
       }
@@ -108,17 +116,25 @@ export function EvolutionApiConfig() {
 
     setLoading(true);
     try {
-      // Save or update the Evolution URL configuration
-      const { error } = await supabase
-        .from('evolution_instance_tokens')
-        .upsert({
-          workspace_id: selectedWorkspace.workspace_id,
-          instance_name: '_master_config',
-          evolution_url: evolutionUrl.trim(),
-          token: 'config_only' // Placeholder token for config-only records
-        });
+      console.log('💾 Saving Evolution config for workspace:', selectedWorkspace.workspace_id);
+      console.log('🔗 New URL:', evolutionUrl.trim());
+      
+      // Use edge function to save configuration instead of direct DB access
+      const headers = getHeaders();
+      const { data, error } = await supabase.functions.invoke('save-evolution-config', {
+        body: { 
+          workspaceId: selectedWorkspace.workspace_id,
+          evolutionUrl: evolutionUrl.trim()
+        },
+        headers
+      });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error from save-evolution-config:', error);
+        throw error;
+      }
+
+      console.log('✅ Configuration saved successfully:', data);
 
       toast({
         title: 'Configuração salva',
@@ -128,7 +144,7 @@ export function EvolutionApiConfig() {
       // Reset connection status to trigger new test
       setConnectionStatus('unknown');
     } catch (error: any) {
-      console.error('Error saving evolution config:', error);
+      console.error('❌ Error saving evolution config:', error);
       toast({
         title: 'Erro ao salvar',
         description: error.message,

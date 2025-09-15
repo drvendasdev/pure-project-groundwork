@@ -12,13 +12,12 @@ serve(async (req) => {
   }
 
   try {
-    const workspaceId = req.headers.get('x-workspace-id') || 
-                       (await req.json().catch(() => ({})))?.workspaceId;
+    const { workspaceId } = await req.json();
 
     if (!workspaceId) {
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'Workspace ID is required' 
+        error: 'Workspace ID é obrigatório' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -30,35 +29,33 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Try to get workspace-specific Evolution API configuration
-    const { data: configData, error } = await supabase
-      .from('evolution_instance_tokens')
-      .select('evolution_url')
+    console.log('🔍 Getting workspace limits for workspace:', workspaceId);
+
+    // Get workspace limits
+    const { data: limitsData, error } = await supabase
+      .from('workspace_limits')
+      .select('connection_limit')
       .eq('workspace_id', workspaceId)
-      .eq('instance_name', '_master_config')
       .maybeSingle();
 
-    let evolutionUrl = 'https://evo.eventoempresalucrativa.com.br'; // Default fallback
-    
-    if (configData?.evolution_url) {
-      evolutionUrl = configData.evolution_url;
+    if (error) {
+      console.error('❌ Database error getting workspace limits:', error);
+      throw error;
     }
 
-    // Get API key from secrets (still using environment for now)
-    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                   Deno.env.get('EVOLUTION_APIKEY') || 
-                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+    console.log('✅ Workspace limits found:', limitsData);
+
+    const connectionLimit = limitsData?.connection_limit || 1;
 
     return new Response(JSON.stringify({ 
       success: true, 
-      url: evolutionUrl,
-      apiKey: apiKey 
+      connection_limit: connectionLimit
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Error getting evolution config:', error);
+    console.error('❌ Error getting workspace limits:', error);
     return new Response(JSON.stringify({ 
       success: false, 
       error: error.message 
