@@ -69,15 +69,19 @@ export function useWorkspaces() {
           setWorkspaces(updatedWorkspaces);
         } catch (fallbackError) {
           console.log('Fallback connections count failed, using 0:', fallbackError);
+          // Não mostrar erro para fallback, apenas usar os workspaces sem connection count
         }
       }
     } catch (error) {
       console.error('Error fetching workspaces:', error);
-      toast({
-        title: "Erro",
-        description: "Falha ao carregar empresas",
-        variant: "destructive"
-      });
+      // Só mostrar erro se realmente falhou em buscar workspaces
+      if (!workspaces.length) {
+        toast({
+          title: "Erro",
+          description: "Falha ao carregar empresas",
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsLoading(false);
     }

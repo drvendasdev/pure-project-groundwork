@@ -119,57 +119,96 @@ class EvolutionProvider {
   }
 
   async createConnection(request: ConnectionCreateRequest): Promise<ConnectionResponse> {
-    try {
-      console.log('🏗️ EvolutionProvider: Creating connection with:', request);
-      
-      const headers = getWorkspaceHeaders(request.workspaceId);
-      console.log('📤 Request headers:', headers);
-      
-      const { data, error } = await supabase.functions.invoke('evolution-create-instance', {
-        body: request,
-        headers
-      });
-
-      console.log('📥 Supabase function response:', { data, error });
-
-      if (error) {
-        console.error('❌ Error from evolution-create-instance function:', error);
+    const retryCount = 3;
+    const retryDelay = 2000;
+    
+    for (let attempt = 1; attempt <= retryCount; attempt++) {
+      try {
+        console.log(`🏗️ EvolutionProvider: Creating connection - Attempt ${attempt}/${retryCount}`, request);
         
-        // Enhanced error handling for CORS issues
-        if (error.message?.includes('Failed to fetch') || 
+        const headers = getWorkspaceHeaders(request.workspaceId);
+        console.log('📤 Request headers:', headers);
+        console.log('🔗 Function URL will be: https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-create-instance');
+        
+        const response = await supabase.functions.invoke('evolution-create-instance', {
+          body: request,
+          headers
+        });
+
+        console.log('📥 Raw Supabase response:', response);
+        const { data, error } = response;
+
+        if (error) {
+          console.error(`❌ Error from evolution-create-instance function (attempt ${attempt}):`, error);
+          console.error('❌ Error details:', JSON.stringify(error, null, 2));
+          
+          // Se for erro CORS/rede e ainda temos tentativas, retry
+          if (attempt < retryCount && (
+            error.message?.includes('Failed to fetch') || 
             error.message?.includes('NetworkError') ||
-            error.message?.includes('CORS')) {
-          throw new Error('Erro de conexão com o servidor. Verificando disponibilidade...');
+            error.message?.includes('CORS') ||
+            error.message?.includes('fetch')
+          )) {
+            console.log(`⏳ Network error, retrying in ${retryDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+          
+          // Enhanced error handling for CORS issues
+          if (error.message?.includes('Failed to fetch') || 
+              error.message?.includes('NetworkError') ||
+              error.message?.includes('CORS')) {
+            throw new Error('Erro de conexão com o servidor. Verificando disponibilidade...');
+          }
+          
+          throw new Error(error.message || 'Erro ao criar instância');
+        }
+
+        if (!data?.success) {
+          console.error('❌ Function returned unsuccessful response:', data);
+          throw new Error(data?.error || 'Falha ao criar instância');
+        }
+
+        console.log('✅ Connection created successfully:', data);
+        
+        // If there's a QR code in the response, include it in the connection
+        const connection = data.connection;
+        if (data.qr_code && !connection.qr_code) {
+          connection.qr_code = data.qr_code;
         }
         
-        throw new Error(error.message || 'Erro ao criar instância');
+        return connection;
+        
+      } catch (error: any) {
+        console.error(`❌ EvolutionProvider.createConnection error (attempt ${attempt}):`, error);
+        console.error('❌ Error stack:', error.stack);
+        
+        // Se for último attempt, lança o erro
+        if (attempt === retryCount) {
+          // Re-throw with more specific error information
+          if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+            throw new Error('Erro de conexão: Serviço temporariamente indisponível');
+          }
+          
+          throw error;
+        }
+        
+        // Se for erro de rede, tenta novamente
+        if (error instanceof TypeError || 
+            error.message?.includes('Failed to fetch') ||
+            error.message?.includes('CORS') ||
+            error.message?.includes('fetch')) {
+          console.log(`⏳ Network error, retrying in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+        
+        // Para outros tipos de erro, não retry
+        throw error;
       }
-
-      if (!data?.success) {
-        console.error('❌ Function returned unsuccessful response:', data);
-        throw new Error(data?.error || 'Falha ao criar instância');
-      }
-
-      console.log('✅ Connection created successfully:', data);
-      
-      // If there's a QR code in the response, include it in the connection
-      const connection = data.connection;
-      if (data.qr_code && !connection.qr_code) {
-        connection.qr_code = data.qr_code;
-      }
-      
-      return connection;
-      
-    } catch (error) {
-      console.error('❌ EvolutionProvider.createConnection error:', error);
-      
-      // Re-throw with more specific error information
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        throw new Error('Erro de conexão: Serviço temporariamente indisponível');
-      }
-      
-      throw error;
     }
+    
+    throw new Error('Falha ao criar instância após múltiplas tentativas');
   }
 
   async getConnectionStatus(connectionId: string): Promise<ConnectionResponse> {
