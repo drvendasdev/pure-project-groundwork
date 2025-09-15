@@ -16,7 +16,7 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
       .select('evolution_url')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', '_master_config')
-      .single();
+      .maybeSingle();
 
     const url = configData?.evolution_url || 'https://evo.eventoempresalucrativa.com.br';
     
@@ -39,8 +39,12 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests first
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { 
+      status: 200,
+      headers: corsHeaders 
+    })
   }
 
   try {
@@ -56,36 +60,17 @@ serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client first
+    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
+    console.log('Supabase URL:', supabaseUrl ? 'Present' : 'Missing')
+    console.log('Supabase Service Key:', supabaseServiceKey ? 'Present' : 'Missing')
+    
     const evolutionConfig = await getEvolutionConfig(workspaceId, supabase)
     console.log('Evolution URL:', evolutionConfig.url)
     console.log('Evolution API Key:', evolutionConfig.apiKey ? 'Present' : 'Missing')
-
-    if (!instanceName || !workspaceId) {
-      console.error('Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing required fields: instanceName and workspaceId are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Initialize Supabase client with service role
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
-    console.log('Supabase URL:', supabaseUrl ? 'Present' : 'Missing')
-    console.log('Service Role Key:', supabaseServiceKey ? 'Present' : 'Missing')
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
 
     console.log('Creating instance for workspace:', workspaceId, 'instance:', instanceName)
 
@@ -99,174 +84,128 @@ serve(async (req) => {
     if (limitError) {
       console.error('Error checking workspace limits:', limitError)
       return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao verificar limites do workspace' }),
+        JSON.stringify({ success: false, error: 'Error checking workspace limits' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     const connectionLimit = limitData?.connection_limit || 1
-    console.log('Connection limit for workspace:', connectionLimit)
+    console.log('Workspace connection limit:', connectionLimit)
 
-    // Count existing connections
-    const { count, error: countError } = await supabase
+    // Check current connection count
+    const { data: existingConnections, error: countError } = await supabase
       .from('connections')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('workspace_id', workspaceId)
 
     if (countError) {
-      console.error('Error counting connections:', countError)
+      console.error('Error counting existing connections:', countError)
       return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao contar conexões existentes' }),
+        JSON.stringify({ success: false, error: 'Error counting existing connections' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (count && count >= connectionLimit) {
+    const currentConnectionCount = existingConnections?.length || 0
+    console.log('Current connection count:', currentConnectionCount, 'Limit:', connectionLimit)
+
+    if (currentConnectionCount >= connectionLimit) {
+      console.error('Connection limit reached:', currentConnectionCount, '>=', connectionLimit)
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Limite de conexões atingido (${count}/${connectionLimit}). Entre em contato com o administrador para aumentar o limite.`,
-          quota_exceeded: true
+          error: `Connection limit reached. Current: ${currentConnectionCount}, Limit: ${connectionLimit}` 
         }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Check if instance name already exists
-    const { data: existing } = await supabase
+    // Check if instance name already exists for this workspace
+    const { data: existingInstance } = await supabase
       .from('connections')
       .select('id')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', instanceName)
       .maybeSingle()
 
-    if (existing) {
+    if (existingInstance) {
+      console.error('Instance name already exists:', instanceName)
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Instance name already exists in this workspace' 
-        }),
+        JSON.stringify({ success: false, error: 'Instance name already exists for this workspace' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Create connection record first (using service role to bypass RLS)
-    console.log('Creating connection record...')
-    const { data: connection, error: connectionError } = await supabase
+    // Create connection record first
+    const { data: connectionData, error: insertError } = await supabase
       .from('connections')
       .insert({
-        workspace_id: workspaceId,
         instance_name: instanceName,
         history_recovery: historyRecovery,
-        status: 'creating'
+        workspace_id: workspaceId,
+        status: 'creating',
+        metadata: {}
       })
       .select()
       .single()
 
-    if (connectionError) {
-      console.error('Failed to create connection record:', connectionError)
+    if (insertError) {
+      console.error('Error creating connection record:', insertError)
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Failed to create connection record: ${connectionError.message}`,
-          details: connectionError
-        }),
+        JSON.stringify({ success: false, error: 'Error creating connection record' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log('Connection record created:', connection.id)
+    console.log('Connection record created:', connectionData.id)
 
-    // Generate unique token for this instance
-    const token = crypto.randomUUID().replace(/-/g, '')
-
-    // Store connection secrets
+    // Generate unique token and store connection secrets
+    const token = crypto.randomUUID()
+    
     const { error: secretError } = await supabase
       .from('connection_secrets')
       .insert({
-        connection_id: connection.id,
+        connection_id: connectionData.id,
         token: token,
         evolution_url: evolutionConfig.url
       })
 
     if (secretError) {
-      console.error("Error saving connection secrets:", secretError)
-      // Clean up connection if secret creation fails
-      await supabase.from('connections').delete().eq('id', connection.id)
-      
+      console.error('Error storing connection secrets:', secretError)
+      // Clean up connection record
+      await supabase.from('connections').delete().eq('id', connectionData.id)
       return new Response(
-        JSON.stringify({ success: false, error: `Failed to save connection secrets: ${secretError.message}` }),
+        JSON.stringify({ success: false, error: 'Error storing connection secrets' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    if (!evolutionConfig.apiKey) {
-      // Clean up if no API key
-      await supabase.from('connection_secrets').delete().eq('connection_id', connection.id)
-      await supabase.from('connections').delete().eq('id', connection.id)
-      
-      return new Response(
-        JSON.stringify({ success: false, error: 'Evolution API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    console.log('Connection secrets stored')
 
-    // Use fixed n8n-response-v2 webhook URL for Evolution instances
-    console.log('Using fixed n8n-response-v2 webhook for Evolution instance...')
-    const fixedWebhookUrl = `${supabaseUrl}/functions/v1/n8n-response-v2`
-    const fixedWebhookSecret = 'supabase-evolution-webhook'
+    // Prepare Evolution API request
+    const webhookUrl = `${supabaseUrl}/functions/v1/n8n-response-v2`
     
-    console.log('Fixed webhook URL for Evolution:', fixedWebhookUrl)
-    
-    const webhookConfig = {
-      webhook_url: fixedWebhookUrl,
-      webhook_secret: fixedWebhookSecret
-    }
-
-    // Build Evolution payload
-    const evolutionPayload: any = {
+    const evolutionPayload = {
       instanceName: instanceName,
       token: token,
       qrcode: true,
-      integration: "WHATSAPP-BAILEYS"
-    }
-
-    // Always add fixed webhook configuration for Evolution instances
-    console.log('Adding fixed n8n-response-v2 webhook configuration for Evolution')
-    evolutionPayload.webhook = {
-      url: webhookConfig.webhook_url,
-      byEvents: true,
-      base64: true,
-      headers: {
-        "X-Secret": webhookConfig.webhook_secret,
-        "Content-Type": "application/json"
-      },
+      number: false,
+      webhook: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: false,
       events: [
+        "APPLICATION_STARTUP",
+        "QRCODE_UPDATED", 
+        "CONNECTION_UPDATE",
         "MESSAGES_UPSERT",
-        "QRCODE_UPDATED"
+        "MESSAGES_UPDATE",
+        "SEND_MESSAGE"
       ]
     }
 
-    // Set use_workspace_default to false since we're using fixed webhook
-    await supabase
-      .from('connections')
-      .update({ use_workspace_default: false })
-      .eq('id', connection.id)
-      
-    // Log that we're using fixed webhook
-    await supabase
-      .from('provider_logs')
-      .insert({
-        correlation_id: crypto.randomUUID(),
-        connection_id: connection.id,
-        event_type: 'INSTANCE_CREATED_FIXED_WEBHOOK',
-        level: 'info',
-        message: `Instance ${instanceName} created with fixed n8n-response-v2 webhook`,
-        metadata: { workspaceId, instanceName, webhookUrl: webhookConfig.webhook_url }
-      })
+    console.log('Calling Evolution API to create instance:', evolutionPayload)
 
-    console.log('Sending to Evolution API:', JSON.stringify(evolutionPayload, null, 2))
-
+    // Call Evolution API
     const evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
       method: 'POST',
       headers: {
@@ -276,85 +215,78 @@ serve(async (req) => {
       body: JSON.stringify(evolutionPayload)
     })
 
-    console.log("Evolution API response status:", evolutionResponse.status)
+    console.log('Evolution API response status:', evolutionResponse.status)
 
     if (!evolutionResponse.ok) {
       const errorText = await evolutionResponse.text()
-      console.error('Evolution API error:', {
-        status: evolutionResponse.status,
-        statusText: evolutionResponse.statusText,
-        body: errorText
-      })
+      console.error('Evolution API error:', errorText)
       
-      // CRITICAL: Clean up failed creation - delete connection and secrets FIRST
-      console.log("Cleaning up failed creation...")
-      await supabase
-        .from('connection_secrets')
-        .delete()
-        .eq('connection_id', connection.id)
-
-      await supabase
-        .from('connections')
-        .delete()
-        .eq('id', connection.id)
-
-      console.log("Cleanup completed, returning error")
+      // Clean up database records
+      await supabase.from('connection_secrets').delete().eq('connection_id', connectionData.id)
+      await supabase.from('connections').delete().eq('id', connectionData.id)
       
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Evolution API error: ${evolutionResponse.status} - ${errorText}`,
-          details: errorText
+          error: `Evolution API error: ${errorText}` 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Parse response data only after confirming success
     const evolutionData = await evolutionResponse.json()
-    console.log("Evolution API success response:", evolutionData)
-    console.log("QR code data:", evolutionData.qrcode)
+    console.log('Evolution API response data:', evolutionData)
 
-    // Update connection with Evolution response data
-    let updateData: any = {}
-    
-    if (evolutionData.qrcode?.base64 || evolutionData.qrcode?.code || evolutionData.qr) {
-      updateData.qr_code = evolutionData.qrcode?.base64 || evolutionData.qrcode?.code || evolutionData.qr
+    // Update connection with Evolution API response
+    const updateData: any = {
+      metadata: evolutionData
+    }
+
+    // Determine status based on response
+    if (evolutionData.instance?.qrcode?.code) {
       updateData.status = 'qr'
+      updateData.qr_code = evolutionData.instance.qrcode.code
     } else if (evolutionData.instance?.state === 'open') {
       updateData.status = 'connected'
       if (evolutionData.instance?.owner) {
         updateData.phone_number = evolutionData.instance.owner
       }
     } else {
-      updateData.status = 'connecting'
+      updateData.status = 'creating'
     }
 
-    updateData.metadata = evolutionData
-    updateData.updated_at = new Date().toISOString()
-
-    const { data: updatedConnection } = await supabase
+    const { error: updateError } = await supabase
       .from('connections')
       .update(updateData)
-      .eq('id', connection.id)
-      .select()
-      .single()
+      .eq('id', connectionData.id)
+
+    if (updateError) {
+      console.error('Error updating connection:', updateError)
+    }
+
+    console.log('Instance created successfully:', {
+      id: connectionData.id,
+      instance_name: instanceName,
+      status: updateData.status
+    })
 
     return new Response(
       JSON.stringify({
         success: true,
-        connection: updatedConnection,
-        qr_code: updateData.qr_code
+        connection: {
+          ...connectionData,
+          ...updateData
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error('Error creating Evolution instance:', error)
+    console.error('Unexpected error in evolution-create-instance:', error)
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || 'Internal server error' 
+        error: `Unexpected error: ${error.message}` 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
