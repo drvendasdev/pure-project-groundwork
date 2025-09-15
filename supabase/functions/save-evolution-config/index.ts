@@ -34,20 +34,43 @@ serve(async (req) => {
     console.log('🔗 URL:', evolutionUrl);
     console.log('🔑 API Key provided:', !!evolutionApiKey);
 
-    // Save or update the Evolution URL and API Key configuration
-    const { data, error } = await supabase
+    // First, try to update existing configuration
+    const { data: updateData, error: updateError } = await supabase
       .from('evolution_instance_tokens')
-      .upsert({
-        workspace_id: workspaceId,
-        instance_name: '_master_config',
+      .update({
         evolution_url: evolutionUrl,
-        token: evolutionApiKey // Store the API Key in the token field
+        token: evolutionApiKey,
+        updated_at: new Date().toISOString()
       })
+      .eq('workspace_id', workspaceId)
+      .eq('instance_name', '_master_config')
       .select();
 
-    if (error) {
-      console.error('❌ Database error saving evolution config:', error);
-      throw error;
+    let data;
+    
+    // If no rows were updated, create a new record
+    if (updateData && updateData.length === 0) {
+      const { data: insertData, error: insertError } = await supabase
+        .from('evolution_instance_tokens')
+        .insert({
+          workspace_id: workspaceId,
+          instance_name: '_master_config',
+          evolution_url: evolutionUrl,
+          token: evolutionApiKey
+        })
+        .select();
+
+      if (insertError) {
+        console.error('❌ Database error inserting evolution config:', insertError);
+        throw insertError;
+      }
+      
+      data = insertData;
+    } else if (updateError) {
+      console.error('❌ Database error updating evolution config:', updateError);
+      throw updateError;
+    } else {
+      data = updateData;
     }
 
     console.log('✅ Evolution config saved successfully:', data);
