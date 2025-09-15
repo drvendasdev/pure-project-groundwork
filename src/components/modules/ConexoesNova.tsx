@@ -134,7 +134,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     }
   };
 
-  const createInstance = async () => {
+  const createInstance = async (retryCount = 0) => {
     if (!instanceName.trim()) {
       toast({
         title: 'Erro',
@@ -177,7 +177,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         workspaceId
       });
 
-      console.log('Created connection:', connection);
+      console.log('✅ Created connection successfully:', connection);
 
       toast({
         title: 'Sucesso',
@@ -200,10 +200,37 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       }
 
     } catch (error) {
-      console.error('Error creating instance:', error);
+      console.error('❌ Error creating instance:', error);
+      
+      // Check if it's a CORS or network error and retry up to 3 times
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      const isCorsError = errorMessage.toLowerCase().includes('cors') || 
+                         errorMessage.toLowerCase().includes('network') ||
+                         errorMessage.toLowerCase().includes('fetch');
+      
+      if (isCorsError && retryCount < 3) {
+        console.log(`🔄 Retrying connection creation (attempt ${retryCount + 1}/3)...`);
+        
+        // Show retry toast
+        toast({
+          title: 'Reconectando...',
+          description: `Tentativa ${retryCount + 1} de 3. Aguarde...`,
+        });
+        
+        // Wait 2 seconds before retry
+        setTimeout(() => {
+          createInstance(retryCount + 1);
+        }, 2000);
+        
+        return;
+      }
+      
+      // Show final error message
       toast({
         title: 'Erro',
-        description: `Erro ao criar instância: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        description: retryCount > 0 
+          ? `Erro após ${retryCount + 1} tentativas: ${errorMessage}`
+          : `Erro ao criar instância: ${errorMessage}`,
         variant: 'destructive',
       });
     } finally {
@@ -630,7 +657,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
             
             <DialogFooter>
               <Button 
-                onClick={isEditMode ? editConnection : createInstance} 
+                onClick={isEditMode ? editConnection : () => createInstance()} 
                 disabled={
                   isCreating || 
                   (!isEditMode && !currentUsage.canCreateMore)

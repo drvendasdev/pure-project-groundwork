@@ -119,27 +119,57 @@ class EvolutionProvider {
   }
 
   async createConnection(request: ConnectionCreateRequest): Promise<ConnectionResponse> {
-    const { data } = await supabase.functions.invoke('evolution-create-instance', {
-      body: {
-        instanceName: request.instanceName,
-        historyRecovery: request.historyRecovery,
-        workspaceId: request.workspaceId
+    try {
+      console.log('🏗️ EvolutionProvider: Creating connection with:', request);
+      
+      const headers = getWorkspaceHeaders(request.workspaceId);
+      console.log('📤 Request headers:', headers);
+      
+      const { data, error } = await supabase.functions.invoke('evolution-create-instance', {
+        body: request,
+        headers
+      });
+
+      console.log('📥 Supabase function response:', { data, error });
+
+      if (error) {
+        console.error('❌ Error from evolution-create-instance function:', error);
+        
+        // Enhanced error handling for CORS issues
+        if (error.message?.includes('Failed to fetch') || 
+            error.message?.includes('NetworkError') ||
+            error.message?.includes('CORS')) {
+          throw new Error('Erro de conexão com o servidor. Verificando disponibilidade...');
+        }
+        
+        throw new Error(error.message || 'Erro ao criar instância');
       }
-    });
-    
-    console.log('Create connection response:', data);
-    
-    if (!data?.success) {
-      throw new Error(data?.error || 'Failed to create connection');
+
+      if (!data?.success) {
+        console.error('❌ Function returned unsuccessful response:', data);
+        throw new Error(data?.error || 'Falha ao criar instância');
+      }
+
+      console.log('✅ Connection created successfully:', data);
+      
+      // If there's a QR code in the response, include it in the connection
+      const connection = data.connection;
+      if (data.qr_code && !connection.qr_code) {
+        connection.qr_code = data.qr_code;
+      }
+      
+      return connection;
+      
+    } catch (error) {
+      console.error('❌ EvolutionProvider.createConnection error:', error);
+      
+      // Re-throw with more specific error information
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        throw new Error('Erro de conexão: Serviço temporariamente indisponível');
+      }
+      
+      throw error;
     }
-    
-    // If there's a QR code in the response, include it in the connection
-    const connection = data.connection;
-    if (data.qr_code && !connection.qr_code) {
-      connection.qr_code = data.qr_code;
-    }
-    
-    return connection;
   }
 
   async getConnectionStatus(connectionId: string): Promise<ConnectionResponse> {

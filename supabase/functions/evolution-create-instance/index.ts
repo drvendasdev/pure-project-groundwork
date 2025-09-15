@@ -11,35 +11,71 @@ const corsHeaders = {
 // Get Evolution API configuration from workspace settings
 async function getEvolutionConfig(workspaceId: string, supabase: any) {
   try {
+    console.log('🔧 Getting Evolution config for workspace:', workspaceId);
+    
     // Try to get workspace-specific configuration first
-    const { data: configData } = await supabase
+    const { data: configData, error: configError } = await supabase
       .from('evolution_instance_tokens')
       .select('evolution_url, token')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', '_master_config')
       .maybeSingle();
 
+    if (configError) {
+      console.log('⚠️ Error querying evolution_instance_tokens:', configError);
+    }
+
+    console.log('📋 Config data from database:', {
+      found: !!configData,
+      hasUrl: !!configData?.evolution_url,
+      hasToken: !!configData?.token,
+      tokenType: configData?.token === 'config_only' ? 'config_only' : 'actual_token'
+    });
+
     let url = 'https://evo.eventoempresalucrativa.com.br'; // Default fallback
     let apiKey = null;
     
     if (configData?.evolution_url) {
       url = configData.evolution_url;
+      console.log('✅ Using workspace-specific URL:', url);
+    } else {
+      console.log('⚠️ No workspace URL found, using default:', url);
     }
     
     if (configData?.token && configData.token !== 'config_only') {
       apiKey = configData.token; // Use workspace-specific API Key
+      console.log('✅ Using workspace-specific API key');
+    } else {
+      console.log('⚠️ No valid workspace API key found, checking environment...');
     }
 
     // Fallback to environment variables if no workspace-specific API key
     if (!apiKey) {
-      apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-               Deno.env.get('EVOLUTION_APIKEY') || 
-               Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+      const envKeys = [
+        'EVOLUTION_API_KEY',
+        'EVOLUTION_APIKEY', 
+        'EVOLUTION_ADMIN_API_KEY'
+      ];
+      
+      for (const envKey of envKeys) {
+        const envValue = Deno.env.get(envKey);
+        if (envValue) {
+          apiKey = envValue;
+          console.log(`✅ Found API key in environment variable: ${envKey}`);
+          break;
+        }
+      }
+      
+      if (!apiKey) {
+        console.log('❌ No API key found in any environment variable:', envKeys);
+      }
     }
     
-    console.log('Evolution URL (from workspace config):', url);
-    console.log('Evolution API Key exists:', !!apiKey);
-    console.log('API Key source:', configData?.token ? 'workspace-specific' : 'environment');
+    console.log('🔧 Final config:', {
+      url,
+      hasApiKey: !!apiKey,
+      source: configData?.token ? 'workspace' : 'environment'
+    });
     
     if (!apiKey) {
       throw new Error('No Evolution API key found in workspace config or environment variables');
@@ -47,16 +83,21 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
     
     return { url, apiKey };
   } catch (error) {
-    console.error('Error getting workspace config, using fallback:', error);
+    console.error('❌ Error getting workspace config:', error);
+    
+    // Try environment fallback
+    console.log('🔄 Attempting environment fallback...');
     const url = 'https://evo.eventoempresalucrativa.com.br';
     const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
                    Deno.env.get('EVOLUTION_APIKEY') || 
                    Deno.env.get('EVOLUTION_ADMIN_API_KEY');
     
     if (!apiKey) {
+      console.error('❌ No Evolution API key found in environment variables (fallback)');
       throw new Error('No Evolution API key found in environment variables (fallback)');
     }
     
+    console.log('✅ Using environment fallback config');
     return { url, apiKey };
   }
 }
