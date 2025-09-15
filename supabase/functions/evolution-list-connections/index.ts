@@ -9,24 +9,39 @@ const corsHeaders = {
 // Get Evolution API configuration from workspace settings
 async function getEvolutionConfig(workspaceId: string, supabase: any) {
   try {
-    // Try to get workspace-specific configuration first
-    const { data: configData } = await supabase
+    console.log('🔧 Getting Evolution config for workspace:', workspaceId);
+    
+    // Get workspace-specific configuration
+    const { data: configData, error: configError } = await supabase
       .from('evolution_instance_tokens')
-      .select('evolution_url')
+      .select('evolution_url, token')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', '_master_config')
-      .single();
+      .maybeSingle();
 
-    const url = configData?.evolution_url || 'https://evo.eventoempresalucrativa.com.br';
+    if (configError) {
+      console.log('⚠️ Error querying evolution_instance_tokens:', configError);
+    }
+
+    if (!configData?.evolution_url || !configData?.token || configData.token === 'config_only') {
+      console.log('❌ No valid workspace Evolution configuration found, using fallback');
+      // Fallback to environment variables
+      const url = Deno.env.get('EVOLUTION_URL') || 'https://evo.eventoempresalucrativa.com.br';
+      const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
+                     Deno.env.get('EVOLUTION_APIKEY') || 
+                     Deno.env.get('EVOLUTION_ADMIN_API_KEY');
+      return { url, apiKey };
+    }
     
-    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                   Deno.env.get('EVOLUTION_APIKEY') || 
-                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-    
-    return { url, apiKey };
+    console.log('✅ Using workspace-specific Evolution config');
+    return {
+      url: configData.evolution_url,
+      apiKey: configData.token
+    };
   } catch (error) {
-    console.error('Error getting workspace config, using fallback:', error);
-    const url = 'https://evo.eventoempresalucrativa.com.br';
+    console.error('Error getting Evolution config:', error);
+    // Fallback to environment variables
+    const url = Deno.env.get('EVOLUTION_URL') || 'https://evo.eventoempresalucrativa.com.br';
     const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
                    Deno.env.get('EVOLUTION_APIKEY') || 
                    Deno.env.get('EVOLUTION_ADMIN_API_KEY');
@@ -102,49 +117,69 @@ serve(async (req) => {
     const connectionsWithStatus = await Promise.all(
       (connections || []).map(async (connection) => {
         try {
-          if (!evolutionConfig.apiKey) return connection // Skip if no API key
+          if (!evolutionConfig.apiKey) {
+            console.log(`⚠️ No API key available for ${connection.instance_name}, skipping status check`);
+            return connection;
+          }
+          
+          console.log(`🔍 Checking status for ${connection.instance_name} on ${evolutionConfig.url}`);
           
           // Check current status from Evolution API
           const statusResponse = await fetch(`${evolutionConfig.url}/instance/connectionState/${connection.instance_name}`, {
             headers: { 'apikey': evolutionConfig.apiKey }
-          })
+          });
 
           if (statusResponse.ok) {
-            const statusData = await statusResponse.json()
-            const currentStatus = statusData.instance?.state
+            const statusData = await statusResponse.json();
+            console.log(`📊 Status response for ${connection.instance_name}:`, statusData);
+            
+            const currentStatus = statusData.instance?.state;
+            let newStatus = connection.status;
+            let phoneNumber = connection.phone_number;
 
-            // Update status in database if different
-            let newStatus = connection.status
+            // Update status based on Evolution API response
             if (currentStatus === 'open' && connection.status !== 'connected') {
-              newStatus = 'connected'
+              newStatus = 'connected';
+              // Extract phone number if available
+              if (statusData.instance?.owner) {
+                phoneNumber = statusData.instance.owner;
+              }
+              
+              console.log(`✅ Updating ${connection.instance_name} to connected`);
               await supabase
                 .from('connections')
                 .update({ 
                   status: 'connected',
+                  phone_number: phoneNumber,
                   updated_at: new Date().toISOString(),
                   last_activity_at: new Date().toISOString()
                 })
-                .eq('id', connection.id)
+                .eq('id', connection.id);
+                
             } else if (currentStatus === 'close' && connection.status === 'connected') {
-              newStatus = 'disconnected'
+              newStatus = 'disconnected';
+              
+              console.log(`❌ Updating ${connection.instance_name} to disconnected`);
               await supabase
                 .from('connections')
                 .update({ 
                   status: 'disconnected',
                   updated_at: new Date().toISOString()
                 })
-                .eq('id', connection.id)
+                .eq('id', connection.id);
             }
 
-            return { ...connection, status: newStatus }
+            return { ...connection, status: newStatus, phone_number: phoneNumber };
+          } else {
+            console.log(`⚠️ Failed to check status for ${connection.instance_name}: ${statusResponse.status}`);
           }
         } catch (error) {
-          console.error(`Error checking status for ${connection.instance_name}:`, error)
+          console.error(`❌ Error checking status for ${connection.instance_name}:`, error);
         }
 
-        return connection
+        return connection;
       })
-    )
+    );
 
     const quota = {
       used: connections?.length || 0,
