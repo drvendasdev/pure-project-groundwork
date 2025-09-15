@@ -308,10 +308,19 @@ serve(async (req) => {
       metadata: evolutionData
     }
 
-    // Determine status based on response
-    if (evolutionData.instance?.qrcode?.code) {
+    // Determine status and extract QR code
+    if (evolutionData.instance?.qrcode?.base64) {
+      updateData.status = 'qr'
+      updateData.qr_code = `data:image/png;base64,${evolutionData.instance.qrcode.base64}`
+    } else if (evolutionData.instance?.qrcode?.code) {
       updateData.status = 'qr'
       updateData.qr_code = evolutionData.instance.qrcode.code
+    } else if (evolutionData.qrcode?.base64) {
+      updateData.status = 'qr'
+      updateData.qr_code = `data:image/png;base64,${evolutionData.qrcode.base64}`
+    } else if (evolutionData.qrcode?.code) {
+      updateData.status = 'qr'
+      updateData.qr_code = evolutionData.qrcode.code
     } else if (evolutionData.instance?.state === 'open') {
       updateData.status = 'connected'
       if (evolutionData.instance?.owner) {

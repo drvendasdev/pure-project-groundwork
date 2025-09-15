@@ -6,24 +6,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from connection secrets
-async function getEvolutionConfig(connectionId: string, supabase: any) {
+// Get Evolution API configuration from workspace settings
+async function getEvolutionConfig(workspaceId: string, supabase: any) {
   try {
-    // Get connection secrets
-    const { data: secretData, error: secretError } = await supabase
-      .from('connection_secrets')
+    console.log('🔧 Getting Evolution config for workspace:', workspaceId);
+    
+    // Get workspace-specific configuration
+    const { data: configData, error: configError } = await supabase
+      .from('evolution_instance_tokens')
       .select('evolution_url, token')
-      .eq('connection_id', connectionId)
-      .single()
+      .eq('workspace_id', workspaceId)
+      .eq('instance_name', '_master_config')
+      .maybeSingle();
 
-    if (secretError || !secretData) {
-      console.error('No connection secrets found:', secretError)
-      throw new Error('Connection secrets not found')
+    if (configError) {
+      console.log('⚠️ Error querying evolution_instance_tokens:', configError);
+      throw new Error('Error getting workspace configuration');
     }
 
+    if (!configData?.evolution_url || !configData?.token || configData.token === 'config_only') {
+      console.error('❌ No valid workspace Evolution configuration found');
+      throw new Error('Evolution API not configured for workspace. Please configure it in the Evolution settings.');
+    }
+    
+    console.log('✅ Using workspace-specific Evolution config');
     return {
-      url: secretData.evolution_url,
-      apiKey: secretData.token
+      url: configData.evolution_url,
+      apiKey: configData.token
     }
   } catch (error) {
     console.error('Error getting Evolution config:', error)
@@ -68,7 +77,7 @@ serve(async (req) => {
       )
     }
 
-    const evolutionConfig = await getEvolutionConfig(connectionId, supabase)
+    const evolutionConfig = await getEvolutionConfig(connection.workspace_id, supabase)
 
     console.log('Getting QR code for instance:', connection.instance_name)
 

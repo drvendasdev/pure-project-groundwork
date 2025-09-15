@@ -193,10 +193,14 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
 
       // If connection has QR code, automatically open QR modal
       if (connection.qr_code) {
+        console.log('QR Code already available, opening modal');
         setSelectedConnection(connection);
         setIsQRModalOpen(true);
-        // Start polling for connection status
         startPolling(connection.id);
+      } else {
+        // Try to get QR code immediately after creation
+        console.log('No QR code in response, trying to get one...');
+        connectInstance(connection);
       }
 
     } catch (error) {
