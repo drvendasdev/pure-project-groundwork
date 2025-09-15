@@ -78,8 +78,11 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
     });
     
     if (!apiKey) {
+      console.error('❌ Critical: No Evolution API key found');
       throw new Error('No Evolution API key found in workspace config or environment variables');
     }
+    
+    console.log('✅ API key validation passed');
     
     return { url, apiKey };
   } catch (error) {
@@ -252,13 +255,23 @@ serve(async (req) => {
     // Prepare Evolution API request
     const webhookUrl = `${supabaseUrl}/functions/v1/n8n-media-processor`
     
+    // Validate API key before proceeding
+    if (!evolutionConfig.apiKey) {
+      console.error('❌ Missing Evolution API key');
+      await supabase.from('connections').delete().eq('id', connectionData.id)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing Evolution API key configuration' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
     const evolutionPayload = {
       instanceName: instanceName,
-      token: evolutionConfig.apiKey, // Use global API key instead of generated token
+      token: evolutionConfig.apiKey, // Use global API key
       qrcode: true,
       webhook: webhookUrl,
-      webhook_by_events: true, // Changed to true
-      webhook_base64: true, // Changed to true
+      webhook_by_events: true,
+      webhook_base64: true,
       events: [
         "APPLICATION_STARTUP",
         "QRCODE_UPDATED", 
@@ -269,19 +282,31 @@ serve(async (req) => {
       ]
     }
 
-    console.log('Calling Evolution API to create instance:', evolutionPayload)
+    console.log('🚀 Calling Evolution API to create instance');
+    console.log('📋 Payload:', JSON.stringify(evolutionPayload, null, 2));
+    console.log('🔗 URL:', `${evolutionConfig.url}/instance/create`);
 
-    // Call Evolution API
-    const evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': evolutionConfig.apiKey
-      },
-      body: JSON.stringify(evolutionPayload)
-    })
-
-    console.log('Evolution API response status:', evolutionResponse.status)
+    // Call Evolution API with error handling
+    let evolutionResponse;
+    try {
+      evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': evolutionConfig.apiKey
+        },
+        body: JSON.stringify(evolutionPayload)
+      })
+      
+      console.log('✅ Evolution API response status:', evolutionResponse.status);
+    } catch (fetchError) {
+      console.error('❌ Fetch error calling Evolution API:', fetchError);
+      await supabase.from('connections').delete().eq('id', connectionData.id)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to connect to Evolution API' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     if (!evolutionResponse.ok) {
       let errorData;
