@@ -541,18 +541,21 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     try {
       setIsSettingDefault(true);
       
-      const { error } = await supabase
-        .from('system_users')
-        .update({ default_channel: connection.id })
-        .eq('id', (await supabase.auth.getUser()).data.user?.id);
+      const { data, error } = await supabase.functions.invoke('set-default-instance', {
+        body: { connectionId: connection.id }
+      });
 
       if (error) {
         throw error;
       }
 
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to set default connection');
+      }
+
       toast({
         title: 'Sucesso',
-        description: `${connection.instance_name} definida como conexão padrão`,
+        description: data.message || `${connection.instance_name} definida como conexão padrão`,
       });
       
       // Reload connections to update UI
