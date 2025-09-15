@@ -228,7 +228,7 @@ serve(async (req) => {
     
     const evolutionPayload = {
       instanceName: instanceName,
-      token: evolutionConfig.apiKey, // Use global API key
+      token: token, // Use the generated connection token, not the Evolution API key
       qrcode: true,
       webhook: webhookUrl,
       webhook_by_events: true,
