@@ -1,5 +1,6 @@
 import { WebhookConfigFix } from '@/components/webhook/WebhookConfigFix';
 import { InstanceSyncPanel } from '@/components/sync/InstanceSyncPanel';
+import { WebhookDiagnostics } from '@/components/diagnostics/WebhookDiagnostics';
 
 export function AutomacoesAPI() {
   return (
@@ -10,6 +11,7 @@ export function AutomacoesAPI() {
       </div>
       
       <div className="grid gap-6">
+        <WebhookDiagnostics />
         <InstanceSyncPanel />
         <WebhookConfigFix />
       </div>

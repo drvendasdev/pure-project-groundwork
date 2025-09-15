@@ -6,8 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets
-function getEvolutionConfig() {
+// Get Evolution API configuration from workspace-specific settings
+async function getEvolutionConfig(supabase: any, workspaceId: string) {
+  console.log('🔧 Getting Evolution config for workspace:', workspaceId);
+  
+  try {
+    // Get workspace-specific config
+    const { data: config, error } = await supabase
+      .from('evolution_instance_tokens')
+      .select('token, evolution_url')
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (!error && config) {
+      console.log('✅ Using workspace-specific Evolution config');
+      return {
+        url: config.evolution_url,
+        apiKey: config.token
+      };
+    }
+    
+    console.log('⚠️ No workspace config found, using environment fallback');
+  } catch (error) {
+    console.log('⚠️ Error getting workspace config:', error);
+  }
+
+  // Fallback to environment variables
   const url = Deno.env.get('EVOLUTION_API_URL') || 
               Deno.env.get('EVOLUTION_URL') || 
               'https://evo.eventoempresalucrativa.com.br';
@@ -40,7 +64,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const evolutionConfig = getEvolutionConfig()
 
     // Get connection details
     let query = supabase.from('connections').select('*')
@@ -59,6 +82,9 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // Get Evolution config after we have the connection (for workspace_id)
+    const evolutionConfig = await getEvolutionConfig(supabase, connection.workspace_id)
 
     if (!evolutionConfig.apiKey) {
       return new Response(
@@ -135,6 +161,13 @@ serve(async (req) => {
           console.error(`❌ Evolution API deletion failed with status: ${response.status}`)
           const errorData = await response.json().catch(() => ({}))
           console.error('❌ Evolution API error details:', errorData)
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `Evolution API deletion failed: ${errorData.message || response.statusText}` 
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
         }
         break
 
@@ -183,7 +216,8 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
-      const errorData = await response.json()
+      const errorData = await response.json().catch(() => ({}))
+      console.error(`❌ Evolution API operation failed:`, errorData)
       return new Response(
         JSON.stringify({ 
           success: false, 
