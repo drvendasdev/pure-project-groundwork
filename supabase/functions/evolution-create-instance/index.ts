@@ -230,8 +230,6 @@ serve(async (req) => {
       instanceName: instanceName,
       qrcode: true,
       webhook: webhookUrl,
-      webhook_by_events: true,
-      webhook_base64: true,
       events: [
         "APPLICATION_STARTUP",
         "QRCODE_UPDATED", 
