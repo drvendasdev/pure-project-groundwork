@@ -11,7 +11,8 @@ serve(async (req) => {
   }
 
   try {
-    const webhookUrl = 'https://n8n-n8n-tezeus.fi1pd6.easypanel.host/webhook-test/message';
+    // Use the correct workspace webhook URL
+    const webhookUrl = 'https://n8n-n8n.upvzfg.easypanel.host/webhook-test/4850b7d8-c388-4193-a76d-e0705791195e';
     
     console.log('🧪 Testing N8N webhook:', webhookUrl);
     
