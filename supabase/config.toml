@@ -60,6 +60,21 @@ enable_confirmations = false
 enabled = true
 port = 54330
 
+[functions.get-evolution-config]
+verify_jwt = false
+
+[functions.save-evolution-config]
+verify_jwt = false
+
+[functions.test-evolution-api]
+verify_jwt = false
+
+[functions.get-workspace-limits]
+verify_jwt = false
+
+[functions.update-workspace-limits]
+verify_jwt = false
+
 [functions.evolution-create-instance]
 verify_jwt = false
 
@@ -121,9 +136,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.ai-chat-response]
-verify_jwt = false
-
-[functions.test-evolution-api]
 verify_jwt = false
 
 [functions.list-evolution-instances]
