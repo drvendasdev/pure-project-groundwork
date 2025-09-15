@@ -250,15 +250,15 @@ serve(async (req) => {
     console.log('Connection secrets stored')
 
     // Prepare Evolution API request
-    const webhookUrl = `${supabaseUrl}/functions/v1/n8n-response-v2`
+    const webhookUrl = `${supabaseUrl}/functions/v1/n8n-media-processor`
     
     const evolutionPayload = {
       instanceName: instanceName,
-      token: token,
+      token: evolutionConfig.apiKey, // Use global API key instead of generated token
       qrcode: true,
       webhook: webhookUrl,
-      webhook_by_events: false,
-      webhook_base64: false,
+      webhook_by_events: true, // Changed to true
+      webhook_base64: true, // Changed to true
       events: [
         "APPLICATION_STARTUP",
         "QRCODE_UPDATED", 
