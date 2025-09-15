@@ -5,12 +5,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspaceHeaders } from "@/lib/workspaceHeaders";
-import { Loader2, Bug, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Bug, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
 export const TestWebhookReceptionModal = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [testResults, setTestResults] = useState<any[]>([]);
+  const [currentStatus, setCurrentStatus] = useState<string>("");
   const { toast } = useToast();
   const { selectedWorkspace } = useWorkspace();
   const { getHeaders } = useWorkspaceHeaders();
@@ -27,12 +28,13 @@ export const TestWebhookReceptionModal = () => {
 
     setIsConfiguring(true);
     setTestResults([]);
+    setCurrentStatus("Configurando webhook de teste...");
 
     try {
       // Configure webhook to point to our test function
       const { data, error } = await supabase.functions.invoke('configure-evolution-webhook', {
         body: {
-          instanceName: 'emp', // Replace with your instance name
+          instance_name: 'emp', // Use the actual instance name from your connection
           webhookUrl: `https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/test-webhook-reception`,
           events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED']
         },
@@ -40,21 +42,30 @@ export const TestWebhookReceptionModal = () => {
       });
 
       if (error) {
-        throw error;
+        console.error('Configure webhook error:', error);
+        setCurrentStatus(`Erro: ${error.message}`);
+        toast({
+          title: "Erro ao Configurar",
+          description: `Erro: ${error.message || 'Erro desconhecido'}`,
+          variant: "destructive",
+        });
+        return;
       }
 
+      setCurrentStatus("Webhook configurado! Aguardando mensagens...");
       toast({
         title: "Webhook Configurado",
         description: "Webhook de teste configurado. Agora envie uma mensagem do celular.",
       });
 
-      // Start monitoring for webhook logs
+      // Start monitoring for webhook logs after a brief delay
       setTimeout(() => {
         monitorWebhookLogs();
-      }, 2000);
+      }, 3000);
 
     } catch (error: any) {
       console.error('Error configuring test webhook:', error);
+      setCurrentStatus(`Erro: ${error.message}`);
       toast({
         title: "Erro ao Configurar",
         description: error.message || "Erro ao configurar webhook de teste",
@@ -67,6 +78,8 @@ export const TestWebhookReceptionModal = () => {
 
   const monitorWebhookLogs = async () => {
     try {
+      console.log('🔍 Monitorando logs de webhook...');
+      
       const { data: logs, error } = await supabase
         .from('webhook_logs')
         .select('*')
@@ -76,25 +89,34 @@ export const TestWebhookReceptionModal = () => {
         .limit(10);
 
       if (error) {
-        throw error;
+        console.error('Error fetching webhook logs:', error);
+        setCurrentStatus(`Erro ao buscar logs: ${error.message}`);
+        return;
       }
 
+      console.log(`📋 Encontrados ${logs?.length || 0} logs de webhook`);
       setTestResults(logs || []);
 
       if (logs && logs.length > 0) {
+        setCurrentStatus(`${logs.length} webhook(s) recebido(s)!`);
         toast({
           title: "Webhooks Detectados!",
           description: `${logs.length} webhook(s) recebido(s)`,
         });
+      } else {
+        setCurrentStatus("Aguardando mensagens... Envie uma mensagem do celular.");
       }
 
     } catch (error: any) {
       console.error('Error monitoring webhook logs:', error);
+      setCurrentStatus(`Erro ao monitorar: ${error.message}`);
     }
   };
 
   const restoreOriginalWebhook = async () => {
     try {
+      setCurrentStatus("Restaurando webhook original...");
+      
       // Get workspace webhook settings
       const { data: webhookSettings } = await supabase
         .from('workspace_webhook_settings')
@@ -106,7 +128,7 @@ export const TestWebhookReceptionModal = () => {
 
       const { error } = await supabase.functions.invoke('configure-evolution-webhook', {
         body: {
-          instanceName: 'emp', // Replace with your instance name
+          instance_name: 'emp', // Use the actual instance name
           webhookUrl: originalUrl,
           events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE', 'QRCODE_UPDATED']
         },
@@ -117,6 +139,7 @@ export const TestWebhookReceptionModal = () => {
         throw error;
       }
 
+      setCurrentStatus("Webhook original restaurado!");
       toast({
         title: "Webhook Restaurado",
         description: "Webhook original restaurado com sucesso",
@@ -124,6 +147,7 @@ export const TestWebhookReceptionModal = () => {
 
     } catch (error: any) {
       console.error('Error restoring webhook:', error);
+      setCurrentStatus(`Erro ao restaurar: ${error.message}`);
       toast({
         title: "Erro ao Restaurar",
         description: error.message || "Erro ao restaurar webhook original",
@@ -155,6 +179,13 @@ export const TestWebhookReceptionModal = () => {
               <li>Clique em "Restaurar Webhook Original" quando terminar</li>
             </ol>
           </div>
+
+          {currentStatus && (
+            <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">{currentStatus}</span>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <Button 
@@ -209,7 +240,10 @@ export const TestWebhookReceptionModal = () => {
                         <details className="mt-2">
                           <summary className="cursor-pointer text-blue-600">Ver Payload</summary>
                           <pre className="text-xs bg-muted p-2 rounded mt-1 overflow-x-auto">
-                            {JSON.stringify(JSON.parse(result.payload_json.body || '{}'), null, 2)}
+                            {typeof result.payload_json.body === 'string' 
+                              ? result.payload_json.body
+                              : JSON.stringify(result.payload_json.body, null, 2)
+                            }
                           </pre>
                         </details>
                       )}
