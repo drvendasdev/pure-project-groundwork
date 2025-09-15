@@ -12,8 +12,56 @@ serve(async (req) => {
   }
 
   try {
-    const { messageId, mediaUrl, base64, fileName, mimeType, conversationId, phoneNumber, workspaceId, direction = 'inbound' } = await req.json();
-    console.log('N8N Media Processor - Processando mídia:', { messageId, hasMediaUrl: !!mediaUrl, hasBase64: !!base64, fileName, mimeType, direction });
+    const payload = await req.json();
+    console.log('N8N Media Processor - Payload recebido:', payload);
+    
+    // Mapear campos do N8N para os campos esperados pela função
+    const {
+      // Campos diretos (se vier da API)
+      messageId: directMessageId,
+      mediaUrl: directMediaUrl,
+      base64: directBase64,
+      fileName: directFileName,
+      mimeType: directMimeType,
+      conversationId: directConversationId,
+      phoneNumber: directPhoneNumber,
+      workspaceId: directWorkspaceId,
+      direction: directDirection,
+      
+      // Campos do N8N (mapeamento)
+      external_id,
+      content,
+      file_name,
+      mime_type,
+      workspace_id,
+      connection_id,
+      contact_name,
+      sender_type,
+      message_type,
+      phone_number
+    } = payload;
+    
+    // Priorizar campos diretos, depois mapear do N8N
+    const messageId = directMessageId || external_id;
+    const mediaUrl = directMediaUrl; // N8N não envia URL, só base64
+    const base64 = directBase64 || content;
+    const fileName = directFileName || file_name;
+    const mimeType = directMimeType || mime_type;
+    const conversationId = directConversationId;
+    const phoneNumber = directPhoneNumber || phone_number;
+    const workspaceId = directWorkspaceId || workspace_id;
+    const direction = directDirection || 'inbound';
+    
+    console.log('N8N Media Processor - Dados mapeados:', { 
+      messageId, 
+      hasMediaUrl: !!mediaUrl, 
+      hasBase64: !!base64, 
+      fileName, 
+      mimeType, 
+      direction,
+      workspaceId,
+      conversationId
+    });
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -44,7 +92,7 @@ serve(async (req) => {
       } catch (e) {
         throw new Error(`Base64 inválido: ${e.message}`);
       }
-    } else {
+    } else if (mediaUrl) {
       // Baixar mídia com headers adequados
       console.log('Baixando mídia de:', mediaUrl);
       const response = await fetch(mediaUrl, {
@@ -64,6 +112,9 @@ serve(async (req) => {
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
       uint8Array = new Uint8Array(arrayBuffer);
+    } else {
+      // Nem base64 nem mediaUrl fornecidos
+      throw new Error('Nenhuma fonte de mídia fornecida (base64 ou mediaUrl)');
     }
     
     // Validar se o arquivo foi obtido corretamente
@@ -463,6 +514,12 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Erro no N8N Media Processor:', error);
+    
+    // Se é erro de URL inválida, ser mais específico no log
+    if (error.message && error.message.includes('Invalid URL')) {
+      console.error('❌ Erro de URL inválida - verifique se mediaUrl está sendo passado corretamente');
+      console.error('💡 Dica: Para N8N, use o campo "content" com base64 em vez de "mediaUrl"');
+    }
     
     return new Response(JSON.stringify({
       success: false,
