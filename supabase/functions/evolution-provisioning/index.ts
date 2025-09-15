@@ -151,11 +151,11 @@ serve(async (req) => {
       await logEvent(supabase, connection.id, correlationId, 'CONNECTION_CREATED', 'info', 
         'Connection record created', { connectionId: connection.id });
 
-      // Use fixed n8n-response-v2 webhook configuration
-      const fixedWebhookUrl = `${supabaseUrl}/functions/v1/n8n-response-v2`;
+      // Use evolution-webhook for proper message routing
+      const fixedWebhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook`;
       const fixedWebhookSecret = 'supabase-evolution-webhook';
       
-      console.log('Using fixed n8n-response-v2 webhook for Evolution:', fixedWebhookUrl);
+      console.log('Using evolution-webhook for Evolution:', fixedWebhookUrl);
       
       const webhookConfig = {
         webhook: fixedWebhookUrl,

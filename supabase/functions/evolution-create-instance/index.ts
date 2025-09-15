@@ -214,7 +214,7 @@ serve(async (req) => {
     console.log('Connection secrets stored')
 
     // Prepare Evolution API request
-    const webhookUrl = `${supabaseUrl}/functions/v1/n8n-media-processor`
+    const webhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook`
     
     // Validate API key before proceeding
     if (!evolutionConfig.apiKey) {
