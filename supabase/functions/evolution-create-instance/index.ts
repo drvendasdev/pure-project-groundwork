@@ -5,6 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+  'Access-Control-Max-Age': '86400'
 }
 
 // Get Evolution API configuration from workspace settings
@@ -63,16 +64,19 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
 serve(async (req) => {
   // Handle CORS preflight requests first
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
+    console.log('⚡ CORS preflight request received');
+    return new Response(null, { 
       status: 200,
       headers: corsHeaders 
     })
   }
 
   try {
-    console.log('=== Evolution Create Instance Function Started ===')
+    console.log('🚀 Evolution Create Instance Function Started - Method:', req.method)
+    console.log('🔗 Request headers:', Object.fromEntries(req.headers.entries()))
+    
     const { instanceName, historyRecovery = 'none', workspaceId } = await req.json()
-    console.log('Request params:', { instanceName, historyRecovery, workspaceId })
+    console.log('📋 Request params:', { instanceName, historyRecovery, workspaceId })
 
     if (!instanceName || !workspaceId) {
       console.error('Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
