@@ -211,7 +211,6 @@ serve(async (req) => {
       instanceName: instanceName,
       token: token,
       qrcode: true,
-      number: false,
       webhook: webhookUrl,
       webhook_by_events: false,
       webhook_base64: false,
@@ -240,8 +239,18 @@ serve(async (req) => {
     console.log('Evolution API response status:', evolutionResponse.status)
 
     if (!evolutionResponse.ok) {
-      const errorText = await evolutionResponse.text()
-      console.error('Evolution API error:', errorText)
+      let errorData;
+      try {
+        errorData = await evolutionResponse.json();
+      } catch {
+        errorData = { message: await evolutionResponse.text() };
+      }
+      
+      console.error('Evolution API error:', {
+        status: evolutionResponse.status,
+        error: errorData,
+        payload: evolutionPayload
+      });
       
       // Clean up database records
       await supabase.from('connection_secrets').delete().eq('connection_id', connectionData.id)
@@ -250,9 +259,10 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Evolution API error: ${errorText}` 
+          error: `Evolution API error (${evolutionResponse.status}): ${errorData.message || JSON.stringify(errorData)}`,
+          details: errorData
         }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
