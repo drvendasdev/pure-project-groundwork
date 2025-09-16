@@ -133,6 +133,36 @@ serve(async (req) => {
       return normalized;
     }
 
+    // Função para detectar MIME type baseado no conteúdo (magic numbers)
+    function detectMimeTypeFromBuffer(buffer: Uint8Array): string | null {
+      // Verificar magic numbers para tipos comuns
+      const header = Array.from(buffer.slice(0, 12)).map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Imagens
+      if (header.startsWith('ffd8ff')) return 'image/jpeg';
+      if (header.startsWith('89504e47')) return 'image/png';
+      if (header.startsWith('47494638')) return 'image/gif';
+      if (header.startsWith('52494646') && header.includes('57454250')) return 'image/webp';
+      
+      // Vídeos
+      if (header.includes('667479706d703432') || header.includes('667479706d703431')) return 'video/mp4';
+      if (header.includes('6674797069736f6d')) return 'video/mp4';
+      if (header.includes('667479703367703')) return 'video/3gpp';
+      if (header.startsWith('1a45dfa3')) return 'video/webm';
+      if (header.includes('667479707174')) return 'video/quicktime';
+      
+      // Áudios  
+      if (header.startsWith('494433') || header.startsWith('fff3') || header.startsWith('fff2')) return 'audio/mpeg';
+      if (header.startsWith('4f676753')) return 'audio/ogg';
+      if (header.startsWith('52494646') && header.includes('57415645')) return 'audio/wav';
+      if (header.includes('667479704d344120')) return 'audio/mp4';
+      
+      // Documentos
+      if (header.startsWith('25504446')) return 'application/pdf';
+      
+      return null;
+    }
+
     // Função para detectar MIME type correto baseado na extensão
     function getMimeTypeByExtension(filename: string): string {
       const ext = filename.toLowerCase().split('.').pop() || '';
@@ -202,52 +232,77 @@ serve(async (req) => {
     ];
 
 
+    // Primeiro, tentar detectar MIME type pelo conteúdo do arquivo (magic numbers)
+    let detectedMimeType = detectMimeTypeFromBuffer(uint8Array);
+    console.log('🔍 MIME detectado por conteúdo:', detectedMimeType);
+    
     // Determinar MIME type correto e extensão com lógica melhorada
     let finalMimeType = mimeType;
     let fileExtension = 'unknown';
     
-    console.log('Processando MIME type - Original:', mimeType, 'Arquivo:', fileName);
+    console.log('Processando MIME type - Original:', mimeType, 'Arquivo:', fileName, 'Detectado:', detectedMimeType);
 
-    // Primeiro, normalizar o MIME type removendo parâmetros
-    if (mimeType) {
-      finalMimeType = normalizeMimeType(mimeType);
-      console.log('✅ MIME type normalizado:', finalMimeType);
+    // Limpar campos vazios/espaços
+    const cleanMimeType = mimeType && mimeType.trim() && mimeType.trim() !== '' ? mimeType.trim() : '';
+    const cleanFileName = fileName && fileName.trim() && fileName.trim() !== '' ? fileName.trim() : '';
+    
+    // Estratégia de detecção hierárquica (priorizar detecção por conteúdo)
+    if (detectedMimeType) {
+      // 1. MIME type detectado pelo conteúdo (mais confiável)
+      finalMimeType = detectedMimeType;
+      console.log('✅ Usando MIME detectado por conteúdo:', finalMimeType);
       
-      // Converter OGG para MP3 pois Supabase não suporta OGG
+      // Mapear para extensão
+      if (finalMimeType === 'image/jpeg') fileExtension = 'jpg';
+      else if (finalMimeType === 'image/png') fileExtension = 'png';
+      else if (finalMimeType === 'image/gif') fileExtension = 'gif';
+      else if (finalMimeType === 'image/webp') fileExtension = 'webp';
+      else if (finalMimeType === 'video/mp4') fileExtension = 'mp4';
+      else if (finalMimeType === 'video/quicktime') fileExtension = 'mov';
+      else if (finalMimeType === 'video/3gpp') fileExtension = '3gp';
+      else if (finalMimeType === 'video/webm') fileExtension = 'webm';
+      else if (finalMimeType === 'audio/mpeg') fileExtension = 'mp3';
+      else if (finalMimeType === 'audio/ogg') fileExtension = 'ogg';
+      else if (finalMimeType === 'audio/wav') fileExtension = 'wav';
+      else if (finalMimeType === 'audio/mp4') fileExtension = 'm4a';
+      else if (finalMimeType === 'application/pdf') fileExtension = 'pdf';
+      else fileExtension = finalMimeType.split('/')[1]?.split('+')[0] || 'unknown';
+      
+    } else if (cleanMimeType) {
+      // 2. MIME type fornecido
+      finalMimeType = normalizeMimeType(cleanMimeType);
+      console.log('✅ Usando MIME type fornecido (normalizado):', finalMimeType);
+      
+      // Converter OGG para MP3 pois Supabase pode ter limitações
       if (finalMimeType === 'audio/ogg' || finalMimeType === 'audio/opus') {
         console.log('🔄 Convertendo audio/ogg para audio/mpeg (MP3)');
         finalMimeType = 'audio/mpeg';
         fileExtension = 'mp3';
+      } else {
+        // Detectar extensão baseada no MIME type
+        if (finalMimeType.includes('jpeg')) fileExtension = 'jpg';
+        else if (finalMimeType.includes('png')) fileExtension = 'png';
+        else if (finalMimeType.includes('gif')) fileExtension = 'gif';
+        else if (finalMimeType.includes('webp')) fileExtension = 'webp';
+        else if (finalMimeType.includes('mp4') && finalMimeType.startsWith('video/')) fileExtension = 'mp4';
+        else if (finalMimeType.includes('quicktime')) fileExtension = 'mov';
+        else if (finalMimeType.includes('3gpp')) fileExtension = '3gp';
+        else if (finalMimeType.includes('webm')) fileExtension = 'webm';
+        else if (finalMimeType.includes('mpeg') && finalMimeType.startsWith('audio/')) fileExtension = 'mp3';
+        else if (finalMimeType.includes('wav')) fileExtension = 'wav';
+        else if (finalMimeType.includes('aac')) fileExtension = 'aac';
+        else fileExtension = finalMimeType.split('/')[1]?.split('+')[0] || 'unknown';
       }
-    }
-
-    // Estratégia de detecção hierárquica
-    if (finalMimeType && finalMimeType !== 'application/octet-stream') {
-      // MIME type fornecido é válido e suportado
-      console.log('✅ Usando MIME type fornecido (normalizado):', finalMimeType);
       
-      // Detectar extensão baseada no MIME type
-      if (finalMimeType.includes('jpeg')) fileExtension = 'jpg';
-      else if (finalMimeType.includes('png')) fileExtension = 'png';
-      else if (finalMimeType.includes('gif')) fileExtension = 'gif';
-      else if (finalMimeType.includes('webp')) fileExtension = 'webp';
-      else if (finalMimeType.includes('mp4') && finalMimeType.startsWith('video/')) fileExtension = 'mp4';
-      else if (finalMimeType.includes('quicktime')) fileExtension = 'mov';
-      else if (finalMimeType.includes('ogg') || finalMimeType.includes('opus')) fileExtension = 'mp3'; // Convertido para MP3
-      else if (finalMimeType.includes('mpeg') && finalMimeType.startsWith('audio/')) fileExtension = 'mp3';
-      else if (finalMimeType.includes('wav')) fileExtension = 'wav';
-      else if (finalMimeType.includes('aac')) fileExtension = 'aac';
-      else fileExtension = finalMimeType.split('/')[1]?.split('+')[0] || 'unknown';
-      
-    } else if (fileName && fileName.includes('.')) {
-      // Detectar por extensão do arquivo
-      console.log('🔍 Detectando por extensão do arquivo:', fileName);
-      fileExtension = fileName.split('.').pop()?.toLowerCase() || 'unknown';
-      finalMimeType = getMimeTypeByExtension(fileName);
+    } else if (cleanFileName && cleanFileName.includes('.')) {
+      // 3. Detectar por extensão do arquivo
+      console.log('🔍 Detectando por extensão do arquivo:', cleanFileName);
+      fileExtension = cleanFileName.split('.').pop()?.toLowerCase() || 'unknown';
+      finalMimeType = getMimeTypeByExtension(cleanFileName);
       console.log('📁 MIME detectado por extensão:', finalMimeType);
       
     } else if (mediaUrl) {
-      // Fallback baseado no URL se possível
+      // 4. Fallback baseado no URL se possível
       console.log('🌐 Tentando detectar por URL:', mediaUrl);
       const urlParts = mediaUrl.split('.');
       if (urlParts.length > 1) {
@@ -255,6 +310,11 @@ serve(async (req) => {
         finalMimeType = getMimeTypeByExtension(`file.${fileExtension}`);
         console.log('🔗 MIME detectado por URL:', finalMimeType);
       }
+    } else {
+      // 5. Fallback final - usar generic binary
+      console.log('⚠️ Não foi possível detectar tipo - usando fallback');
+      finalMimeType = 'application/octet-stream';
+      fileExtension = 'bin';
     }
 
     // Remover validação de MIME type - deixar o Supabase Storage decidir
@@ -277,14 +337,18 @@ serve(async (req) => {
     const randomId = crypto.randomUUID().split('-')[0]; // Primeiros 8 caracteres do UUID
     let finalFileName;
     
-    if (fileName) {
+    if (cleanFileName) {
       // Extrair extensão do arquivo original
-      const fileParts = fileName.split('.');
+      const fileParts = cleanFileName.split('.');
       const extension = fileParts.length > 1 ? fileParts.pop() : fileExtension;
-      const baseName = sanitizeFileName(fileParts.join('.')) || 'file';
+      const baseName = sanitizeFileName(fileParts.join('.')) || 'media';
       finalFileName = `${timestamp}_${randomId}_${baseName}.${extension}`;
     } else {
-      finalFileName = `${timestamp}_${randomId}.${fileExtension}`;
+      // Se não tem nome, usar o tipo detectado
+      const typePrefix = finalMimeType.startsWith('video/') ? 'video' : 
+                        finalMimeType.startsWith('audio/') ? 'audio' :
+                        finalMimeType.startsWith('image/') ? 'image' : 'file';
+      finalFileName = `${timestamp}_${randomId}_${typePrefix}.${fileExtension}`;
     }
     
     const storagePath = `messages/${finalFileName}`;
