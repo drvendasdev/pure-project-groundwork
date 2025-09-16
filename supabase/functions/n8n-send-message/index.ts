@@ -236,6 +236,7 @@ serve(async (req) => {
     const n8nPayload = {
       event: 'send.message',
       instance: finalEvolutionInstance,
+      external_id: messageId,
       data: {
         key: {
           remoteJid: `${contactPhone}@s.whatsapp.net`,
