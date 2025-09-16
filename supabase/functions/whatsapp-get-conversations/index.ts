@@ -170,55 +170,68 @@ serve(async (req) => {
 
     console.log(`📋 Found ${conversationsData?.length || 0} conversations`);
 
-    // Fetch messages for each conversation
-    const conversationsWithMessages = await Promise.all(
-      (conversationsData || []).map(async (conv) => {
-        const { data: messagesData } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('conversation_id', conv.id)
-          .order('created_at', { ascending: true });
+    // Otimização: buscar todas as mensagens de uma vez
+    let allMessages: any[] = [];
+    if (conversationsData && conversationsData.length > 0) {
+      const conversationIds = conversationsData.map(conv => conv.id);
+      
+      const { data: messagesData } = await supabase
+        .from('messages')
+        .select('*')
+        .in('conversation_id', conversationIds)
+        .order('created_at', { ascending: true });
+      
+      allMessages = messagesData || [];
+    }
 
-        return {
-          id: conv.id,
-          contact: conv.contacts ? {
-            id: conv.contacts.id,
-            name: conv.contacts.name,
-            phone: conv.contacts.phone,
-            email: conv.contacts.email,
-            profile_image_url: conv.contacts.profile_image_url,
-          } : {
-            id: conv.contact_id,
-            name: 'Unknown Contact',
-            phone: null,
-            email: null,
-            profile_image_url: null,
-          },
-          agente_ativo: conv.agente_ativo,
-          status: conv.status,
-          unread_count: conv.unread_count,
-          last_activity_at: conv.last_activity_at,
-          created_at: conv.created_at,
-          evolution_instance: conv.evolution_instance,
-          assigned_user_id: conv.assigned_user_id,
-          assigned_at: conv.assigned_at,
-          connection_id: conv.connection_id,
-          workspace_id: conv.workspace_id,
-          messages: (messagesData || []).map(msg => ({
-            id: msg.id,
-            content: msg.content,
-            sender_type: msg.sender_type,
-            created_at: msg.created_at,
-            read_at: msg.read_at,
-            status: msg.status,
-            message_type: msg.message_type,
-            file_url: msg.file_url,
-            file_name: msg.file_name,
-            origem_resposta: msg.origem_resposta || 'manual',
-          })),
-        };
-      })
-    );
+    // Agrupar mensagens por conversa
+    const messagesByConversation = allMessages.reduce((acc, msg) => {
+      if (!acc[msg.conversation_id]) {
+        acc[msg.conversation_id] = [];
+      }
+      acc[msg.conversation_id].push({
+        id: msg.id,
+        content: msg.content,
+        sender_type: msg.sender_type,
+        created_at: msg.created_at,
+        read_at: msg.read_at,
+        status: msg.status,
+        message_type: msg.message_type,
+        file_url: msg.file_url,
+        file_name: msg.file_name,
+        origem_resposta: msg.origem_resposta || 'manual',
+      });
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    // Construir resultado final
+    const conversationsWithMessages = (conversationsData || []).map(conv => ({
+      id: conv.id,
+      contact: conv.contacts ? {
+        id: conv.contacts.id,
+        name: conv.contacts.name,
+        phone: conv.contacts.phone,
+        email: conv.contacts.email,
+        profile_image_url: conv.contacts.profile_image_url,
+      } : {
+        id: conv.contact_id,
+        name: 'Unknown Contact',
+        phone: null,
+        email: null,
+        profile_image_url: null,
+      },
+      agente_ativo: conv.agente_ativo,
+      status: conv.status,
+      unread_count: conv.unread_count,
+      last_activity_at: conv.last_activity_at,
+      created_at: conv.created_at,
+      evolution_instance: conv.evolution_instance,
+      assigned_user_id: conv.assigned_user_id,
+      assigned_at: conv.assigned_at,
+      connection_id: conv.connection_id,
+      workspace_id: conv.workspace_id,
+      messages: messagesByConversation[conv.id] || [],
+    }));
 
     console.log(`✅ Successfully fetched ${conversationsWithMessages.length} conversations`);
 
