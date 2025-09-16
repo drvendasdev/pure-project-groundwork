@@ -37,14 +37,38 @@ export function useNotifications() {
         // Pegar APENAS a última mensagem não lida do contato
         const lastUnreadMessage = unreadContactMessages[unreadContactMessages.length - 1];
         
-        const isMedia = ['image', 'video', 'audio', 'document'].includes(lastUnreadMessage.message_type || '');
+        const isMedia = ['image', 'video', 'audio', 'document', 'sticker'].includes(lastUnreadMessage.message_type || '');
+        
+        // Determinar o conteúdo da notificação baseado no tipo
+        let notificationContent = lastUnreadMessage.content || '';
+        if (isMedia) {
+          switch (lastUnreadMessage.message_type) {
+            case 'image':
+              notificationContent = '📷 Imagem';
+              break;
+            case 'video':
+              notificationContent = '🎥 Vídeo';
+              break;
+            case 'audio':
+              notificationContent = '🎵 Áudio';
+              break;
+            case 'document':
+              notificationContent = '📄 Documento';
+              break;
+            case 'sticker':
+              notificationContent = '🎪 Sticker';
+              break;
+            default:
+              notificationContent = '📎 Mídia';
+          }
+        }
         
         newNotifications.push({
           id: lastUnreadMessage.id,
           conversationId: conv.id,
           contactName: conv.contact.name,
-          contactPhone: conv.contact.phone,
-          content: isMedia ? 'Imagem' : (lastUnreadMessage.content || ''),
+          contactPhone: conv.contact.phone || '',
+          content: notificationContent,
           messageType: lastUnreadMessage.message_type || 'text',
           timestamp: new Date(lastUnreadMessage.created_at),
           isMedia
@@ -52,9 +76,18 @@ export function useNotifications() {
       }
     });
     
-    // Tocar som se o número de não lidas aumentou
-    if (unreadCount > previousUnreadCount && previousUnreadCount > 0) {
-      playNotificationSound();
+    // Tocar som APENAS se o número de não lidas aumentou (nova mensagem recebida)
+    if (unreadCount > previousUnreadCount && previousUnreadCount >= 0) {
+      console.log('🔔 Nova notificação:', {
+        anterior: previousUnreadCount,
+        atual: unreadCount,
+        diferenca: unreadCount - previousUnreadCount
+      });
+      
+      // Só tocar som se realmente aumentou (não na primeira carga)
+      if (previousUnreadCount > 0) {
+        playNotificationSound();
+      }
     }
     
     setPreviousUnreadCount(unreadCount);
