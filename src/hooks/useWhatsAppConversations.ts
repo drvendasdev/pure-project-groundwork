@@ -452,11 +452,9 @@ export const useWhatsAppConversations = () => {
       return;
     }
 
-    console.log('🔄 Configurando subscriptions real-time para workspace:', selectedWorkspace.workspace_id);
-
-    // Canal principal para mensagens
+    // Subscription para novas mensagens
     const messagesChannel = supabase
-      .channel(`messages-${selectedWorkspace.workspace_id}`)
+      .channel('whatsapp-messages')
       .on('postgres_changes', 
         { 
           event: 'INSERT', 
@@ -465,49 +463,43 @@ export const useWhatsAppConversations = () => {
           filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
         },
         (payload) => {
-          console.log('🔔 Nova mensagem recebida via realtime:', payload.new);
+          console.log('🔔 Nova mensagem recebida:', payload.new);
           const newMessage = payload.new as any;
           
-            setConversations(prev => {
-              const updatedConversations = prev.map(conv => {
-                if (conv.id === newMessage.conversation_id) {
-                  // Verificar se mensagem já existe para evitar duplicatas
-                  const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
-                  if (messageExists) {
-                    console.log('⚠️ Mensagem já existe, ignorando:', newMessage.id);
-                    return conv;
-                  }
+          setConversations(prev => {
+            return prev.map(conv => {
+              if (conv.id === newMessage.conversation_id) {
+                // Verificar se mensagem já existe para evitar duplicatas
+                const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
+                if (messageExists) return conv;
 
-                  console.log('✅ Adicionando nova mensagem:', newMessage.id);
-                  const updatedConv = {
-                    ...conv,
-                    messages: [...conv.messages, {
-                      id: newMessage.id,
-                      content: newMessage.content,
-                      sender_type: newMessage.sender_type,
-                      created_at: newMessage.created_at,
-                      read_at: newMessage.read_at,
-                      status: newMessage.status,
-                      message_type: newMessage.message_type,
-                      file_url: newMessage.file_url,
-                      file_name: newMessage.file_name,
-                      origem_resposta: newMessage.origem_resposta || 'manual',
-                    }],
-                    last_activity_at: newMessage.created_at
-                  };
+                const updatedConv = {
+                  ...conv,
+                  messages: [...conv.messages, {
+                    id: newMessage.id,
+                    content: newMessage.content,
+                    sender_type: newMessage.sender_type,
+                    created_at: newMessage.created_at,
+                    read_at: newMessage.read_at,
+                    status: newMessage.status,
+                    message_type: newMessage.message_type,
+                    file_url: newMessage.file_url,
+                    file_name: newMessage.file_name,
+                    origem_resposta: newMessage.origem_resposta || 'manual',
+                  }],
+                  last_activity_at: newMessage.created_at
+                };
 
-                  // Se é mensagem de contato, incrementar unread_count localmente
-                  if (newMessage.sender_type === 'contact') {
-                    updatedConv.unread_count = conv.unread_count + 1;
-                  }
-
-                  return updatedConv;
+                // Se é mensagem de contato, incrementar unread_count localmente (triggers do DB fazem isso também)
+                if (newMessage.sender_type === 'contact') {
+                  updatedConv.unread_count = conv.unread_count + 1;
                 }
-                return conv;
-              }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
-              
-              return updatedConversations;
-            });
+
+                return updatedConv;
+              }
+              return conv;
+            }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
+          });
         }
       )
       .on('postgres_changes',
@@ -677,18 +669,8 @@ export const useWhatsAppConversations = () => {
     };
   }, [selectedWorkspace?.workspace_id]);
 
-  // Polling como fallback para garantir sincronização
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('🔄 Verificação de sincronização (polling)');
-      fetchConversations();
-    }, 30000); // A cada 30 segundos
-
-    return () => clearInterval(interval);
-  }, [selectedWorkspace?.workspace_id]);
-
   return {
-    conversations: conversations.sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()),
+    conversations,
     loading,
     sendMessage,
     markAsRead,

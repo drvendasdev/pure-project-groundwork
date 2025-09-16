@@ -141,20 +141,11 @@ const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 const audioChunksRef = useRef<Blob[]>([]);
 const [isRecording, setIsRecording] = useState(false);
 
-  // Filtrar conversas baseado no termo de busca e aba ativa
-  const filteredConversations = getFilteredConversations()
-    .filter(conv =>
-      conv.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (conv.contact.phone && conv.contact.phone.includes(searchTerm))
-    )
-    .sort((a, b) => {
-      // Priorizar conversas com mensagens não lidas
-      if (a.unread_count > 0 && b.unread_count === 0) return -1;
-      if (a.unread_count === 0 && b.unread_count > 0) return 1;
-      
-      // Depois ordenar por última atividade
-      return new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime();
-    });
+  // Filtrar conversas baseado no termo de busca
+  const filteredConversations = conversations.filter(conv =>
+    conv.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (conv.contact.phone && conv.contact.phone.includes(searchTerm))
+  );
 
   // Função para enviar mensagem
   const handleSendMessage = async () => {
