@@ -448,7 +448,7 @@ export const useWhatsAppConversations = () => {
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    if (!currentUserData?.id) {
+    if (!currentUserData?.id || !selectedWorkspace?.workspace_id) {
       return;
     }
 
@@ -456,7 +456,12 @@ export const useWhatsAppConversations = () => {
     const messagesChannel = supabase
       .channel('whatsapp-messages')
       .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
           console.log('🔔 Nova mensagem recebida:', payload.new);
           const newMessage = payload.new as any;
@@ -498,7 +503,12 @@ export const useWhatsAppConversations = () => {
         }
       )
       .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
           const updatedMessage = payload.new as any;
           console.log('✏️ Mensagem atualizada:', {
@@ -532,7 +542,12 @@ export const useWhatsAppConversations = () => {
         }
       )
       .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'messages' },
+        { 
+          event: 'DELETE', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
           const deletedMessageId = payload.old?.id;
           console.log('🗑️ Mensagem deletada:', deletedMessageId);
@@ -551,7 +566,12 @@ export const useWhatsAppConversations = () => {
     const conversationsChannel = supabase
       .channel('whatsapp-conversations')
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'conversations' },
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'conversations',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         async (payload) => {
           const newConv = payload.new as any;
           
@@ -614,7 +634,12 @@ export const useWhatsAppConversations = () => {
         }
       )
       .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'conversations' },
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'conversations',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
         (payload) => {
           console.log('🔄 Conversa atualizada:', payload.new);
           const updatedConv = payload.new as any;
@@ -642,7 +667,7 @@ export const useWhatsAppConversations = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, []);
+  }, [selectedWorkspace?.workspace_id]);
 
   return {
     conversations,
