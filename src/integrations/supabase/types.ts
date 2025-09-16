@@ -1507,10 +1507,6 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: undefined
       }
-      ensure_master_users_in_all_workspaces: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
       get_current_user_profile: {
         Args: Record<PropertyKey, never>
         Returns: string

@@ -431,135 +431,218 @@ export const useWhatsAppConversations = () => {
     }
   }, []);
 
-  // Fase 1: Listagem básica estável sem Realtime
+  // Real-time subscriptions and workspace dependency
   useEffect(() => {
-    console.log('🔄 Carregando conversas - workspace dependency effect');
+    // Get current user from localStorage
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (currentUserData?.id) {
+      console.log('🧹 Limpando subscriptions real-time');
       fetchConversations();
     }
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
 
-  // Fase 2: Realtime seguro (implementar depois que Phase 1 estiver funcionando)
   useEffect(() => {
+    // Get current user from localStorage
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    if (!currentUserData?.id || !selectedWorkspace?.workspace_id) {
-      console.log('⚠️ Pulando Realtime - usuário ou workspace não disponível');
+    if (!currentUserData?.id) {
       return;
     }
 
-    console.log('🎯 Configurando Realtime para workspace:', selectedWorkspace.workspace_id);
-    
-    let cleanup: (() => void) | null = null;
-    
-    // Aguardar 1 segundo após o fetch inicial para garantir estabilidade
-    const timeout = setTimeout(() => {
-      // Subscription única para workspace específico
-      const channel = supabase
-        .channel(`messages-${selectedWorkspace.workspace_id}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        }, (payload) => {
-          console.log('🔔 Nova mensagem via Realtime:', payload.new);
+    // Subscription para novas mensagens
+    const messagesChannel = supabase
+      .channel('whatsapp-messages')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          console.log('🔔 Nova mensagem recebida:', payload.new);
           const newMessage = payload.new as any;
           
-          setConversations(prev => prev.map(conv => {
-            if (conv.id === newMessage.conversation_id) {
-              // Anti-duplicação: verificar se mensagem já existe
-              const exists = conv.messages.some(msg => 
-                msg.id === newMessage.id || 
-                (newMessage.external_id && msg.id === newMessage.external_id)
-              );
-              if (exists) {
-                console.log('⚠️ Mensagem já existe, ignorando duplicata');
-                return conv;
-              }
+          setConversations(prev => {
+            return prev.map(conv => {
+              if (conv.id === newMessage.conversation_id) {
+                // Verificar se mensagem já existe para evitar duplicatas
+                const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
+                if (messageExists) return conv;
 
-              console.log('✅ Adicionando nova mensagem ao estado');
-              return {
-                ...conv,
-                messages: [...conv.messages, {
-                  id: newMessage.id,
-                  content: newMessage.content,
-                  sender_type: newMessage.sender_type,
-                  created_at: newMessage.created_at,
-                  read_at: newMessage.read_at,
-                  status: newMessage.status || 'sent',
-                  message_type: newMessage.message_type,
-                  file_url: newMessage.file_url,
-                  file_name: newMessage.file_name,
-                  origem_resposta: newMessage.origem_resposta || 'manual',
-                }],
-                last_activity_at: newMessage.created_at,
-                unread_count: newMessage.sender_type === 'contact' ? conv.unread_count + 1 : conv.unread_count
-              };
-            }
-            return conv;
-          }));
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        }, (payload) => {
-          console.log('🔄 Mensagem atualizada via Realtime:', payload.new);
+                const updatedConv = {
+                  ...conv,
+                  messages: [...conv.messages, {
+                    id: newMessage.id,
+                    content: newMessage.content,
+                    sender_type: newMessage.sender_type,
+                    created_at: newMessage.created_at,
+                    read_at: newMessage.read_at,
+                    status: newMessage.status,
+                    message_type: newMessage.message_type,
+                    file_url: newMessage.file_url,
+                    file_name: newMessage.file_name,
+                    origem_resposta: newMessage.origem_resposta || 'manual',
+                  }],
+                  last_activity_at: newMessage.created_at
+                };
+
+                // Se é mensagem de contato, incrementar unread_count localmente (triggers do DB fazem isso também)
+                if (newMessage.sender_type === 'contact') {
+                  updatedConv.unread_count = conv.unread_count + 1;
+                }
+
+                return updatedConv;
+              }
+              return conv;
+            }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
+          });
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
           const updatedMessage = payload.new as any;
+          console.log('✏️ Mensagem atualizada:', {
+            id: updatedMessage.id,
+            status: updatedMessage.status,
+            message_type: updatedMessage.message_type,
+            file_url: updatedMessage.file_url,
+            file_name: updatedMessage.file_name,
+          });
           
           setConversations(prev => prev.map(conv => {
-            if (conv.id === updatedMessage.conversation_id) {
-              return {
-                ...conv,
-                messages: conv.messages.map(msg => 
-                  msg.id === updatedMessage.id 
-                    ? {
-                        ...msg,
-                        content: updatedMessage.content,
-                        status: updatedMessage.status || msg.status,
-                        file_url: updatedMessage.file_url || msg.file_url,
-                        file_name: updatedMessage.file_name || msg.file_name
-                      }
-                    : msg
-                )
-              };
-            }
-            return conv;
+            // Só atualiza a conversa que contém a mensagem
+            if (!conv.messages.some(m => m.id === updatedMessage.id)) return conv;
+            return {
+              ...conv,
+              messages: conv.messages.map(msg => 
+                msg.id === updatedMessage.id 
+                  ? {
+                      ...msg,
+                      status: updatedMessage.status ?? msg.status,
+                      read_at: updatedMessage.read_at ?? msg.read_at,
+                      message_type: (updatedMessage.message_type as any) ?? msg.message_type,
+                      file_url: updatedMessage.file_url ?? msg.file_url,
+                      file_name: updatedMessage.file_name ?? msg.file_name,
+                      content: updatedMessage.content ?? msg.content,
+                    }
+                  : msg
+              )
+            };
           }));
-        })
-        .subscribe((status) => {
-          console.log('📡 Status do canal Realtime:', status);
-        });
+        }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const deletedMessageId = payload.old?.id;
+          console.log('🗑️ Mensagem deletada:', deletedMessageId);
+          
+          if (deletedMessageId) {
+            setConversations(prev => prev.map(conv => ({
+              ...conv,
+              messages: conv.messages.filter(msg => msg.id !== deletedMessageId)
+            })));
+          }
+        }
+      )
+      .subscribe();
 
-      cleanup = () => {
-        console.log('🧹 Limpando canal Realtime');
-        supabase.removeChannel(channel);
-      };
-    }, 1000);
+    // Subscription para mudanças em conversas
+    const conversationsChannel = supabase
+      .channel('whatsapp-conversations')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'conversations' },
+        async (payload) => {
+          const newConv = payload.new as any;
+          
+          // Só processar conversas do WhatsApp
+          if (newConv.canal !== 'whatsapp') return;
+          
+          console.log('🔔 Nova conversa criada:', newConv);
+          
+          // Buscar dados completos da nova conversa
+          const { data: conversationData } = await supabase
+            .from('conversations')
+            .select(`
+              id,
+              agente_ativo,
+              status,
+              unread_count,
+              last_activity_at,
+              created_at,
+              evolution_instance,
+              contact_id,
+              contacts!inner (
+                id,
+                name,
+                phone,
+                email,
+                profile_image_url
+              )
+            `)
+            .eq('id', newConv.id)
+            .single();
+
+          if (conversationData && conversationData.contacts) {
+            const newConversation: WhatsAppConversation = {
+              id: conversationData.id,
+              contact: {
+                id: conversationData.contacts.id,
+                name: conversationData.contacts.name,
+                phone: conversationData.contacts.phone,
+                email: conversationData.contacts.email,
+                profile_image_url: conversationData.contacts.profile_image_url,
+              },
+              agente_ativo: conversationData.agente_ativo,
+              status: conversationData.status as 'open' | 'closed' | 'pending',
+              unread_count: conversationData.unread_count,
+              last_activity_at: conversationData.last_activity_at,
+              created_at: conversationData.created_at,
+              evolution_instance: (conversationData as any).evolution_instance ?? null,
+              messages: [],
+            };
+
+            setConversations(prev => {
+              const exists = prev.some(conv => conv.id === newConversation.id);
+              if (exists) return prev;
+              
+              return [newConversation, ...prev].sort((a, b) => 
+                new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
+              );
+            });
+          }
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'conversations' },
+        (payload) => {
+          console.log('🔄 Conversa atualizada:', payload.new);
+          const updatedConv = payload.new as any;
+          
+          setConversations(prev => {
+            return prev.map(conv => 
+              conv.id === updatedConv.id
+                ? { 
+                    ...conv, 
+                    agente_ativo: updatedConv.agente_ativo,
+                    unread_count: updatedConv.unread_count,
+                    last_activity_at: updatedConv.last_activity_at,
+                    status: updatedConv.status,
+                    evolution_instance: (updatedConv as any).evolution_instance ?? conv.evolution_instance
+                  }
+                : conv
+            ).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
+          });
+        }
+      )
+      .subscribe();
 
     return () => {
-      clearTimeout(timeout);
-      if (cleanup) cleanup();
+      console.log('🧹 Limpando subscriptions real-time');
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(conversationsChannel);
     };
-  }, [selectedWorkspace?.workspace_id, setConversations]);
-
-  // Polling de fallback para garantir sincronização
-  useEffect(() => {
-    if (!selectedWorkspace?.workspace_id) return;
-    
-    const interval = setInterval(() => {
-      console.log('🔄 Polling de fallback - verificando atualizações');
-      fetchConversations();
-    }, 5000); // A cada 5 segundos
-    
-    return () => clearInterval(interval);
-  }, [selectedWorkspace?.workspace_id]);
+  }, []);
 
   return {
     conversations,
@@ -569,7 +652,7 @@ export const useWhatsAppConversations = () => {
     assumirAtendimento,
     reativarIA,
     clearAllConversations,
-    acceptConversation,
-    fetchConversations
+    fetchConversations,
+    acceptConversation
   };
 };

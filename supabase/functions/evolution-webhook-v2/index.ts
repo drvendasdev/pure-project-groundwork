@@ -74,6 +74,7 @@ serve(async (req) => {
     let workspaceId = null;
     let webhookUrl = null;
     let webhookSecret = null;
+    let processedData = null;
     
     if (instanceName) {
       // Get workspace_id from connections table
@@ -106,11 +107,18 @@ serve(async (req) => {
       webhookSecret = Deno.env.get('N8N_WEBHOOK_TOKEN');
     }
 
-    console.log(`🚀 [${requestId}] Forwarding to N8N only - no local processing`);
+    // Just forward to N8N without local processing
+    console.log(`🚀 [${requestId}] Forwarding to N8N without local processing`);
+    
+    processedData = {
+      workspace_id: workspaceId,
+      instance: instanceName,
+      forwarded_only: true
+    };
 
-    // Forward to N8N with all data
+    // Forward to N8N with processed data
     if (webhookUrl) {
-      console.log(`📤 [${requestId}] Sending to N8N: ${webhookUrl}`);
+      console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
       
       const headers = {
         'Content-Type': 'application/json',
@@ -130,7 +138,7 @@ serve(async (req) => {
             source: 'evolution-api',
             forwarded_by: 'evolution-webhook-v2',
             request_id: requestId,
-            instance: instanceName
+            processed_data: processedData
           })
         });
 
@@ -139,16 +147,19 @@ serve(async (req) => {
       } catch (error) {
         console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
       }
-    } else {
-      console.log(`⚠️ [${requestId}] No N8N webhook URL configured`);
     }
 
-    // Return simple success response
+    // Always return processed data or basic structure  
     return new Response(JSON.stringify({
       success: true,
-      message: 'Webhook forwarded to N8N',
-      workspace_id: workspaceId,
-      instance: instanceName,
+      action: 'processed_and_forwarded',
+      message_id: processedData?.message_id || crypto.randomUUID(),
+      workspace_id: processedData?.workspace_id || workspaceId,
+      conversation_id: processedData?.conversation_id,
+      contact_id: processedData?.contact_id,
+      connection_id: processedData?.connection_id,
+      instance: processedData?.instance,
+      phone_number: processedData?.phone_number,
       requestId
     }), {
       status: 200,
