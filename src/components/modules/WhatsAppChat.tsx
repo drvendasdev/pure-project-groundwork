@@ -474,7 +474,7 @@ const stopRecording = () => {
       intervalId = setInterval(() => {
         console.log('🔄 Atualizando conversações...');
         fetchConversations();
-      }, 10000); // Atualiza a cada 10 segundos
+      }, 30000); // Atualiza a cada 30 segundos (reduzido de 10s)
     }
 
     return () => {
@@ -482,7 +482,7 @@ const stopRecording = () => {
         clearInterval(intervalId);
       }
     };
-  }, [fetchConversations, loading]);
+  }, [fetchConversations]); // Removido 'loading' da dependência para evitar loops
 
   // Atualizar conversa selecionada quando conversations muda
   useEffect(() => {

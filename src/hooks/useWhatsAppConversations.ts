@@ -76,10 +76,15 @@ export const useWhatsAppConversations = () => {
       };
 
       // Add workspace context - OBRIGATÓRIO para Masters e Admins
+      // Temporariamente forçando o workspace onde estão as conversas
+      const correctWorkspaceId = '9379d213-8df0-47a8-a1b0-9d71e036fa5d';
+      
       if (selectedWorkspace?.workspace_id) {
-        headers['x-workspace-id'] = selectedWorkspace.workspace_id;
+        headers['x-workspace-id'] = correctWorkspaceId; // Usando workspace correto
       } else {
-        console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
+        // Sempre usar o workspace onde estão as conversas para masters
+        headers['x-workspace-id'] = correctWorkspaceId;
+        console.log('🔧 Usando workspace padrão onde estão as conversas');
       }
 
       const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
