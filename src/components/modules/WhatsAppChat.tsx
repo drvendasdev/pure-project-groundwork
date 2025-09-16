@@ -462,38 +462,6 @@ const stopRecording = () => {
     }
   }, [selectedConversation, selectedConversation?.messages]);
 
-  // Polling automático para buscar novas mensagens
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
-    // Buscar conversações imediatamente ao montar o componente
-    fetchConversations();
-
-    // Configurar polling apenas se não estamos carregando
-    if (!loading) {
-      intervalId = setInterval(() => {
-        console.log('🔄 Atualizando conversações...');
-        fetchConversations();
-      }, 30000); // Atualiza a cada 30 segundos (reduzido de 10s)
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [fetchConversations]); // Removido 'loading' da dependência para evitar loops
-
-  // Atualizar conversa selecionada quando conversations muda
-  useEffect(() => {
-    if (selectedConversation && conversations.length > 0) {
-      const updatedConversation = conversations.find(conv => conv.id === selectedConversation.id);
-      if (updatedConversation) {
-        setSelectedConversation(updatedConversation);
-      }
-    }
-  }, [conversations, selectedConversation?.id]);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -533,24 +501,6 @@ const stopRecording = () => {
               >
                 {isUpdatingProfileImages ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                ) : (
-                 <RefreshCw className="h-4 w-4" />
-                )}
-              </Button>
-
-              <Button 
-                onClick={() => {
-                  console.log('🔄 Atualizando conversações manualmente...');
-                  fetchConversations();
-                }}
-                variant="ghost" 
-                size="sm"
-                disabled={loading}
-                className="text-blue-600 hover:bg-blue-50"
-                title="Atualizar conversações"
-              >
-                {loading ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
                 ) : (
                  <RefreshCw className="h-4 w-4" />
                 )}
