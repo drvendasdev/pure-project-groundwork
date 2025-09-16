@@ -50,7 +50,24 @@ serve(async (req) => {
     const conversationId = directConversationId;
     const phoneNumber = directPhoneNumber || phone_number;
     const workspaceId = directWorkspaceId || workspace_id;
-    const direction = directDirection || 'inbound';
+    
+    // Detectar direction automaticamente baseado no contexto
+    let direction = directDirection;
+    if (!direction) {
+      // Se sender_type é 'contact', é uma mensagem recebida (inbound)
+      // Se sender_type é 'agent' ou 'user', é uma mensagem enviada (outbound)
+      if (sender_type === 'contact') {
+        direction = 'inbound';
+        console.log('🔍 Direction detectado automaticamente como inbound (sender_type: contact)');
+      } else if (sender_type === 'agent' || sender_type === 'user') {
+        direction = 'outbound';
+        console.log('🔍 Direction detectado automaticamente como outbound (sender_type: agent/user)');
+      } else {
+        // Fallback: se não conseguimos detectar, assumir inbound para processar
+        direction = 'inbound';
+        console.log('⚠️ Direction não detectado, assumindo inbound como fallback');
+      }
+    }
     
     console.log('N8N Media Processor - Dados mapeados:', { 
       messageId, 
@@ -466,9 +483,10 @@ serve(async (req) => {
     console.log(`📋 MIME final: ${finalMimeType} → Tipo de mensagem: ${computedMessageType}`);
 
 
-    // Se for mensagem de entrada, atualizar no banco
-    if (direction === 'inbound' && messageId) {
-      console.log('Tentando atualizar mensagem com ID:', messageId);
+    // Processar mensagens (tanto inbound quanto outbound com messageId)
+    // Para mensagens inbound, sempre tentar processar mesmo sem messageId
+    if (direction === 'inbound' || (direction === 'outbound' && messageId)) {
+      console.log(`🔄 Processando mensagem ${direction} com ID:`, messageId || 'sem ID - criará nova');
       
       // Verificar se messageId é um UUID válido ou usar external_id
       const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
@@ -516,28 +534,51 @@ serve(async (req) => {
       if (updateError || !updateData || updateData.length === 0) {
         console.log('❌ Mensagem não encontrada para atualização, tentando criar nova...');
         
-        // Se a mensagem não existe e temos dados suficientes, criar uma nova
-        if (conversationId && workspaceId) {
+        // Se a mensagem não existe, criar uma nova (especialmente para inbound)
+        if ((direction === 'inbound') || (conversationId && workspaceId)) {
           console.log('💡 Criando nova mensagem pois não foi encontrada...');
           
-          const newMessageData = {
-            id: isValidUUID ? messageId : undefined,
-            external_id: isValidUUID ? undefined : messageId,
-            content: `📎 ${computedMessageType === 'file' && finalMimeType === 'application/pdf' ? 'Documento' : 'Arquivo'}`,
-            message_type: computedMessageType,
-            file_url: publicUrl,
-            file_name: finalFileName,
-            mime_type: finalMimeType,
-            sender_type: 'contact',
-            conversation_id: conversationId,
-            workspace_id: workspaceId,
-            metadata: {
-              original_url: mediaUrl,
-              storage_path: storagePath,
-              processed_by: 'n8n',
-              created_by_processor: true
+          // Para mensagens inbound sem conversationId, tentar encontrar pelo phoneNumber
+          let finalConversationId = conversationId;
+          let finalWorkspaceId = workspaceId;
+          
+          if (!finalConversationId && phoneNumber && direction === 'inbound') {
+            console.log('🔍 Tentando encontrar conversa pelo phoneNumber:', phoneNumber);
+            
+            const { data: conversationData } = await supabase
+              .from('conversations')
+              .select('id, workspace_id')
+              .eq('contact_id', phoneNumber.replace(/\D/g, ''))
+              .order('created_at', { ascending: false })
+              .limit(1);
+              
+            if (conversationData && conversationData.length > 0) {
+              finalConversationId = conversationData[0].id;
+              finalWorkspaceId = conversationData[0].workspace_id;
+              console.log('✅ Conversa encontrada:', finalConversationId);
             }
-          };
+          }
+          
+          if (finalConversationId && finalWorkspaceId) {
+            const newMessageData = {
+              id: isValidUUID ? messageId : undefined,
+              external_id: isValidUUID ? undefined : messageId,
+              content: `📎 ${computedMessageType === 'file' && finalMimeType === 'application/pdf' ? 'Documento' : 'Arquivo'}`,
+              message_type: computedMessageType,
+              file_url: publicUrl,
+              file_name: finalFileName,
+              mime_type: finalMimeType,
+              sender_type: direction === 'inbound' ? 'contact' : 'agent',
+              conversation_id: finalConversationId,
+              workspace_id: finalWorkspaceId,
+              metadata: {
+                original_url: mediaUrl,
+                storage_path: storagePath,
+                processed_by: 'n8n',
+                created_by_processor: true,
+                phone_number: phoneNumber
+              }
+            };
           
           const { data: insertData, error: insertError } = await supabase
             .from('messages')
