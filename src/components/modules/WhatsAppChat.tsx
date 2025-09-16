@@ -951,12 +951,24 @@ const stopRecording = () => {
                     >
                       {/* Renderizar conteúdo baseado no tipo */}
                       {message.message_type !== 'text' && message.file_url ? (
-                        <MediaViewer
-                          fileUrl={message.file_url}
-                          fileName={message.file_name}
-                          messageType={message.message_type}
-                          className="max-w-xs"
-                        />
+                        (() => {
+                          // Debug da mensagem
+                          console.log('🔥 MENSAGEM NO CHAT:', {
+                            id: message.id,
+                            message_type: message.message_type,
+                            file_url: message.file_url,
+                            file_name: message.file_name,
+                            content: message.content
+                          });
+                          return (
+                            <MediaViewer
+                              fileUrl={message.file_url}
+                              fileName={message.file_name}
+                              messageType={message.message_type}
+                              className="max-w-xs"
+                            />
+                          );
+                        })()
                       ) : (
                         <p className="text-sm break-words">{message.content}</p>
                       )}
