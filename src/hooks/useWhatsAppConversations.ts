@@ -502,175 +502,63 @@ export const useWhatsAppConversations = () => {
               };
             }
             return conv;
-            }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
-          });
-        }
-      )
-      .on('postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
+          }));
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
           table: 'messages',
           filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
+        }, (payload) => {
+          console.log('🔄 Mensagem atualizada via Realtime:', payload.new);
           const updatedMessage = payload.new as any;
-          console.log('✏️ Mensagem atualizada:', {
-            id: updatedMessage.id,
-            status: updatedMessage.status,
-            message_type: updatedMessage.message_type,
-            file_url: updatedMessage.file_url,
-            file_name: updatedMessage.file_name,
-          });
           
           setConversations(prev => prev.map(conv => {
-            // Só atualiza a conversa que contém a mensagem
-            if (!conv.messages.some(m => m.id === updatedMessage.id)) return conv;
-            return {
-              ...conv,
-              messages: conv.messages.map(msg => 
-                msg.id === updatedMessage.id 
-                  ? {
-                      ...msg,
-                      status: updatedMessage.status ?? msg.status,
-                      read_at: updatedMessage.read_at ?? msg.read_at,
-                      message_type: (updatedMessage.message_type as any) ?? msg.message_type,
-                      file_url: updatedMessage.file_url ?? msg.file_url,
-                      file_name: updatedMessage.file_name ?? msg.file_name,
-                      content: updatedMessage.content ?? msg.content,
-                    }
-                  : msg
-              )
-            };
+            if (conv.id === updatedMessage.conversation_id) {
+              return {
+                ...conv,
+                messages: conv.messages.map(msg => 
+                  msg.id === updatedMessage.id 
+                    ? {
+                        ...msg,
+                        content: updatedMessage.content,
+                        status: updatedMessage.status || msg.status,
+                        file_url: updatedMessage.file_url || msg.file_url,
+                        file_name: updatedMessage.file_name || msg.file_name
+                      }
+                    : msg
+                )
+              };
+            }
+            return conv;
           }));
-        }
-      )
-      .on('postgres_changes',
-        { 
-          event: 'DELETE', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          const deletedMessageId = payload.old?.id;
-          console.log('🗑️ Mensagem deletada:', deletedMessageId);
-          
-          if (deletedMessageId) {
-            setConversations(prev => prev.map(conv => ({
-              ...conv,
-              messages: conv.messages.filter(msg => msg.id !== deletedMessageId)
-            })));
-          }
-        }
-      )
-      .subscribe();
+        })
+        .subscribe((status) => {
+          console.log('📡 Status do canal Realtime:', status);
+        });
 
-    // Subscription para mudanças em conversas
-    const conversationsChannel = supabase
-      .channel('whatsapp-conversations')
-      .on('postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        async (payload) => {
-          const newConv = payload.new as any;
-          
-          // Só processar conversas do WhatsApp
-          if (newConv.canal !== 'whatsapp') return;
-          
-          console.log('🔔 Nova conversa criada:', newConv);
-          
-          // Buscar dados completos da nova conversa
-          const { data: conversationData } = await supabase
-            .from('conversations')
-            .select(`
-              id,
-              agente_ativo,
-              status,
-              unread_count,
-              last_activity_at,
-              created_at,
-              evolution_instance,
-              contact_id,
-              contacts!inner (
-                id,
-                name,
-                phone,
-                email,
-                profile_image_url
-              )
-            `)
-            .eq('id', newConv.id)
-            .single();
-
-          if (conversationData && conversationData.contacts) {
-            const newConversation: WhatsAppConversation = {
-              id: conversationData.id,
-              contact: {
-                id: conversationData.contacts.id,
-                name: conversationData.contacts.name,
-                phone: conversationData.contacts.phone,
-                email: conversationData.contacts.email,
-                profile_image_url: conversationData.contacts.profile_image_url,
-              },
-              agente_ativo: conversationData.agente_ativo,
-              status: conversationData.status as 'open' | 'closed' | 'pending',
-              unread_count: conversationData.unread_count,
-              last_activity_at: conversationData.last_activity_at,
-              created_at: conversationData.created_at,
-              evolution_instance: (conversationData as any).evolution_instance ?? null,
-              messages: [],
-            };
-
-            setConversations(prev => {
-              const exists = prev.some(conv => conv.id === newConversation.id);
-              if (exists) return prev;
-              
-              return [newConversation, ...prev].sort((a, b) => 
-                new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
-              );
-            });
-          }
-        }
-      )
-      .on('postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          console.log('🔄 Conversa atualizada:', payload.new);
-          const updatedConv = payload.new as any;
-          
-          setConversations(prev => {
-            return prev.map(conv => 
-              conv.id === updatedConv.id
-                ? { 
-                    ...conv, 
-                    agente_ativo: updatedConv.agente_ativo,
-                    unread_count: updatedConv.unread_count,
-                    last_activity_at: updatedConv.last_activity_at,
-                    status: updatedConv.status,
-                    evolution_instance: (updatedConv as any).evolution_instance ?? conv.evolution_instance
-                  }
-                : conv
-            ).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
-          });
-        }
-      )
-      .subscribe();
+      cleanup = () => {
+        console.log('🧹 Limpando canal Realtime');
+        supabase.removeChannel(channel);
+      };
+    }, 1000);
 
     return () => {
-      console.log('🧹 Limpando subscriptions real-time');
-      supabase.removeChannel(messagesChannel);
-      supabase.removeChannel(conversationsChannel);
+      clearTimeout(timeout);
+      if (cleanup) cleanup();
     };
+  }, [selectedWorkspace?.workspace_id, setConversations]);
+
+  // Polling de fallback para garantir sincronização
+  useEffect(() => {
+    if (!selectedWorkspace?.workspace_id) return;
+    
+    const interval = setInterval(() => {
+      console.log('🔄 Polling de fallback - verificando atualizações');
+      fetchConversations();
+    }, 5000); // A cada 5 segundos
+    
+    return () => clearInterval(interval);
   }, [selectedWorkspace?.workspace_id]);
 
   return {
@@ -681,7 +569,7 @@ export const useWhatsAppConversations = () => {
     assumirAtendimento,
     reativarIA,
     clearAllConversations,
-    fetchConversations,
-    acceptConversation
+    acceptConversation,
+    fetchConversations
   };
 };
