@@ -246,11 +246,17 @@ serve(async (req) => {
     const cleanMimeType = mimeType && mimeType.trim() && mimeType.trim() !== '' ? mimeType.trim() : '';
     const cleanFileName = fileName && fileName.trim() && fileName.trim() !== '' ? fileName.trim() : '';
     
-    // Estratégia de detecção hierárquica (priorizar detecção por conteúdo)
+    // Estratégia de detecção hierárquica (com tratamento especial para WebM)
     if (detectedMimeType) {
-      // 1. MIME type detectado pelo conteúdo (mais confiável)
-      finalMimeType = detectedMimeType;
-      console.log('✅ Usando MIME detectado por conteúdo:', finalMimeType);
+      // Tratamento especial para WebM: priorizar MIME original se for áudio
+      if (detectedMimeType === 'video/webm' && cleanMimeType === 'audio/webm') {
+        finalMimeType = 'audio/webm';
+        console.log('🎵 WebM detectado como vídeo, mas MIME original é áudio - mantendo como áudio');
+      } else {
+        // 1. MIME type detectado pelo conteúdo (mais confiável para outros formatos)
+        finalMimeType = detectedMimeType;
+        console.log('✅ Usando MIME detectado por conteúdo:', finalMimeType);
+      }
       
       // Mapear para extensão
       if (finalMimeType === 'image/jpeg') fileExtension = 'jpg';
@@ -261,6 +267,7 @@ serve(async (req) => {
       else if (finalMimeType === 'video/quicktime') fileExtension = 'mov';
       else if (finalMimeType === 'video/3gpp') fileExtension = '3gp';
       else if (finalMimeType === 'video/webm') fileExtension = 'webm';
+      else if (finalMimeType === 'audio/webm') fileExtension = 'webm';
       else if (finalMimeType === 'audio/mpeg') fileExtension = 'mp3';
       else if (finalMimeType === 'audio/ogg') fileExtension = 'ogg';
       else if (finalMimeType === 'audio/wav') fileExtension = 'wav';
