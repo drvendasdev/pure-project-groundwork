@@ -75,7 +75,9 @@ serve(async (req) => {
             content,
             message_type,
             sender_type,
-            created_at
+            created_at,
+            file_url,
+            file_name
           )
         `)
         .order('updated_at', { ascending: false });
