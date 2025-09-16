@@ -431,73 +431,77 @@ export const useWhatsAppConversations = () => {
     }
   }, []);
 
-  // Real-time subscriptions and workspace dependency
+  // Fase 1: Listagem básica estável sem Realtime
   useEffect(() => {
-    // Get current user from localStorage
+    console.log('🔄 Carregando conversas - workspace dependency effect');
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (currentUserData?.id) {
-      console.log('🧹 Limpando subscriptions real-time');
       fetchConversations();
     }
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
 
+  // Fase 2: Realtime seguro (implementar depois que Phase 1 estiver funcionando)
   useEffect(() => {
-    // Get current user from localStorage
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (!currentUserData?.id || !selectedWorkspace?.workspace_id) {
+      console.log('⚠️ Pulando Realtime - usuário ou workspace não disponível');
       return;
     }
 
-    // Subscription para novas mensagens
-    const messagesChannel = supabase
-      .channel('whatsapp-messages')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
+    console.log('🎯 Configurando Realtime para workspace:', selectedWorkspace.workspace_id);
+    
+    let cleanup: (() => void) | null = null;
+    
+    // Aguardar 1 segundo após o fetch inicial para garantir estabilidade
+    const timeout = setTimeout(() => {
+      // Subscription única para workspace específico
+      const channel = supabase
+        .channel(`messages-${selectedWorkspace.workspace_id}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
           table: 'messages',
           filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
-        },
-        (payload) => {
-          console.log('🔔 Nova mensagem recebida:', payload.new);
+        }, (payload) => {
+          console.log('🔔 Nova mensagem via Realtime:', payload.new);
           const newMessage = payload.new as any;
           
-          setConversations(prev => {
-            return prev.map(conv => {
-              if (conv.id === newMessage.conversation_id) {
-                // Verificar se mensagem já existe para evitar duplicatas
-                const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
-                if (messageExists) return conv;
-
-                const updatedConv = {
-                  ...conv,
-                  messages: [...conv.messages, {
-                    id: newMessage.id,
-                    content: newMessage.content,
-                    sender_type: newMessage.sender_type,
-                    created_at: newMessage.created_at,
-                    read_at: newMessage.read_at,
-                    status: newMessage.status,
-                    message_type: newMessage.message_type,
-                    file_url: newMessage.file_url,
-                    file_name: newMessage.file_name,
-                    origem_resposta: newMessage.origem_resposta || 'manual',
-                  }],
-                  last_activity_at: newMessage.created_at
-                };
-
-                // Se é mensagem de contato, incrementar unread_count localmente (triggers do DB fazem isso também)
-                if (newMessage.sender_type === 'contact') {
-                  updatedConv.unread_count = conv.unread_count + 1;
-                }
-
-                return updatedConv;
+          setConversations(prev => prev.map(conv => {
+            if (conv.id === newMessage.conversation_id) {
+              // Anti-duplicação: verificar se mensagem já existe
+              const exists = conv.messages.some(msg => 
+                msg.id === newMessage.id || 
+                (newMessage.external_id && msg.id === newMessage.external_id)
+              );
+              if (exists) {
+                console.log('⚠️ Mensagem já existe, ignorando duplicata');
+                return conv;
               }
-              return conv;
+
+              console.log('✅ Adicionando nova mensagem ao estado');
+              return {
+                ...conv,
+                messages: [...conv.messages, {
+                  id: newMessage.id,
+                  content: newMessage.content,
+                  sender_type: newMessage.sender_type,
+                  created_at: newMessage.created_at,
+                  read_at: newMessage.read_at,
+                  status: newMessage.status || 'sent',
+                  message_type: newMessage.message_type,
+                  file_url: newMessage.file_url,
+                  file_name: newMessage.file_name,
+                  origem_resposta: newMessage.origem_resposta || 'manual',
+                }],
+                last_activity_at: newMessage.created_at,
+                unread_count: newMessage.sender_type === 'contact' ? conv.unread_count + 1 : conv.unread_count
+              };
+            }
+            return conv;
             }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
           });
         }
