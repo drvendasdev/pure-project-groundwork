@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ProfileImageDebug } from "@/components/debug/ProfileImageDebug";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +43,8 @@ export function CRMContatos() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(false);
+  const [showDebugModal, setShowDebugModal] = useState(false);
+  const [debugContact, setDebugContact] = useState<Contact | null>(null);
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
   
   const { tags } = useTags();
@@ -657,6 +660,17 @@ export function CRMContatos() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDebugContact(contact);
+                        setShowDebugModal(true);
+                      }}
+                      title="Debug imagem de perfil"
+                    >
+                      🐛
+                    </Button>
                   </div>
                 </TableCell>
                 <TableCell className="text-center">
@@ -806,6 +820,24 @@ export function CRMContatos() {
         onClose={() => setIsBulkDeleteOpen(false)}
         onConfirm={handleBulkDelete}
       />
+
+      {/* Debug Profile Image Modal */}
+      {showDebugModal && debugContact && selectedWorkspace && (
+        <Dialog open={showDebugModal} onOpenChange={setShowDebugModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Debug - Imagem de Perfil</DialogTitle>
+            </DialogHeader>
+            <ProfileImageDebug
+              contactId={debugContact.id}
+              contactName={debugContact.name}
+              contactPhone={debugContact.phone || ''}
+              workspaceId={selectedWorkspace.workspace_id}
+              currentImageUrl={debugContact.profile_image_url || undefined}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

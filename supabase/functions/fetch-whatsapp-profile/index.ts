@@ -15,53 +15,90 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-// Helper function to download and save profile image
-async function downloadAndSaveProfileImage(imageUrl: string, phone: string): Promise<string | null> {
-  try {
-    console.log(`📥 Downloading profile image for ${phone}: ${imageUrl}`);
-    
-    // Download the image
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      console.error(`❌ Failed to download image: ${response.status} ${response.statusText}`);
-      return null;
-    }
-
-    const imageBuffer = await response.arrayBuffer();
-    const imageBytes = new Uint8Array(imageBuffer);
-    
-    // Generate filename
-    const timestamp = Date.now();
-    const fileName = `profile_${phone}_${timestamp}.jpg`;
-    const filePath = `profiles/${fileName}`;
-    
-    console.log(`💾 Saving image to storage: ${filePath}`);
-    
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('whatsapp-media')
-      .upload(filePath, imageBytes, {
-        contentType: 'image/jpeg',
-        upsert: true
+// Helper function to download and save profile image with retry
+async function downloadAndSaveProfileImage(imageUrl: string, phone: string, retries: number = 3): Promise<string | null> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📥 Downloading profile image for ${phone} (attempt ${attempt}/${retries}): ${imageUrl}`);
+      
+      // Download the image with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const response = await fetch(imageUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
       });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        console.error(`❌ Failed to download image (attempt ${attempt}): ${response.status} ${response.statusText}`);
+        if (attempt === retries) return null;
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+        continue;
+      }
 
-    if (uploadError) {
-      console.error('❌ Upload error:', uploadError);
-      return null;
+      const imageBuffer = await response.arrayBuffer();
+      const imageBytes = new Uint8Array(imageBuffer);
+      
+      // Validate image size (max 10MB)
+      if (imageBytes.length > 10 * 1024 * 1024) {
+        console.error(`❌ Image too large: ${imageBytes.length} bytes`);
+        return null;
+      }
+      
+      // Validate it's actually an image
+      if (imageBytes.length < 100) {
+        console.error(`❌ Image too small or invalid: ${imageBytes.length} bytes`);
+        if (attempt === retries) return null;
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      }
+      
+      // Generate filename with proper extension
+      const timestamp = Date.now();
+      const extension = imageUrl.includes('.png') ? 'png' : 
+                       imageUrl.includes('.webp') ? 'webp' : 'jpg';
+      const fileName = `profile_${phone}_${timestamp}.${extension}`;
+      const filePath = `profiles/${fileName}`;
+      
+      console.log(`💾 Saving image to storage: ${filePath} (${imageBytes.length} bytes)`);
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('whatsapp-media')
+        .upload(filePath, imageBytes, {
+          contentType: extension === 'png' ? 'image/png' : 
+                      extension === 'webp' ? 'image/webp' : 'image/jpeg',
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error(`❌ Upload error (attempt ${attempt}):`, uploadError);
+        if (attempt === retries) return null;
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('whatsapp-media')
+        .getPublicUrl(filePath);
+
+      console.log(`✅ Profile image saved: ${publicUrl}`);
+      return publicUrl;
+      
+    } catch (error) {
+      console.error(`❌ Error downloading/saving profile image (attempt ${attempt}):`, error);
+      if (attempt === retries) return null;
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Wait before retry
     }
-
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('whatsapp-media')
-      .getPublicUrl(filePath);
-
-    console.log(`✅ Profile image saved: ${publicUrl}`);
-    return publicUrl;
-    
-  } catch (error) {
-    console.error('❌ Error downloading/saving profile image:', error);
-    return null;
   }
+  
+  return null;
 }
 
 serve(async (req) => {
