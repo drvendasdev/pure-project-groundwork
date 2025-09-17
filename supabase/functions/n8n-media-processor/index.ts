@@ -212,15 +212,23 @@ serve(async (req) => {
         conversation = newConversation;
       }
 
-      // Criar a mensagem
+      // Criar a mensagem - detectar tipo correto baseado no MIME type
+      let messageType = 'text';
+      if (mimeType) {
+        if (mimeType.startsWith('image/')) messageType = 'image';
+        else if (mimeType.startsWith('video/')) messageType = 'video';
+        else if (mimeType.startsWith('audio/')) messageType = 'audio';
+        else if (mimeType === 'application/pdf' || mimeType.includes('document')) messageType = 'document';
+      }
+      
       const { data: newMessage, error: messageError } = await supabase
         .from('messages')
         .insert({
           external_id: messageId,
           conversation_id: conversation.id,
           workspace_id: workspaceId,
-          content: fileName || 'Documento PDF',
-          message_type: mimeType === 'application/pdf' ? 'document' : 'media',
+          content: fileName || 'Documento',
+          message_type: messageType,
           sender_type: 'contact',
           created_at: new Date().toISOString()
         })
