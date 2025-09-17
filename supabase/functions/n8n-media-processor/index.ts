@@ -26,7 +26,6 @@ serve(async (req) => {
       conversationId: directConversationId,
       phoneNumber: directPhoneNumber,
       workspaceId: directWorkspaceId,
-      direction: directDirection,
       
       // Campos do N8N (mapeamento)
       external_id,
