@@ -60,6 +60,7 @@ serve(async (req) => {
       .order('last_activity_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false })
       .order('last_message.created_at', { ascending: false })
+      .limit('last_message', 1)
       .limit(limit);
 
     // Apply cursor pagination if provided
