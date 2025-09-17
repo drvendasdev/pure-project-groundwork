@@ -82,7 +82,8 @@ export const useWhatsAppConversations = () => {
         console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
       }
 
-      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
+      // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens)
+      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations-lite', {
         method: 'GET',
         headers
       });
@@ -91,16 +92,32 @@ export const useWhatsAppConversations = () => {
         throw functionError;
       }
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to fetch conversations');
-      }
-
-      const conversationsWithMessages = response.data || [];
+      // ✅ Conversas SEM mensagens (apenas metadados)
+      const conversationsOnly = response.items || [];
       
-      setConversations(conversationsWithMessages);
-      console.log(`✅ ${conversationsWithMessages.length} conversas carregadas`);
+      // ✅ Mapear para formato compatível (SEM array de mensagens)
+      const formattedConversations = conversationsOnly.map(conv => ({
+        id: conv.id,
+        contact: {
+          id: conv.contacts.id,
+          name: conv.contacts.name,
+          phone: conv.contacts.phone,
+          profile_image_url: conv.contacts.profile_image_url
+        },
+        agente_ativo: false, // Será carregado sob demanda se necessário
+        status: conv.status,
+        unread_count: conv.unread_count || 0,
+        last_activity_at: conv.last_activity_at,
+        created_at: conv.created_at || conv.last_activity_at,
+        assigned_user_id: conv.assigned_user_id,
+        priority: conv.priority,
+        messages: [] // ✅ VAZIO - mensagens carregadas sob demanda
+      }));
       
-      if (conversationsWithMessages.length === 0) {
+      setConversations(formattedConversations);
+      console.log(`✅ ${formattedConversations.length} conversas carregadas (SEM mensagens)`);
+      
+      if (formattedConversations.length === 0) {
         console.log('ℹ️ Nenhuma conversa encontrada. Verifique se há conexões configuradas e conversas ativas.');
       }
     } catch (error) {

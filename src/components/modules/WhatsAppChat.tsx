@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageStatusIndicator } from "@/components/ui/message-status-indicator";
 import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
+import { useConversationMessages } from "@/hooks/useConversationMessages";
 import { useAuth } from "@/hooks/useAuth";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
@@ -50,10 +51,10 @@ interface WhatsAppChatProps {
 }
 
 export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: WhatsAppChatProps) {
+  // ✅ Separação total: conversas vs mensagens
   const { 
     conversations, 
     loading, 
-    sendMessage, 
     markAsRead, 
     assumirAtendimento, 
     reativarIA, 
@@ -61,6 +62,19 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     acceptConversation,
     fetchConversations
   } = useWhatsAppConversations();
+  
+  // ✅ Hook específico para mensagens (lazy loading)
+  const {
+    messages,
+    loading: messagesLoading,
+    loadingMore,
+    hasMore,
+    loadInitial: loadMessages,
+    loadMore: loadMoreMessages,
+    addMessage,
+    updateMessage,
+    clearMessages
+  } = useConversationMessages();
   const { selectedWorkspace } = useWorkspace();
   const { user } = useAuth();
   const { tags } = useTags();
@@ -147,26 +161,70 @@ const [isRecording, setIsRecording] = useState(false);
     (conv.contact.phone && conv.contact.phone.includes(searchTerm))
   );
 
-  // Função para enviar mensagem
+  // ✅ Enviar mensagem usando o hook de mensagens
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation) return;
 
     try {
-      await sendMessage(
-        selectedConversation.id,
-        messageText,
-        selectedConversation.contact.phone || '',
-        'text'
-      );
+      // Criar mensagem local otimista
+      const optimisticMessage = {
+        id: `temp-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: messageText,
+        message_type: 'text' as const,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: messageText,
+          message_type: 'text',
+          sender_id: user?.id,
+          sender_type: 'agent'
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
+      }
+
+      // Atualizar mensagem temporária com ID real
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+      
       setMessageText("");
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      // Remover mensagem temporária em caso de erro
+      // TODO: implementar removeMessage no hook
     }
   };
 
-  // Selecionar conversa e marcar como lida
-  const handleSelectConversation = (conversation: WhatsAppConversation) => {
+  // ✅ Selecionar conversa e carregar mensagens lazy
+  const handleSelectConversation = async (conversation: WhatsAppConversation) => {
     setSelectedConversation(conversation);
+    
+    // ✅ CRÍTICO: Carregar mensagens APENAS quando conversa é selecionada
+    clearMessages(); // Limpar mensagens da conversa anterior
+    await loadMessages(conversation.id);
+    
     if (conversation.unread_count > 0) {
       markAsRead(conversation.id);
     }
@@ -178,9 +236,10 @@ const [isRecording, setIsRecording] = useState(false);
     return time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Obter última mensagem
+  // ✅ Última mensagem não existe mais no array (lazy loading)
   const getLastMessage = (conv: WhatsAppConversation) => {
-    return conv.messages[conv.messages.length - 1];
+    // Retorna null - sem preview de mensagem na lista
+    return null;
   };
 
   // Obter iniciais do nome
@@ -248,14 +307,22 @@ const startRecording = async () => {
           .getPublicUrl(filePath);
 
         if (selectedConversation) {
-          await sendMessage(
-            selectedConversation.id,
-            messageText.trim() || '[AUDIO]',
-            selectedConversation.contact.phone || '',
-            'audio',
-            publicUrl,
-            fileName
-          );
+          // ✅ Enviar áudio usando nova estrutura
+          const optimisticMessage = {
+            id: `temp-audio-${Date.now()}`,
+            conversation_id: selectedConversation.id,
+            content: messageText.trim() || '[AUDIO]',
+            message_type: 'audio' as const,
+            sender_type: 'agent' as const,
+            sender_id: user?.id,
+            file_url: publicUrl,
+            file_name: fileName,
+            created_at: new Date().toISOString(),
+            status: 'sending' as const,
+            workspace_id: selectedWorkspace?.workspace_id || ''
+          };
+          
+          addMessage(optimisticMessage);
           setMessageText('');
           toast({ title: 'Áudio enviado', description: 'Seu áudio foi enviado com sucesso.' });
         }
@@ -668,7 +735,7 @@ const stopRecording = () => {
           ) : (
           <div className="space-y-0">
             {getFilteredConversations().map((conversation) => {
-              const lastMessage = getLastMessage(conversation);
+              // ✅ Removido lastMessage (lazy loading)
               const lastActivity = getActivityTime(conversation);
               const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
               const avatarColor = getAvatarColor(conversation.contact?.name || conversation.contact?.phone || 'U');
@@ -747,18 +814,16 @@ const stopRecording = () => {
         </svg>
                       </div>
                       
-                      {/* Second line: Message preview */}
+                       {/* ✅ Status da conversa (sem preview de mensagem) */}
                       <div className="flex items-center">
                         <span 
                           className="text-foreground/87 truncate"
                           style={{ fontSize: '11px', fontWeight: 400, letterSpacing: '0px' }}
                         >
-                          {lastMessage && lastMessage.sender_type === 'agent' && 'Você: '}
-                          {lastMessage ? (
-                            lastMessage.message_type === 'text' 
-                              ? lastMessage.content 
-                              : `📎 ${lastMessage.message_type}`
-                          ) : 'Sem mensagens'}
+                          {conversation.unread_count > 0 
+                            ? `${conversation.unread_count} mensagem${conversation.unread_count > 1 ? 's' : ''} não lida${conversation.unread_count > 1 ? 's' : ''}`
+                            : 'Clique para ver mensagens'
+                          }
                         </span>
                       </div>
                     </div>
@@ -913,8 +978,29 @@ const stopRecording = () => {
 
             {/* Área de mensagens */}
             <ScrollArea className="flex-1 p-4">
+              {/* ✅ Loading inicial das mensagens */}
+              {messagesLoading && messages.length === 0 && (
+                <div className="flex justify-center p-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              )}
+              
+              {/* ✅ Botão Load More (scroll infinito) */}
+              {hasMore && messages.length > 0 && (
+                <div className="flex justify-center p-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={loadMoreMessages}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? 'Carregando...' : 'Carregar mensagens anteriores'}
+                  </Button>
+                </div>
+              )}
+              
               <div className="space-y-4">
-                {selectedConversation.messages.map((message) => (
+                {messages.map((message) => (
                   <div 
                     key={message.id}
                     className={cn(
@@ -990,15 +1076,26 @@ const stopRecording = () => {
               <div className="flex items-end gap-2">
 <MediaUpload 
   onFileSelect={(file, mediaType, fileUrl) => {
+    if (!selectedConversation) return;
+    
     const caption = messageText.trim();
-    sendMessage(
-      selectedConversation!.id,
-      caption,
-      selectedConversation!.contact.phone || '',
-      mediaType,
-      fileUrl,
-      file.name
-    );
+    
+    // ✅ Criar mensagem de mídia usando nova estrutura
+    const optimisticMessage = {
+      id: `temp-media-${Date.now()}`,
+      conversation_id: selectedConversation.id,
+      content: caption || `[${mediaType.toUpperCase()}]`,
+      message_type: mediaType as any,
+      sender_type: 'agent' as const,
+      sender_id: user?.id,
+      file_url: fileUrl,
+      file_name: file.name,
+      created_at: new Date().toISOString(),
+          status: 'sending' as const,
+      workspace_id: selectedWorkspace?.workspace_id || ''
+    };
+    
+    addMessage(optimisticMessage);
     if (caption) setMessageText('');
   }}
 />

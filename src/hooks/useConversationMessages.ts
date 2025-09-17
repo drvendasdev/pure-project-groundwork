@@ -14,7 +14,7 @@ interface WhatsAppMessage {
   file_name?: string;
   mime_type?: string;
   created_at: string;
-  status?: string;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   external_id?: string;
   metadata?: any;
 }
