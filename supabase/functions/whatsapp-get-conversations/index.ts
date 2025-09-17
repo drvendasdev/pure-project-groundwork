@@ -170,55 +170,84 @@ serve(async (req) => {
 
     console.log(`📋 Found ${conversationsData?.length || 0} conversations`);
 
-    // Fetch messages for each conversation
-    const conversationsWithMessages = await Promise.all(
-      (conversationsData || []).map(async (conv) => {
-        const { data: messagesData } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('conversation_id', conv.id)
-          .order('created_at', { ascending: true });
+    // Buscar TODAS as mensagens de uma vez (otimizado) - limitando às últimas 50 por conversa
+    let allMessages: any[] = [];
+    if (conversationsData && conversationsData.length > 0) {
+      const conversationIds = conversationsData.map(conv => conv.id);
+      
+      console.log(`📨 Fetching messages for ${conversationIds.length} conversations`);
+      
+      // Buscar todas as mensagens de uma vez - muito mais eficiente que N+1 queries
+      const { data: messages, error: messagesError } = await supabase
+        .from('messages')
+        .select('*')
+        .in('conversation_id', conversationIds)
+        .order('created_at', { ascending: false })
+        .limit(50 * conversationIds.length); // Máximo 50 mensagens por conversa
 
-        return {
-          id: conv.id,
-          contact: conv.contacts ? {
-            id: conv.contacts.id,
-            name: conv.contacts.name,
-            phone: conv.contacts.phone,
-            email: conv.contacts.email,
-            profile_image_url: conv.contacts.profile_image_url,
-          } : {
-            id: conv.contact_id,
-            name: 'Unknown Contact',
-            phone: null,
-            email: null,
-            profile_image_url: null,
-          },
-          agente_ativo: conv.agente_ativo,
-          status: conv.status,
-          unread_count: conv.unread_count,
-          last_activity_at: conv.last_activity_at,
-          created_at: conv.created_at,
-          evolution_instance: conv.evolution_instance,
-          assigned_user_id: conv.assigned_user_id,
-          assigned_at: conv.assigned_at,
-          connection_id: conv.connection_id,
-          workspace_id: conv.workspace_id,
-          messages: (messagesData || []).map(msg => ({
-            id: msg.id,
-            content: msg.content,
-            sender_type: msg.sender_type,
-            created_at: msg.created_at,
-            read_at: msg.read_at,
-            status: msg.status,
-            message_type: msg.message_type,
-            file_url: msg.file_url,
-            file_name: msg.file_name,
-            origem_resposta: msg.origem_resposta || 'manual',
-          })),
-        };
-      })
-    );
+      if (messagesError) {
+        console.error('❌ Error fetching messages:', messagesError);
+        allMessages = [];
+      } else {
+        allMessages = messages || [];
+        console.log(`📨 Loaded ${allMessages.length} messages total`);
+      }
+    }
+
+    // Agrupar mensagens por conversa (otimizado)
+    const messagesByConversation = allMessages.reduce((acc, message) => {
+      if (!acc[message.conversation_id]) {
+        acc[message.conversation_id] = [];
+      }
+      acc[message.conversation_id].push(message);
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    // Montar resultado final com mensagens agrupadas
+    const conversationsWithMessages = (conversationsData || []).map(conv => {
+      const messages = (messagesByConversation[conv.id] || [])
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .slice(-50); // Manter apenas as últimas 50 mensagens ordenadas
+
+      return {
+        id: conv.id,
+        contact: conv.contacts ? {
+          id: conv.contacts.id,
+          name: conv.contacts.name,
+          phone: conv.contacts.phone,
+          email: conv.contacts.email,
+          profile_image_url: conv.contacts.profile_image_url,
+        } : {
+          id: conv.contact_id,
+          name: 'Unknown Contact',
+          phone: null,
+          email: null,
+          profile_image_url: null,
+        },
+        agente_ativo: conv.agente_ativo,
+        status: conv.status,
+        unread_count: conv.unread_count,
+        last_activity_at: conv.last_activity_at,
+        created_at: conv.created_at,
+        evolution_instance: conv.evolution_instance,
+        assigned_user_id: conv.assigned_user_id,
+        assigned_at: conv.assigned_at,
+        connection_id: conv.connection_id,
+        workspace_id: conv.workspace_id,
+        messages: messages.map(msg => ({
+          id: msg.id,
+          content: msg.content,
+          sender_type: msg.sender_type,
+          created_at: msg.created_at,
+          read_at: msg.read_at,
+          status: msg.status,
+          message_type: msg.message_type,
+          file_url: msg.file_url,
+          file_name: msg.file_name,
+          origem_resposta: msg.origem_resposta || 'manual',
+        })),
+      };
+    });
 
     console.log(`✅ Successfully fetched ${conversationsWithMessages.length} conversations`);
 
