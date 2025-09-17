@@ -332,7 +332,9 @@ serve(async (req) => {
             contact_id: contactId,
             connection_id: resolvedConnectionId,
             instance: instanceName,
-            phone_number: sanitizedPhone
+            phone_number: sanitizedPhone,
+            external_id: payload.data?.key?.id,
+            direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound'
           };
 
           console.log(`✅ [${requestId}] Inbound message processed locally:`, processedData);
