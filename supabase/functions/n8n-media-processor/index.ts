@@ -127,16 +127,120 @@ serve(async (req) => {
     }
 
     if (!existingMessage) {
-      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas para external_id:`, messageId);
-      return new Response(JSON.stringify({
-        success: false,
-        error: `Mensagem não encontrada após ${maxAttempts} tentativas - possível problema de timing`,
-        external_id: messageId,
-        attempts: attempts
-      }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas - criando nova mensagem para external_id:`, messageId);
+      
+      // Se não encontrou a mensagem, vamos criar uma nova (especialmente para PDFs e mídias)
+      // Primeiro, precisamos encontrar ou criar o contato e conversa
+      
+      if (!workspaceId || !phoneNumber) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'workspace_id e phone_number são obrigatórios para criar nova mensagem',
+          external_id: messageId
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Buscar ou criar contato
+      let contact = null;
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('phone_number', phoneNumber)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+
+      if (existingContact) {
+        contact = existingContact;
+      } else {
+        const { data: newContact, error: contactError } = await supabase
+          .from('contacts')
+          .insert({
+            phone_number: phoneNumber,
+            workspace_id: workspaceId,
+            name: contact_name || phoneNumber
+          })
+          .select('id')
+          .single();
+
+        if (contactError) {
+          console.error('❌ Erro ao criar contato:', contactError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Falha ao criar contato'
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        contact = newContact;
+      }
+
+      // Buscar ou criar conversa
+      let conversation = null;
+      const { data: existingConversation } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('contact_id', contact.id)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+
+      if (existingConversation) {
+        conversation = existingConversation;
+      } else {
+        const { data: newConversation, error: conversationError } = await supabase
+          .from('conversations')
+          .insert({
+            contact_id: contact.id,
+            workspace_id: workspaceId,
+            status: 'active'
+          })
+          .select('id')
+          .single();
+
+        if (conversationError) {
+          console.error('❌ Erro ao criar conversa:', conversationError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Falha ao criar conversa'
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        conversation = newConversation;
+      }
+
+      // Criar a mensagem
+      const { data: newMessage, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          external_id: messageId,
+          conversation_id: conversation.id,
+          workspace_id: workspaceId,
+          content: fileName || 'Documento PDF',
+          direction: 'incoming',
+          message_type: mimeType === 'application/pdf' ? 'document' : 'media',
+          created_at: new Date().toISOString()
+        })
+        .select('id, external_id, workspace_id, content')
+        .single();
+
+      if (messageError) {
+        console.error('❌ Erro ao criar mensagem:', messageError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Falha ao criar mensagem'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      existingMessage = newMessage;
+      console.log('✅ Nova mensagem criada:', existingMessage.id);
     }
 
     // Verificar se é mensagem de texto (sem mídia)
@@ -251,6 +355,12 @@ serve(async (req) => {
       // Documentos
       if (header.startsWith('25504446')) return 'application/pdf';
       
+      // Office Documents
+      if (header.startsWith('504b0304')) {
+        // ZIP-based formats (DOCX, XLSX, PPTX)
+        return 'application/octet-stream'; // Will be refined by extension
+      }
+      
       // Verificar se é texto (UTF-8/ASCII) pela ausência de bytes de controle
       const isTextContent = buffer.slice(0, 100).every(byte => 
         (byte >= 32 && byte <= 126) || // ASCII printable
@@ -278,7 +388,11 @@ serve(async (req) => {
         'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
         'mp4': 'video/mp4', 'mov': 'video/quicktime', 'avi': 'video/x-msvideo', 'webm': 'video/webm', '3gp': 'video/3gpp',
         'mp3': 'audio/mpeg', 'ogg': 'audio/ogg', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'aac': 'audio/aac',
-        'pdf': 'application/pdf', 'doc': 'application/msword', 'txt': 'text/plain', 'xml': 'application/xml'
+        'pdf': 'application/pdf', 
+        'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel', 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint', 'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'txt': 'text/plain', 'xml': 'application/xml', 'json': 'application/json'
       };
       return mimeMap[ext] || 'application/octet-stream';
     }
@@ -303,6 +417,10 @@ serve(async (req) => {
     else if (finalMimeType === 'application/pdf') fileExtension = 'pdf';
     else if (finalMimeType === 'text/plain') fileExtension = 'txt';
     else if (finalMimeType === 'application/xml') fileExtension = 'xml';
+    else if (finalMimeType === 'application/json') fileExtension = 'json';
+    else if (finalMimeType.includes('wordprocessingml')) fileExtension = 'docx';
+    else if (finalMimeType.includes('spreadsheetml')) fileExtension = 'xlsx';
+    else if (finalMimeType.includes('presentationml')) fileExtension = 'pptx';
     else if (fileName) {
       fileExtension = fileName.split('.').pop()?.toLowerCase() || 'unknown';
     }
