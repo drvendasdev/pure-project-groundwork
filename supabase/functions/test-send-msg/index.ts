@@ -476,17 +476,6 @@ serve(async (req) => {
       });
     }
 
-      } catch (fallbackError) {
-        console.error(`❌ [${requestId}] Fallback save failed:`, fallbackError);
-        return new Response(JSON.stringify({
-          error: 'Both N8N and fallback save failed',
-          details: fallbackError.message
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-    }
 
     console.log(`🎉 [${requestId}] SUCCESS - Message sent to N8N with external_id: ${external_id}`);
 
