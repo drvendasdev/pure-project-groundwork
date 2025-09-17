@@ -522,12 +522,32 @@ const stopRecording = () => {
     }
   }, [selectedConversationId, conversations, markAsRead]);
 
-  // Auto-scroll quando conversa é selecionada ou nova mensagem chega
+  // Auto-scroll quando conversa é selecionada ou mensagens carregam
   useEffect(() => {
-    if (selectedConversation) {
-      setTimeout(scrollToBottom, 100);
+    if (selectedConversation && messages.length > 0) {
+      // Scroll direto para o final sem animação no primeiro carregamento
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
-  }, [selectedConversation, selectedConversation?.messages]);
+  }, [selectedConversation, messages.length]);
+
+  // Auto-scroll suave quando novas mensagens chegam (não no carregamento inicial)
+  useEffect(() => {
+    if (selectedConversation && messages.length > 0 && !loading) {
+      const isAtBottom = () => {
+        const container = messagesEndRef.current?.parentElement;
+        if (!container) return true;
+        const threshold = 100;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      };
+
+      // Se já está próximo do final, faz scroll suave para nova mensagem
+      if (isAtBottom()) {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  }, [messages, loading]);
 
   if (loading) {
     return (
