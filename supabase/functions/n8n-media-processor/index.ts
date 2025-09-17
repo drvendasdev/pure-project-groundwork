@@ -37,7 +37,8 @@ serve(async (req) => {
       contact_name,
       sender_type,
       message_type,
-      phone_number
+      phone_number,
+      direction
     } = payload;
     
     // Priorizar campos diretos, depois mapear do N8N
@@ -49,6 +50,7 @@ serve(async (req) => {
     const conversationId = directConversationId;
     const phoneNumber = directPhoneNumber || phone_number;
     const workspaceId = directWorkspaceId || workspace_id;
+    const messageDirection = direction;
     
     console.log('N8N Media Processor - Dados mapeados:', { 
       messageId, 
@@ -57,7 +59,9 @@ serve(async (req) => {
       fileName, 
       mimeType, 
       workspaceId,
-      conversationId
+      conversationId,
+      direction: messageDirection,
+      sender_type
     });
 
     const supabase = createClient(
@@ -77,9 +81,24 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+    
+    // VALIDAÇÃO CRÍTICA: Se não há dados de mídia (base64 ou mediaUrl), 
+    // não devemos processar mensagens de texto simples
+    if (!base64 && !mediaUrl && !fileName && !mimeType) {
+      console.log('⚠️ Nenhum dado de mídia encontrado - pulando processamento');
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Nenhum dado de mídia para processar - mensagem de texto simples',
+        external_id: messageId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    const isOutbound = payload.direction === 'outbound' || sender_type === 'agent';
+    const isOutbound = messageDirection === 'outbound' || sender_type === 'agent';
     console.log(`🔄 Processando mensagem ${isOutbound ? 'OUTBOUND' : 'INBOUND'} - external_id: ${messageId}`);
+    console.log(`📋 Direction: ${messageDirection}, Sender Type: ${sender_type}, Is Outbound: ${isOutbound}`);
 
     console.log('🔍 Buscando mensagem existente por external_id:', messageId);
     
@@ -131,8 +150,7 @@ serve(async (req) => {
     if (!existingMessage) {
       console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas - external_id:`, messageId);
       
-      // Verificar se é uma mensagem outbound (enviada do sistema)
-      const isOutbound = payload.direction === 'outbound' || sender_type === 'agent';
+      // Usar a variável isOutbound já definida anteriormente
       
       if (isOutbound) {
         console.log(`❌ [OUTBOUND] Mensagem deveria existir no banco mas não foi encontrada - external_id: ${messageId}`);
