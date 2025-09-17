@@ -48,19 +48,11 @@ serve(async (req) => {
           name,
           phone,
           profile_image_url
-        ),
-        last_message:messages!conversation_id(
-          content,
-          message_type,
-          sender_type,
-          created_at
         )
       `)
       .eq('workspace_id', workspaceId)
       .order('last_activity_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false })
-      .order('last_message.created_at', { ascending: false })
-      .limit('last_message', 1)
       .limit(limit);
 
     // Apply cursor pagination if provided
@@ -82,16 +74,33 @@ serve(async (req) => {
       );
     }
 
+    // Buscar última mensagem para cada conversa
+    const conversationsWithMessages = await Promise.all(
+      (conversations || []).map(async (conv) => {
+        const { data: lastMessage } = await supabase
+          .from('messages')
+          .select('content, message_type, sender_type, created_at')
+          .eq('conversation_id', conv.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        return {
+          ...conv,
+          last_message: lastMessage || []
+        };
+      })
+    );
+
     // Generate next cursor if we have results
     let nextCursor = null;
-    if (conversations && conversations.length === limit) {
-      const lastConversation = conversations[conversations.length - 1];
+    if (conversationsWithMessages && conversationsWithMessages.length === limit) {
+      const lastConversation = conversationsWithMessages[conversationsWithMessages.length - 1];
       nextCursor = `${lastConversation.last_activity_at}|${lastConversation.id}`;
     }
 
     return new Response(
       JSON.stringify({
-        items: conversations || [],
+        items: conversationsWithMessages || [],
         nextCursor
       }),
       {
