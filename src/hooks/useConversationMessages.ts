@@ -78,12 +78,15 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     setCurrentConversationId(conversationId);
 
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
-        body: {
-          workspace_id: selectedWorkspace.workspace_id,
-          conversation_id: conversationId,
-          limit: 5
-        }
+      const params = new URLSearchParams({
+        workspace_id: selectedWorkspace.workspace_id,
+        conversation_id: conversationId,
+        limit: '5'
+      });
+
+      const { data, error } = await supabase.functions.invoke(
+        `whatsapp-get-messages?${params}`, {
+        method: 'GET'
       });
 
       if (error) {
@@ -127,13 +130,16 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     setLoadingMore(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
-        body: {
-          workspace_id: selectedWorkspace.workspace_id,
-          conversation_id: currentConversationId,
-          limit: 5,
-          before: cursorBefore
-        }
+      const params = new URLSearchParams({
+        workspace_id: selectedWorkspace.workspace_id,
+        conversation_id: currentConversationId,
+        limit: '5',
+        before: cursorBefore
+      });
+
+      const { data, error } = await supabase.functions.invoke(
+        `whatsapp-get-messages?${params}`, {
+        method: 'GET'
       });
 
       if (error) {

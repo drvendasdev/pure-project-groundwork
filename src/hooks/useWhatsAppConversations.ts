@@ -82,8 +82,14 @@ export const useWhatsAppConversations = () => {
         console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
       }
 
-      // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens)
-      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations-lite', {
+      // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens) via query params
+      const params = new URLSearchParams({
+        workspace_id: selectedWorkspace.workspace_id,
+        limit: '50'
+      });
+      
+      const { data: response, error: functionError } = await supabase.functions.invoke(
+        `whatsapp-get-conversations-lite?${params}`, {
         method: 'GET',
         headers
       });
