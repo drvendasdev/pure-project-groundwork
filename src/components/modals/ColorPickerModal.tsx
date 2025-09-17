@@ -16,12 +16,15 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
 
   useEffect(() => {
     if (open) {
-      drawColorPicker();
-      drawHueBar();
+      // Timeout para garantir que o canvas esteja renderizado
+      setTimeout(() => {
+        drawColorPicker();
+        drawHueBar();
+      }, 100);
     }
   }, [open]);
 
-  const drawColorPicker = () => {
+  const drawColorPicker = (hueColor = "#ff0000") => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -31,18 +34,21 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
     const width = canvas.width;
     const height = canvas.height;
 
-    // Create gradient from white to black (left to right)
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Create saturation gradient (white to hue color)
     const horizontalGradient = ctx.createLinearGradient(0, 0, width, 0);
     horizontalGradient.addColorStop(0, 'white');
-    horizontalGradient.addColorStop(1, 'red');
+    horizontalGradient.addColorStop(1, hueColor);
 
     ctx.fillStyle = horizontalGradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Create gradient from transparent to black (top to bottom)
+    // Create brightness gradient (transparent to black)
     const verticalGradient = ctx.createLinearGradient(0, 0, 0, height);
-    verticalGradient.addColorStop(0, 'transparent');
-    verticalGradient.addColorStop(1, 'black');
+    verticalGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    verticalGradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
 
     ctx.fillStyle = verticalGradient;
     ctx.fillRect(0, 0, width, height);
@@ -76,17 +82,24 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const imageData = ctx.getImageData(x, y, 1, 1);
-    const [r, g, b] = imageData.data;
-    
-    const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-    setSelectedColor(color);
+    try {
+      const imageData = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1);
+      const [r, g, b] = imageData.data;
+      
+      const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      setSelectedColor(color);
+    } catch (error) {
+      console.error('Erro ao capturar cor:', error);
+    }
   };
 
   const handleHueClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -94,41 +107,23 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
+    const scaleX = canvas.width / rect.width;
+    const x = (event.clientX - rect.left) * scaleX;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const imageData = ctx.getImageData(x, 10, 1, 1);
-    const [r, g, b] = imageData.data;
-    
-    const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-    setSelectedColor(color);
-    
-    // Redraw main picker with new hue
-    const mainCanvas = canvasRef.current;
-    const mainCtx = mainCanvas?.getContext('2d');
-    if (!mainCtx || !mainCanvas) return;
-
-    const width = mainCanvas.width;
-    const height = mainCanvas.height;
-
-    // Clear and redraw with new hue
-    mainCtx.clearRect(0, 0, width, height);
-    
-    const horizontalGradient = mainCtx.createLinearGradient(0, 0, width, 0);
-    horizontalGradient.addColorStop(0, 'white');
-    horizontalGradient.addColorStop(1, color);
-
-    mainCtx.fillStyle = horizontalGradient;
-    mainCtx.fillRect(0, 0, width, height);
-
-    const verticalGradient = mainCtx.createLinearGradient(0, 0, 0, height);
-    verticalGradient.addColorStop(0, 'transparent');
-    verticalGradient.addColorStop(1, 'black');
-
-    mainCtx.fillStyle = verticalGradient;
-    mainCtx.fillRect(0, 0, width, height);
+    try {
+      const imageData = ctx.getImageData(Math.floor(x), 10, 1, 1);
+      const [r, g, b] = imageData.data;
+      
+      const hueColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      
+      // Redesenha o picker principal com a nova cor
+      drawColorPicker(hueColor);
+    } catch (error) {
+      console.error('Erro ao capturar cor do hue:', error);
+    }
   };
 
   const handleConfirm = () => {
