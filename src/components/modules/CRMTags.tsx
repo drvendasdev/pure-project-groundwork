@@ -5,13 +5,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Edit, Trash2 } from "lucide-react";
 import { useTags } from "@/hooks/useTags";
+import { CriarTagModal } from "@/components/modals/CriarTagModal";
 
 export function CRMTags() {
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   
-  const { tags, isLoading, error } = useTags();
+  const { tags, isLoading, error, refetch } = useTags();
 
   return (
     <div className="p-6">
@@ -52,7 +54,11 @@ export function CRMTags() {
               <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
             
-            <Button variant="yellow" className="whitespace-nowrap">
+            <Button 
+              variant="yellow" 
+              className="whitespace-nowrap"
+              onClick={() => setIsCreateModalOpen(true)}
+            >
               + Criar
             </Button>
           </div>
@@ -107,6 +113,14 @@ export function CRMTags() {
           </div>
         </div>
       </div>
+
+      <CriarTagModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onTagCreated={() => {
+          refetch?.();
+        }}
+      />
     </div>
   );
 }
