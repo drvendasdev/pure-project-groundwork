@@ -364,7 +364,9 @@ serve(async (req) => {
             source: 'evolution-api',
             forwarded_by: 'evolution-webhook-v2',
             request_id: requestId,
-            processed_data: processedData
+            processed_data: processedData,
+            // Include external_id for media processing
+            external_id: payload.data?.key?.id
           })
         });
 
