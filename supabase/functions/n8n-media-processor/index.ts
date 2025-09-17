@@ -65,8 +65,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // REGRA CRÍTICA: n8n-media-processor APENAS atualiza mensagens existentes
-    // NUNCA cria novas mensagens - apenas UPDATE por external_id
+    // REGRA CRÍTICA: n8n-media-processor APENAS atualiza mensagens existentes para OUTBOUND
+    // Para INBOUND, pode criar novas mensagens se necessário
     if (!messageId) {
       console.log('❌ Sem messageId - não é possível processar');
       return new Response(JSON.stringify({
@@ -77,6 +77,9 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    const isOutbound = payload.direction === 'outbound' || sender_type === 'agent';
+    console.log(`🔄 Processando mensagem ${isOutbound ? 'OUTBOUND' : 'INBOUND'} - external_id: ${messageId}`);
 
     console.log('🔍 Buscando mensagem existente por external_id:', messageId);
     
@@ -126,15 +129,31 @@ serve(async (req) => {
     }
 
     if (!existingMessage) {
-      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas - criando nova mensagem para external_id:`, messageId);
+      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas - external_id:`, messageId);
       
-      // Se não encontrou a mensagem, vamos criar uma nova (especialmente para PDFs e mídias)
-      // Primeiro, precisamos encontrar ou criar o contato e conversa
+      // Verificar se é uma mensagem outbound (enviada do sistema)
+      const isOutbound = payload.direction === 'outbound' || sender_type === 'agent';
+      
+      if (isOutbound) {
+        console.log(`❌ [OUTBOUND] Mensagem deveria existir no banco mas não foi encontrada - external_id: ${messageId}`);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Mensagem outbound não encontrada no banco de dados',
+          external_id: messageId,
+          details: 'Mensagens enviadas do sistema devem ser salvas antes de chamar o media processor'
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // APENAS para mensagens INBOUND (recebidas) - criar nova mensagem
+      console.log(`📥 [INBOUND] Criando nova mensagem para external_id: ${messageId}`);
       
       if (!workspaceId || !phoneNumber) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'workspace_id e phone_number são obrigatórios para criar nova mensagem',
+          error: 'workspace_id e phone_number são obrigatórios para criar nova mensagem inbound',
           external_id: messageId
         }), {
           status: 400,
@@ -194,7 +213,7 @@ serve(async (req) => {
           .insert({
             contact_id: contact.id,
             workspace_id: workspaceId,
-            status: 'active'
+            status: 'open'
           })
           .select('id')
           .single();
@@ -212,7 +231,7 @@ serve(async (req) => {
         conversation = newConversation;
       }
 
-      // Criar a mensagem - detectar tipo correto baseado no MIME type
+      // Criar a mensagem INBOUND - detectar tipo correto baseado no MIME type
       let messageType = 'text';
       if (mimeType) {
         if (mimeType.startsWith('image/')) messageType = 'image';
@@ -229,17 +248,17 @@ serve(async (req) => {
           workspace_id: workspaceId,
           content: fileName || 'Documento',
           message_type: messageType,
-          sender_type: 'contact',
+          sender_type: 'contact', // SEMPRE contact para mensagens INBOUND
           created_at: new Date().toISOString()
         })
         .select('id, external_id, workspace_id, content')
         .single();
 
       if (messageError) {
-        console.error('❌ Erro ao criar mensagem:', messageError);
+        console.error('❌ Erro ao criar mensagem inbound:', messageError);
         return new Response(JSON.stringify({
           success: false,
-          error: 'Falha ao criar mensagem'
+          error: 'Falha ao criar mensagem inbound'
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -247,7 +266,7 @@ serve(async (req) => {
       }
 
       existingMessage = newMessage;
-      console.log('✅ Nova mensagem criada:', existingMessage.id);
+      console.log('✅ Nova mensagem INBOUND criada:', existingMessage.id);
     }
 
     // Verificar se é mensagem de texto (sem mídia)
