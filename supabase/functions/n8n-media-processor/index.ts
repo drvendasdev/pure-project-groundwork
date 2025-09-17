@@ -241,12 +241,19 @@ serve(async (req) => {
     let detectedMimeType = detectMimeTypeFromBuffer(uint8Array);
     let finalMimeType = detectedMimeType || mimeType || 'application/octet-stream';
     
+    // Converter tipos MIME não suportados pelo Supabase Storage
+    if (finalMimeType === 'audio/ogg') {
+      finalMimeType = 'audio/webm'; // Supabase não suporta audio/ogg, usar webm
+    }
+    
     // Determinar extensão
     let fileExtension = 'unknown';
     if (finalMimeType === 'image/jpeg') fileExtension = 'jpg';
     else if (finalMimeType === 'image/png') fileExtension = 'png';
     else if (finalMimeType === 'video/mp4') fileExtension = 'mp4';
     else if (finalMimeType === 'audio/mpeg') fileExtension = 'mp3';
+    else if (finalMimeType === 'audio/webm') fileExtension = 'webm';
+    else if (finalMimeType === 'audio/ogg') fileExtension = 'webm'; // Fallback para OGG
     else if (finalMimeType === 'application/pdf') fileExtension = 'pdf';
     else if (fileName) {
       fileExtension = fileName.split('.').pop()?.toLowerCase() || 'unknown';
