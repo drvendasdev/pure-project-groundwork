@@ -127,136 +127,16 @@ serve(async (req) => {
     }
 
     if (!existingMessage) {
-      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas para external_id: ${messageId}`);
-      console.log('🔄 Tentando criar nova mensagem para mídia...');
-      
-      // Se não encontrou a mensagem e tem mídia, criar a mensagem
-      if (base64 || mediaUrl) {
-        try {
-          // Extrair dados necessários do payload para criar a mensagem
-          const phoneNumber = phone_number?.replace('@s.whatsapp.net', '').replace(/\D/g, '') || '';
-          
-          // Buscar ou criar contato
-          let contactId: string | null = null;
-          if (phoneNumber && workspaceId) {
-            const { data: existingContact } = await supabase
-              .from('contacts')
-              .select('id')
-              .eq('phone', phoneNumber)
-              .eq('workspace_id', workspaceId)
-              .maybeSingle();
-
-            if (existingContact) {
-              contactId = existingContact.id;
-            } else {
-              const { data: newContact } = await supabase
-                .from('contacts')
-                .insert({
-                  phone: phoneNumber,
-                  name: contact_name || phoneNumber,
-                  workspace_id: workspaceId
-                })
-                .select('id')
-                .single();
-              contactId = newContact?.id;
-            }
-          }
-
-          // Buscar connection_id
-          let connectionId: string | null = null;
-          if (connection_id && workspaceId) {
-            // Remover duplicação no connection_id se existir
-            const cleanConnectionId = connection_id.includes(connection_id.substring(0, 36)) ? 
-              connection_id.substring(0, 36) : connection_id;
-            
-            const { data: connectionData } = await supabase
-              .from('connections')
-              .select('id')
-              .eq('id', cleanConnectionId)
-              .eq('workspace_id', workspaceId)
-              .maybeSingle();
-            
-            if (connectionData) {
-              connectionId = connectionData.id;
-            }
-          }
-
-          // Buscar ou criar conversa
-          let conversationId: string | null = null;
-          if (contactId && workspaceId) {
-            const { data: existingConversation } = await supabase
-              .from('conversations')
-              .select('id')
-              .eq('contact_id', contactId)
-              .eq('workspace_id', workspaceId)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (existingConversation) {
-              conversationId = existingConversation.id;
-            } else {
-              const { data: newConversation } = await supabase
-                .from('conversations')
-                .insert({
-                  contact_id: contactId,
-                  workspace_id: workspaceId,
-                  connection_id: connectionId,
-                  status: 'open'
-                })
-                .select('id')
-                .single();
-              conversationId = newConversation?.id;
-            }
-          }
-
-          // Criar a mensagem
-          if (conversationId) {
-            const newMessageId = crypto.randomUUID();
-            const { data: createdMessage, error: createError } = await supabase
-              .from('messages')
-              .insert({
-                id: newMessageId,
-                conversation_id: conversationId,
-                workspace_id: workspaceId,
-                content: '📎 Arquivo de mídia',
-                message_type: message_type || 'document',
-                sender_type: 'contact',
-                status: 'received',
-                origem_resposta: 'automatica',
-                external_id: messageId,
-                metadata: {
-                  source: 'n8n-media-processor',
-                  created_on_demand: true,
-                  contact_name: contact_name
-                }
-              })
-              .select('id, external_id, workspace_id, content')
-              .single();
-
-            if (createError) {
-              console.error('❌ Erro ao criar nova mensagem:', createError);
-            } else {
-              console.log('✅ Nova mensagem criada:', createdMessage.id);
-              existingMessage = createdMessage;
-            }
-          }
-        } catch (createError) {
-          console.error('❌ Erro no processo de criação de mensagem:', createError);
-        }
-      }
-      
-      // Se ainda não conseguiu criar/encontrar a mensagem, retornar erro
-      if (!existingMessage) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: `Mensagem não encontrada - n8n-media-processor só atualiza mensagens existentes`,
-          external_id: messageId
-        }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
+      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas para external_id:`, messageId);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Mensagem não encontrada após ${maxAttempts} tentativas - possível problema de timing`,
+        external_id: messageId,
+        attempts: attempts
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Verificar se é mensagem de texto (sem mídia)

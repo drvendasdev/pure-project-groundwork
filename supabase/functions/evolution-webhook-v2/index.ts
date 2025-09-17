@@ -107,64 +107,44 @@ serve(async (req) => {
       webhookSecret = Deno.env.get('N8N_WEBHOOK_TOKEN');
     }
 
-    // PROCESS MESSAGE LOCALLY FIRST (Only for inbound TEXT messages from contacts)
+    // PROCESS MESSAGE LOCALLY FIRST (Only for inbound messages from contacts)
     if (workspaceId && payload.data?.message && payload.data?.key?.fromMe === false) {
+      console.log(`📝 [${requestId}] Processing inbound message locally before forwarding`);
+      
       // Extract message data from Evolution webhook
       const messageData = payload.data;
       const phoneNumber = messageData.key?.remoteJid?.replace('@s.whatsapp.net', '') || '';
       const evolutionMessageId = messageData.key?.id;
       
-      // Check if this is a media message (documentMessage, imageMessage, videoMessage, audioMessage)
-      const isMediaMessage = !!(
-        messageData.message?.documentMessage ||
-        messageData.message?.imageMessage ||
-        messageData.message?.videoMessage ||
-        messageData.message?.audioMessage
-      );
-      
-      if (isMediaMessage) {
-        console.log(`📎 [${requestId}] Media message detected, skipping local processing - will be handled by N8N`);
+      // Check if this message already exists (prevent duplicates)
+      const { data: existingMessage } = await supabase
+        .from('messages')
+        .select('id, conversation_id')
+        .eq('external_id', evolutionMessageId)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+
+      if (existingMessage) {
+        console.log(`⚠️ [${requestId}] Message already exists, skipping local processing: ${evolutionMessageId}`);
         processedData = {
-          message_type: 'media',
+          message_id: existingMessage.id,
           workspace_id: workspaceId,
+          conversation_id: existingMessage.conversation_id,
           instance: instanceName,
           phone_number: phoneNumber.replace(/\D/g, ''),
-          external_id: evolutionMessageId,
-          direction: 'inbound',
-          skip_local: true,
-          media_type: messageData.message?.documentMessage ? 'document' :
-                     messageData.message?.imageMessage ? 'image' :
-                     messageData.message?.videoMessage ? 'video' : 'audio'
+          duplicate_skipped: true
         };
       } else {
-        console.log(`📝 [${requestId}] Text message detected, processing locally before forwarding`);
+        const messageContent = messageData.message?.conversation || 
+                              messageData.message?.extendedTextMessage?.text || 
+                              messageData.message?.imageMessage?.caption ||
+                              messageData.message?.videoMessage?.caption ||
+                              messageData.message?.documentMessage?.caption ||
+                              '📎 Arquivo';
         
-        // Check if this message already exists (prevent duplicates)
-        const { data: existingMessage } = await supabase
-          .from('messages')
-          .select('id, conversation_id')
-          .eq('external_id', evolutionMessageId)
-          .eq('workspace_id', workspaceId)
-          .maybeSingle();
-
-        if (existingMessage) {
-          console.log(`⚠️ [${requestId}] Message already exists, skipping local processing: ${evolutionMessageId}`);
-          processedData = {
-            message_id: existingMessage.id,
-            workspace_id: workspaceId,
-            conversation_id: existingMessage.conversation_id,
-            instance: instanceName,
-            phone_number: phoneNumber.replace(/\D/g, ''),
-            duplicate_skipped: true
-          };
-        } else {
-          const messageContent = messageData.message?.conversation || 
-                                messageData.message?.extendedTextMessage?.text || 
-                                '';
-          
-          const sanitizedPhone = phoneNumber.replace(/\D/g, '');
-          
-          if (sanitizedPhone && messageContent) {
+        const sanitizedPhone = phoneNumber.replace(/\D/g, '');
+        
+        if (sanitizedPhone && messageContent) {
           // Find or create contact
           let contactId: string;
           const { data: existingContact } = await supabase
@@ -357,8 +337,7 @@ serve(async (req) => {
             direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound'
           };
 
-          console.log(`✅ [${requestId}] Inbound text message processed locally:`, processedData);
-          }
+          console.log(`✅ [${requestId}] Inbound message processed locally:`, processedData);
         }
       }
     } else if (workspaceId && payload.data?.key?.fromMe === true) {
