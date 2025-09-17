@@ -754,7 +754,7 @@ serve(async (req) => {
 
     // Create message
     const messageData = {
-      id: external_id || crypto.randomUUID(),
+      id: crypto.randomUUID(), // Sempre gerar UUID único para id
       conversation_id: conversationId,
       workspace_id: workspace_id,
       content: content || (file_url ? `📎 ${file_name || 'Arquivo'}` : ''),
@@ -765,7 +765,7 @@ serve(async (req) => {
       mime_type: mime_type || null,
       status: direction === 'inbound' ? 'received' : 'sent',
       origem_resposta: direction === 'inbound' ? 'automatica' : 'manual',
-      external_id: external_id || null,
+      external_id: external_id || null, // external_id separado do id
       metadata: {
         source: 'n8n-response-v2',
         direction: direction,
