@@ -180,6 +180,7 @@ serve(async (req) => {
         file_name: body.file_name,
         mime_type: body.mime_type,
         status: 'sending',
+        external_id: requestId, // Usar requestId como external_id
         metadata: {
           requestId,
           created_at: new Date().toISOString()
@@ -216,7 +217,8 @@ serve(async (req) => {
       fileName: body.file_name,
       evolutionInstance: conversation.connection.instance_name,
       conversationId: conversation.id,
-      workspaceId: conversation.workspace_id
+      workspaceId: conversation.workspace_id,
+      external_id: message.external_id // Incluir external_id no payload
     };
 
     // Chamar centralizador inteligente

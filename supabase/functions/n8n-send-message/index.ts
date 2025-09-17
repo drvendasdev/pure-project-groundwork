@@ -31,7 +31,8 @@ serve(async (req) => {
       mimeType: mimeTypeFromBody, 
       evolutionInstance: evolutionInstanceFromBody,
       conversationId,
-      workspaceId 
+      workspaceId,
+      external_id 
     } = requestBodyCache;
     
     receivedMessageId = messageId;
@@ -236,12 +237,12 @@ serve(async (req) => {
     const n8nPayload = {
       event: 'send.message',
       instance: finalEvolutionInstance,
-      external_id: messageId,
+      external_id: external_id || messageId, // Usar external_id se fornecido, senão messageId
       data: {
         key: {
           remoteJid: `${contactPhone}@s.whatsapp.net`,
           fromMe: true,
-          id: messageId
+          id: external_id || messageId // Usar external_id como ID também
         },
         message: evolutionMessage,
         messageType: evolutionMessageType,

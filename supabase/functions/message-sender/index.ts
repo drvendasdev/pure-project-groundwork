@@ -109,7 +109,8 @@ serve(async (req) => {
           fileName,
           evolutionInstance,
           conversationId,
-          workspaceId: finalWorkspaceId
+          workspaceId: finalWorkspaceId,
+          external_id: requestBody.external_id // Propagar external_id
         }
       });
 
