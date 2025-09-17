@@ -47,7 +47,7 @@ export function CRMContatos() {
   const { tags } = useTags();
   const { toast } = useToast();
 
-  // Fetch contacts from conversations
+  // Fetch contacts directly from contacts table
   const fetchContacts = async () => {
     try {
       setIsLoading(true);
@@ -58,30 +58,21 @@ export function CRMContatos() {
         return;
       }
 
-      // First, get distinct contact_ids from conversations filtered by workspace
-      const { data: conversationContacts, error: conversationsError } = await supabase
-        .from('conversations')
-        .select('contact_id')
-        .eq('workspace_id', selectedWorkspace.workspace_id)
-        .order('created_at', { ascending: false });
-
-      if (conversationsError) throw conversationsError;
-
-      const uniqueContactIds = [...new Set(conversationContacts?.map(c => c.contact_id) || [])];
-
-      if (uniqueContactIds.length === 0) {
-        setContacts([]);
-        return;
-      }
-
-      // Get contact details filtered by workspace
+      // Get all contacts from the workspace
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('*')
         .eq('workspace_id', selectedWorkspace.workspace_id)
-        .in('id', uniqueContactIds);
+        .order('created_at', { ascending: false });
 
       if (contactsError) throw contactsError;
+
+      if (!contactsData || contactsData.length === 0) {
+        setContacts([]);
+        return;
+      }
+
+      const contactIds = contactsData.map(c => c.id);
 
       // Get contact tags
       const { data: contactTagsData, error: tagsError } = await supabase
@@ -94,7 +85,7 @@ export function CRMContatos() {
             color
           )
         `)
-        .in('contact_id', uniqueContactIds);
+        .in('contact_id', contactIds);
 
       if (tagsError) throw tagsError;
 
@@ -129,47 +120,62 @@ export function CRMContatos() {
 
   useEffect(() => {
     fetchContacts();
-  }, []);
+  }, [selectedWorkspace]);
 
-  // Real-time subscription for new conversations
+  // Real-time subscription for contacts changes
   useEffect(() => {
+    if (!selectedWorkspace) return;
+
     const channel = supabase
-      .channel('conversations-contacts')
+      .channel('contacts-changes')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'conversations'
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
         },
         async (payload) => {
-          // When a new conversation is created, check if the contact is already in our list
-          const newContactId = payload.new.contact_id;
-          const existingContact = contacts.find(c => c.id === newContactId);
-          
-          if (!existingContact) {
-            // Fetch the new contact and add it to the list
-            const { data: newContactData, error } = await supabase
-              .from('contacts')
-              .select('*')
-              .eq('id', newContactId)
-              .single();
+          const newContactData = payload.new;
+          const newContact: Contact = {
+            id: newContactData.id,
+            name: newContactData.name,
+            phone: newContactData.phone || '',
+            email: newContactData.email || '',
+            createdAt: format(new Date(newContactData.created_at), 'dd/MM/yyyy HH:mm:ss'),
+            tags: [],
+            profile_image_url: newContactData.profile_image_url,
+            extra_info: newContactData.extra_info as Record<string, any> || {}
+          };
 
-            if (!error && newContactData) {
-              const newContact: Contact = {
-                id: newContactData.id,
-                name: newContactData.name,
-                phone: newContactData.phone || '',
-                email: newContactData.email || '',
-                createdAt: format(new Date(newContactData.created_at), 'dd/MM/yyyy HH:mm:ss'),
-                tags: [],
-                profile_image_url: newContactData.profile_image_url,
-                extra_info: newContactData.extra_info as Record<string, any> || {}
-              };
-
-              setContacts(prev => [newContact, ...prev]);
-            }
-          }
+          setContacts(prev => [newContact, ...prev]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        () => {
+          // Refetch all contacts when any contact is updated
+          fetchContacts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        (payload) => {
+          const deletedId = payload.old.id;
+          setContacts(prev => prev.filter(c => c.id !== deletedId));
         }
       )
       .subscribe();
@@ -177,7 +183,7 @@ export function CRMContatos() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [contacts]);
+  }, [selectedWorkspace]);
 
   // Filter contacts based on search and tag filter
   const filteredContacts = contacts.filter(contact => {
