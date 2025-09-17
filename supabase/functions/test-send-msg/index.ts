@@ -198,6 +198,59 @@ serve(async (req) => {
     // Generate external_id for tracking
     const external_id = crypto.randomUUID();
     
+    // CRÍTICO: Salvar a mensagem ANTES de chamar o N8N para evitar race condition
+    console.log(`💾 [${requestId}] Saving message to database BEFORE calling N8N`);
+    
+    try {
+      const messageData = {
+        id: external_id,
+        conversation_id: conversation_id,
+        workspace_id: conversation.workspace_id,
+        content: effectiveContent || '',
+        message_type: message_type,
+        sender_type: sender_type || 'agent',
+        sender_id: sender_id,
+        file_url: file_url || null,
+        file_name: file_name || null,
+        status: 'sending',
+        origem_resposta: 'manual',
+        external_id: external_id,
+        metadata: {
+          source: 'test-send-msg-pre-save',
+          request_id: requestId,
+          step: 'before_n8n'
+        }
+      };
+
+      const { data: savedMessage, error: saveError } = await supabase
+        .from('messages')
+        .insert(messageData)
+        .select('id')
+        .single();
+
+      if (saveError) {
+        console.error(`❌ [${requestId}] Failed to save message before N8N:`, saveError);
+        return new Response(JSON.stringify({
+          error: 'Failed to save message',
+          details: saveError.message
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`✅ [${requestId}] Message saved before N8N: ${savedMessage.id}`);
+    } catch (preSaveError) {
+      console.error(`❌ [${requestId}] Pre-save error:`, preSaveError);
+      return new Response(JSON.stringify({
+        error: 'Failed to save message before N8N',
+        details: preSaveError.message
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
     let n8nPayload: any;
 
     // Se for imagem com file_url, enviar no formato base64 para N8N
@@ -364,106 +417,64 @@ serve(async (req) => {
         console.log(`✅ [${requestId}] N8N webhook called successfully`);
         n8nSuccess = true;
         
-        // Para imagens enviadas pelo sistema, sempre salvar localmente também
-        // para garantir que aparece na conversa imediatamente
-        if (message_type !== 'text' && file_url) {
-          console.log(`💾 [${requestId}] Saving image message locally for immediate display`);
-          
-          try {
-            const messageData = {
-              id: external_id,
-              conversation_id: conversation_id,
-              workspace_id: conversation.workspace_id,
-              content: effectiveContent || '',
-              message_type: message_type,
-              sender_type: sender_type || 'agent',
-              sender_id: sender_id,
-              file_url: file_url,
-              file_name: file_name || null,
+        // Atualizar status da mensagem para 'sent' após sucesso do N8N
+        try {
+          await supabase
+            .from('messages')
+            .update({ 
               status: 'sent',
-              origem_resposta: 'manual',
-              external_id: external_id,
               metadata: {
-                source: 'test-send-msg-local-save',
+                source: 'test-send-msg-post-n8n',
                 request_id: requestId,
-                n8n_success: true
+                n8n_success: true,
+                step: 'after_n8n_success'
               }
-            };
-
-            const { data: savedMessage, error: saveError } = await supabase
-              .from('messages')
-              .insert(messageData)
-              .select('id')
-              .single();
-
-            if (saveError) {
-              console.error(`❌ [${requestId}] Failed to save local message:`, saveError);
-            } else {
-              console.log(`✅ [${requestId}] Image message saved locally: ${savedMessage.id}`);
-            }
-          } catch (localSaveError) {
-            console.error(`❌ [${requestId}] Local save error:`, localSaveError);
-          }
+            })
+            .eq('external_id', external_id);
+          
+          console.log(`✅ [${requestId}] Message status updated to 'sent'`);
+        } catch (updateError) {
+          console.error(`⚠️ [${requestId}] Failed to update message status:`, updateError);
         }
       }
     } catch (webhookErr) {
       console.error(`❌ [${requestId}] Error calling N8N webhook:`, webhookErr);
     }
 
-    // FALLBACK: Salvar mensagem diretamente na base de dados se N8N falhar
+    // Se N8N falhar, atualizar status para 'failed'
     if (!n8nSuccess) {
-      console.log(`🔄 [${requestId}] N8N failed, saving message directly to database as fallback`);
+      console.log(`❌ [${requestId}] N8N failed, updating message status to 'failed'`);
       
       try {
-        const messageData = {
-          id: external_id,
-          conversation_id: conversation_id,
-          workspace_id: conversation.workspace_id,
-          content: effectiveContent || '',
-          message_type: message_type,
-          sender_type: sender_type || 'agent',
-          sender_id: sender_id,
-          file_url: file_url || null,
-          file_name: file_name || null,
-          status: 'sent',
-          origem_resposta: 'manual',
-          external_id: external_id,
-          metadata: {
-            source: 'test-send-msg-fallback',
-            request_id: requestId,
-            n8n_failed: true,
-            original_payload: n8nPayload
-          }
-        };
-
-        const { data: savedMessage, error: saveError } = await supabase
-          .from('messages')
-          .insert(messageData)
-          .select('id')
-          .single();
-
-        if (saveError) {
-          console.error(`❌ [${requestId}] Failed to save fallback message:`, saveError);
-          return new Response(JSON.stringify({
-            error: 'N8N failed and fallback save failed',
-            n8n_error: 'N8N webhook failed',
-            save_error: saveError.message
-          }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-
-        console.log(`✅ [${requestId}] Message saved via fallback: ${savedMessage.id}`);
-        
-        // Update conversation timestamp
         await supabase
-          .from('conversations')
+          .from('messages')
           .update({ 
-            last_activity_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            status: 'failed',
+            metadata: {
+              source: 'test-send-msg-n8n-failed',
+              request_id: requestId,
+              n8n_failed: true,
+              step: 'after_n8n_failed',
+              original_payload: n8nPayload
+            }
           })
-          .eq('id', conversation_id);
+          .eq('external_id', external_id);
+
+        console.log(`✅ [${requestId}] Message status updated to 'failed'`);
+      } catch (updateError) {
+        console.error(`❌ [${requestId}] Failed to update message status after N8N failure:`, updateError);
+      }
+      
+      return new Response(JSON.stringify({
+        error: 'N8N webhook failed',
+        external_id: external_id,
+        message_saved: true,
+        status: 'failed'
+      }), {
+        status: 424,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
       } catch (fallbackError) {
         console.error(`❌ [${requestId}] Fallback save failed:`, fallbackError);
