@@ -81,14 +81,42 @@ serve(async (req) => {
 
     console.log('🔍 Buscando mensagem existente por external_id:', messageId);
     
-    const { data: existingMessage, error: searchError } = await supabase
-      .from('messages')
-      .select('id, external_id, workspace_id, content')
-      .eq('external_id', messageId)
-      .maybeSingle(); // Use maybeSingle para não dar erro se não encontrar
+    // Implementar retry para aguardar a mensagem aparecer no banco (condição de corrida)
+    let existingMessage = null;
+    let searchError = null;
+    let attempts = 0;
+    const maxAttempts = 5;
+    const retryDelay = 500; // 500ms entre tentativas
+    
+    while (attempts < maxAttempts && !existingMessage) {
+      attempts++;
+      console.log(`⏳ Tentativa ${attempts}/${maxAttempts} - Buscando mensagem...`);
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, external_id, workspace_id, content')
+        .eq('external_id', messageId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Erro ao buscar mensagem:', error);
+        searchError = error;
+        break;
+      }
+
+      if (data) {
+        existingMessage = data;
+        console.log(`✅ Mensagem encontrada na tentativa ${attempts}:`, existingMessage.id);
+        break;
+      }
+
+      if (attempts < maxAttempts) {
+        console.log(`⏳ Mensagem não encontrada, aguardando ${retryDelay}ms antes da próxima tentativa...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
 
     if (searchError) {
-      console.error('❌ Erro ao buscar mensagem:', searchError);
       return new Response(JSON.stringify({
         success: false,
         error: 'Erro ao buscar mensagem existente'
@@ -99,11 +127,12 @@ serve(async (req) => {
     }
 
     if (!existingMessage) {
-      console.log('⚠️ Mensagem não encontrada para external_id:', messageId);
+      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas para external_id:`, messageId);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Mensagem não encontrada - n8n-media-processor só atualiza mensagens existentes',
-        external_id: messageId
+        error: `Mensagem não encontrada após ${maxAttempts} tentativas - possível problema de timing`,
+        external_id: messageId,
+        attempts: attempts
       }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
