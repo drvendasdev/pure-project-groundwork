@@ -148,7 +148,7 @@ serve(async (req) => {
       const { data: existingContact } = await supabase
         .from('contacts')
         .select('id')
-        .eq('phone_number', phoneNumber)
+        .eq('phone', phoneNumber)
         .eq('workspace_id', workspaceId)
         .maybeSingle();
 
@@ -158,7 +158,7 @@ serve(async (req) => {
         const { data: newContact, error: contactError } = await supabase
           .from('contacts')
           .insert({
-            phone_number: phoneNumber,
+            phone: phoneNumber,
             workspace_id: workspaceId,
             name: contact_name || phoneNumber
           })
