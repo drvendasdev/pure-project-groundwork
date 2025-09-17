@@ -221,8 +221,8 @@ serve(async (req) => {
           conversation_id: conversation.id,
           workspace_id: workspaceId,
           content: fileName || 'Documento PDF',
-          direction: 'incoming',
           message_type: mimeType === 'application/pdf' ? 'document' : 'media',
+          sender_type: 'contact',
           created_at: new Date().toISOString()
         })
         .select('id, external_id, workspace_id, content')
