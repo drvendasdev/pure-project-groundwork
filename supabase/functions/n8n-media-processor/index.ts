@@ -83,7 +83,7 @@ serve(async (req) => {
     
     const { data: existingMessage, error: searchError } = await supabase
       .from('messages')
-      .select('id, external_id, workspace_id')
+      .select('id, external_id, workspace_id, content')
       .eq('external_id', messageId)
       .maybeSingle(); // Use maybeSingle para não dar erro se não encontrar
 
@@ -110,7 +110,44 @@ serve(async (req) => {
       });
     }
 
-    // Preparar bytes a partir de base64 ou URL
+    // Verificar se é mensagem de texto (sem mídia)
+    if (!base64 && !mediaUrl) {
+      console.log('📝 Processando mensagem de texto - external_id:', messageId);
+      
+      // Para mensagens de texto, apenas confirmar que foi processada pelo N8N
+      const { error: updateError } = await supabase
+        .from('messages')
+        .update({
+          metadata: {
+            processed_by_n8n: true,
+            processed_at: new Date().toISOString()
+          }
+        })
+        .eq('external_id', messageId);
+
+      if (updateError) {
+        console.error('❌ Erro ao atualizar mensagem de texto:', updateError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Falha ao processar mensagem de texto'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log('✅ Mensagem de texto processada:', existingMessage.id);
+      return new Response(JSON.stringify({
+        success: true,
+        messageId: existingMessage.id,
+        action: 'text_message_processed',
+        content: existingMessage.content
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Preparar bytes a partir de base64 ou URL para mensagens de mídia
     let uint8Array: Uint8Array;
     
     if (base64) {
