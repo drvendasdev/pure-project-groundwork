@@ -222,6 +222,23 @@ serve(async (req) => {
       // Documentos
       if (header.startsWith('25504446')) return 'application/pdf';
       
+      // Verificar se é texto (UTF-8/ASCII) pela ausência de bytes de controle
+      const isTextContent = buffer.slice(0, 100).every(byte => 
+        (byte >= 32 && byte <= 126) || // ASCII printable
+        byte === 9 || byte === 10 || byte === 13 || // Tab, LF, CR
+        (byte >= 128 && byte <= 255) // UTF-8 extended
+      );
+      
+      if (isTextContent) {
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer.slice(0, 100));
+        // Detectar XML por estrutura
+        if (text.includes('<?xml') || text.includes('<') && text.includes('>')) {
+          return 'application/xml';
+        }
+        // Texto puro
+        return 'text/plain';
+      }
+      
       return null;
     }
 
@@ -232,7 +249,7 @@ serve(async (req) => {
         'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
         'mp4': 'video/mp4', 'mov': 'video/quicktime', 'avi': 'video/x-msvideo', 'webm': 'video/webm', '3gp': 'video/3gpp',
         'mp3': 'audio/mpeg', 'ogg': 'audio/ogg', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'aac': 'audio/aac',
-        'pdf': 'application/pdf', 'doc': 'application/msword', 'txt': 'text/plain'
+        'pdf': 'application/pdf', 'doc': 'application/msword', 'txt': 'text/plain', 'xml': 'application/xml'
       };
       return mimeMap[ext] || 'application/octet-stream';
     }
@@ -255,6 +272,8 @@ serve(async (req) => {
     else if (finalMimeType === 'audio/webm') fileExtension = 'webm';
     else if (finalMimeType === 'audio/ogg') fileExtension = 'webm'; // Fallback para OGG
     else if (finalMimeType === 'application/pdf') fileExtension = 'pdf';
+    else if (finalMimeType === 'text/plain') fileExtension = 'txt';
+    else if (finalMimeType === 'application/xml') fileExtension = 'xml';
     else if (fileName) {
       fileExtension = fileName.split('.').pop()?.toLowerCase() || 'unknown';
     }
