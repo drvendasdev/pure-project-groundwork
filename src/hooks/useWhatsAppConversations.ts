@@ -41,6 +41,12 @@ export interface WhatsAppConversation {
     name: string;
     color: string;
   }>;
+  last_message?: Array<{
+    content: string;
+    message_type: string;
+    sender_type: string;
+    created_at: string;
+  }>;
   messages: WhatsAppMessage[];
 }
 

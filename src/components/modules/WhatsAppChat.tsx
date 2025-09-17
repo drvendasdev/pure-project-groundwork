@@ -792,7 +792,7 @@ const stopRecording = () => {
                     {/* Main content */}
                     <div className="flex-1 min-w-0">
                       {/* First line: Name with eye icon */}
-                      <div className="flex items-center mb-0.5">
+                       <div className="flex items-center mb-0.5">
                         <span 
                           className="text-xs font-normal text-foreground tracking-tight truncate"
                           style={{ fontWeight: 400, letterSpacing: '-0.2px', fontSize: '12px' }}
@@ -814,16 +814,30 @@ const stopRecording = () => {
         </svg>
                       </div>
                       
-                       {/* ✅ Status da conversa (sem preview de mensagem) */}
+                        {/* ✅ Última mensagem da conversa */}
                       <div className="flex items-center">
                         <span 
                           className="text-foreground/87 truncate"
                           style={{ fontSize: '11px', fontWeight: 400, letterSpacing: '0px' }}
                         >
-                          {conversation.unread_count > 0 
-                            ? `${conversation.unread_count} mensagem${conversation.unread_count > 1 ? 's' : ''} não lida${conversation.unread_count > 1 ? 's' : ''}`
-                            : 'Clique para ver mensagens'
-                          }
+                          {conversation.last_message?.[0] ? (
+                            <>
+                              {conversation.last_message[0].sender_type === 'contact' ? '' : 'Você: '}
+                              {conversation.last_message[0].message_type === 'text' 
+                                ? conversation.last_message[0].content 
+                                : `${conversation.last_message[0].message_type === 'image' ? '📷' : 
+                                    conversation.last_message[0].message_type === 'video' ? '🎥' : 
+                                    conversation.last_message[0].message_type === 'audio' ? '🎵' : '📄'} ${
+                                    conversation.last_message[0].message_type.charAt(0).toUpperCase() + 
+                                    conversation.last_message[0].message_type.slice(1)
+                                  }`
+                              }
+                            </>
+                          ) : (
+                            conversation.unread_count > 0 
+                              ? `${conversation.unread_count} mensagem${conversation.unread_count > 1 ? 's' : ''} não lida${conversation.unread_count > 1 ? 's' : ''}`
+                              : 'Clique para ver mensagens'
+                          )}
                         </span>
                       </div>
                     </div>

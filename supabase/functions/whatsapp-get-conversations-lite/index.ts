@@ -48,11 +48,18 @@ serve(async (req) => {
           name,
           phone,
           profile_image_url
+        ),
+        last_message:messages!conversation_id(
+          content,
+          message_type,
+          sender_type,
+          created_at
         )
       `)
       .eq('workspace_id', workspaceId)
       .order('last_activity_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false })
+      .order('last_message.created_at', { ascending: false })
       .limit(limit);
 
     // Apply cursor pagination if provided
