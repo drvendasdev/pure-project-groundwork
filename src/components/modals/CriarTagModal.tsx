@@ -90,6 +90,7 @@ export function CriarTagModal({ isOpen, onClose, onTagCreated }: CriarTagModalPr
 
   return (
     <>
+      {console.log('CriarTagModal render - isOpen:', isOpen)}
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-md bg-white border-gray-200">
           <DialogHeader>
