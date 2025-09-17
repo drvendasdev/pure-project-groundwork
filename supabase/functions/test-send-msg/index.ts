@@ -276,6 +276,7 @@ serve(async (req) => {
         // Formato específico para N8N com base64 (incluindo phone_number)
         n8nPayload = {
           messageId: external_id,
+          external_id: external_id, // Incluir external_id explicitamente
           base64: imageBase64,
           fileName: fileName,
           mimeType: mimeType,
