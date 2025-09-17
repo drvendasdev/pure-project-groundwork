@@ -15,8 +15,6 @@ export function CRMTags() {
   
   const { tags, isLoading, error, refetch } = useTags();
 
-  console.log('CRMTags render - isCreateModalOpen:', isCreateModalOpen);
-
   return (
     <div className="p-6">
       <div className="bg-white rounded-lg border shadow-sm">
@@ -59,10 +57,7 @@ export function CRMTags() {
             <Button 
               variant="yellow" 
               className="whitespace-nowrap"
-              onClick={() => {
-                console.log('Botão +Criar clicado!');
-                setIsCreateModalOpen(true);
-              }}
+              onClick={() => setIsCreateModalOpen(true)}
             >
               + Criar
             </Button>

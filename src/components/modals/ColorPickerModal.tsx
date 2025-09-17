@@ -151,7 +151,8 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
               ref={canvasRef}
               width={300}
               height={200}
-              className="w-full h-48 border border-gray-300 rounded cursor-crosshair"
+              style={{ width: '100%', height: '200px' }}
+              className="border border-gray-300 rounded cursor-crosshair"
               onClick={handleCanvasClick}
             />
           </div>
@@ -162,7 +163,8 @@ export function ColorPickerModal({ open, onOpenChange, onColorSelect, isDarkMode
               ref={hueCanvasRef}
               width={300}
               height={20}
-              className="w-full h-5 border border-gray-300 rounded cursor-crosshair"
+              style={{ width: '100%', height: '20px' }}
+              className="border border-gray-300 rounded cursor-crosshair"
               onClick={handleHueClick}
             />
           </div>
