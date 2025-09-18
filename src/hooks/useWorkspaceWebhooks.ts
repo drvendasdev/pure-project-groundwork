@@ -290,40 +290,38 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     const startTime = performance.now();
     
     try {
-      const testPayload = {
-        type: 'test',
-        timestamp: new Date().toISOString(),
-        workspace_id: workspaceId
-      };
-
-      const response = await fetch(webhookConfig.webhook_url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Secret': webhookConfig.webhook_secret
-        },
-        body: JSON.stringify(testPayload)
+      // Use edge function to test webhook (avoid CORS issues)
+      const { data: testResult, error } = await supabase.functions.invoke('test-webhook-reception', {
+        body: { 
+          webhook_url: webhookConfig.webhook_url,
+          webhook_secret: webhookConfig.webhook_secret,
+          workspace_id: workspaceId
+        }
       });
 
       const endTime = performance.now();
       const latency = Math.round(endTime - startTime);
-      const responseText = await response.text().catch(() => '');
 
-      // Log the test result
-      await supabase.from('webhook_logs').insert({
-        workspace_id: workspaceId,
-        event_type: 'test',
-        status: response.ok ? 'success' : 'error',
-        payload_json: testPayload,
-        response_status: response.status,
-        response_body: responseText
-      });
+      if (error) {
+        console.error('Error testing webhook:', error);
+        toast({
+          title: "Erro no teste",
+          description: error.message || "Falha ao testar webhook",
+          variant: "destructive",
+        });
+        return {
+          success: false,
+          status: 500,
+          latency,
+          error: error.message
+        };
+      }
 
       const result: TestWebhookResponse = {
-        success: response.ok,
-        status: response.status,
+        success: testResult.success,
+        status: testResult.status,
         latency,
-        error: response.ok ? undefined : `HTTP ${response.status}: ${responseText}`
+        error: testResult.success ? undefined : testResult.error
       };
       
       if (result.success) {
