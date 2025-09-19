@@ -37,6 +37,16 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Set user context for RLS policies
+    if (systemUserId) {
+      const userEmail = req.headers.get('x-system-user-email') || '';
+      await supabase.rpc('set_current_user_context', {
+        user_id: systemUserId,
+        user_email: userEmail
+      });
+      console.log('🔐 User context set for RLS - User ID:', systemUserId);
+    }
+
     if (conversationId) {
       // Buscar conversa específica com dados do contato
       console.log(`📋 Buscando conversa completa: ${conversationId}`);

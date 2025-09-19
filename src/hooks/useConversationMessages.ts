@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceHeaders } from '@/lib/workspaceHeaders';
 
 interface WhatsAppMessage {
   id: string;
@@ -41,6 +42,7 @@ export function useConversationMessages(): UseConversationMessagesReturn {
   
   const { selectedWorkspace } = useWorkspace();
   const { toast } = useToast();
+  const { getHeaders } = useWorkspaceHeaders();
   
   // Cache em memória para evitar re-fetch desnecessário
   const cacheRef = useRef<Map<string, { messages: WhatsAppMessage[]; timestamp: number }>>(new Map());
@@ -78,15 +80,14 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     setCurrentConversationId(conversationId);
 
     try {
-      const params = new URLSearchParams({
-        workspace_id: selectedWorkspace.workspace_id,
-        conversation_id: conversationId,
-        limit: '5'
-      });
-
-      const { data, error } = await supabase.functions.invoke(
-        `whatsapp-get-messages?${params}`, {
-        method: 'GET'
+      const headers = getHeaders();
+      
+      const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          limit: 5
+        }),
+        headers
       });
 
       if (error) {
@@ -130,16 +131,15 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     setLoadingMore(true);
 
     try {
-      const params = new URLSearchParams({
-        workspace_id: selectedWorkspace.workspace_id,
-        conversation_id: currentConversationId,
-        limit: '5',
-        before: cursorBefore
-      });
-
-      const { data, error } = await supabase.functions.invoke(
-        `whatsapp-get-messages?${params}`, {
-        method: 'GET'
+      const headers = getHeaders();
+      
+      const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
+        body: JSON.stringify({
+          conversation_id: currentConversationId,
+          limit: 5,
+          before: cursorBefore
+        }),
+        headers
       });
 
       if (error) {
