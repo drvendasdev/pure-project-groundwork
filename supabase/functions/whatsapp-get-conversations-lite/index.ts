@@ -67,6 +67,20 @@ serve(async (req) => {
       console.error('Error setting user context:', contextError);
     }
 
+    // Verificar o perfil do usuário para determinar filtros
+    const supabaseService = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const { data: userData } = await supabaseService
+      .from('system_users')
+      .select('profile')
+      .eq('id', systemUserId)
+      .single();
+
+    console.log('📋 User profile:', userData?.profile);
+
     let query = supabase
       .from('conversations')
       .select(`
@@ -84,7 +98,19 @@ serve(async (req) => {
           profile_image_url
         )
       `)
-      .eq('workspace_id', workspaceId)
+      .eq('workspace_id', workspaceId);
+
+    // Aplicar filtro baseado no perfil do usuário
+    const userProfile = userData?.profile;
+    if (userProfile !== 'master' && userProfile !== 'admin') {
+      // Usuários normais veem apenas conversas atribuídas a eles ou sem atribuição
+      query = query.or(`assigned_user_id.eq.${systemUserId},assigned_user_id.is.null`);
+      console.log('🔒 Filtering conversations for regular user');
+    } else {
+      console.log('👑 Admin/Master user - showing all conversations');
+    }
+
+    query = query
       .order('last_activity_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false })
       .limit(limit);
