@@ -82,11 +82,14 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     try {
       const headers = getHeaders();
       
-      const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
-        body: JSON.stringify({
-          conversation_id: conversationId,
-          limit: 5
-        }),
+      const params = new URLSearchParams({
+        conversation_id: conversationId,
+        limit: '5'
+      });
+
+      const { data, error } = await supabase.functions.invoke(
+        `whatsapp-get-messages?${params}`, {
+        method: 'GET',
         headers
       });
 
@@ -133,12 +136,15 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     try {
       const headers = getHeaders();
       
-      const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
-        body: JSON.stringify({
-          conversation_id: currentConversationId,
-          limit: 5,
-          before: cursorBefore
-        }),
+      const params = new URLSearchParams({
+        conversation_id: currentConversationId,
+        limit: '5',
+        before: cursorBefore
+      });
+
+      const { data, error } = await supabase.functions.invoke(
+        `whatsapp-get-messages?${params}`, {
+        method: 'GET',
         headers
       });
 
