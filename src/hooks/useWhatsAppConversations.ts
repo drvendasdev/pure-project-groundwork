@@ -123,6 +123,7 @@ export const useWhatsAppConversations = () => {
         created_at: conv.created_at || conv.last_activity_at,
         assigned_user_id: conv.assigned_user_id,
         priority: conv.priority,
+        last_message: conv.last_message, // ✅ Adicionado para exibir última mensagem
         messages: [] // ✅ VAZIO - mensagens carregadas sob demanda
       }));
       
