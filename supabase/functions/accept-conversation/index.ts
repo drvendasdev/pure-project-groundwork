@@ -95,7 +95,7 @@ serve(async (req) => {
       .update({
         assigned_user_id: systemUserId,
         assigned_at: new Date().toISOString(),
-        status: 'em_atendimento'
+        status: 'open'
       })
       .eq('id', conversation_id)
       .eq('workspace_id', workspaceId) // Garantir que é do workspace correto
