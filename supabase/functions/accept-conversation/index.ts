@@ -46,6 +46,16 @@ serve(async (req) => {
       });
     }
 
+    if (!workspaceId) {
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'Workspace ID required'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const { conversation_id } = await req.json();
     
     if (!conversation_id) {
@@ -58,7 +68,26 @@ serve(async (req) => {
       });
     }
 
-    console.log(`👤 User ${systemUserId} trying to accept conversation ${conversation_id}`);
+    console.log(`👤 User ${systemUserId} trying to accept conversation ${conversation_id} in workspace ${workspaceId}`);
+
+    // Verificar se o usuário tem permissão para aceitar conversas neste workspace
+    const { data: workspaceMember, error: memberError } = await supabase
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', systemUserId)
+      .single();
+
+    if (memberError || !workspaceMember) {
+      console.error('❌ User not a member of workspace:', memberError);
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'Usuário não tem permissão neste workspace'
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     // Update atômico com condição para evitar corrida
     const { data: updateResult, error: updateError } = await supabase
@@ -69,6 +98,7 @@ serve(async (req) => {
         status: 'em_atendimento'
       })
       .eq('id', conversation_id)
+      .eq('workspace_id', workspaceId) // Garantir que é do workspace correto
       .is('assigned_user_id', null) // Condição crítica para evitar corrida - usar .is() para NULL
       .select('id, assigned_user_id, status');
 
