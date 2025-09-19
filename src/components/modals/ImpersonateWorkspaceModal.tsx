@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,17 @@ export function ImpersonateWorkspaceModal({ open, onOpenChange }: ImpersonateWor
   const { selectedWorkspace, setSelectedWorkspace } = useWorkspace();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(selectedWorkspace?.workspace_id || '');
 
+  // Atualizar selectedWorkspaceId quando o modal abrir ou o workspace atual mudar
+  useEffect(() => {
+    if (open && selectedWorkspace?.workspace_id) {
+      setSelectedWorkspaceId(selectedWorkspace.workspace_id);
+    }
+  }, [open, selectedWorkspace?.workspace_id]);
+
   const handleConfirm = () => {
     const workspace = workspaces.find(w => w.workspace_id === selectedWorkspaceId);
     if (workspace) {
+      console.log('🏢 Personificando empresa:', workspace.name, 'ID:', workspace.workspace_id);
       setSelectedWorkspace(workspace);
     }
     onOpenChange(false);

@@ -221,7 +221,22 @@ export function useConversationMessages(): UseConversationMessagesReturn {
       const cacheKey = `${selectedWorkspace.workspace_id}:${currentConversationId}`;
       cacheRef.current.delete(cacheKey);
     }
-  }, [selectedWorkspace?.workspace_id, currentConversationId]);
+   }, [selectedWorkspace?.workspace_id, currentConversationId]);
+
+  // Effect para limpar cache e recarregar mensagens quando workspace muda
+  useEffect(() => {
+    if (currentConversationId) {
+      console.log('🔄 Workspace mudou para:', selectedWorkspace?.workspace_id, 'recarregando conversa:', currentConversationId);
+      // Limpar todo o cache
+      cacheRef.current.clear();
+      // Limpar mensagens atuais
+      setMessages([]);
+      setHasMore(true);
+      setCursorBefore(null);
+      // Recarregar mensagens da conversa atual
+      loadInitial(currentConversationId);
+    }
+  }, [selectedWorkspace?.workspace_id, currentConversationId, loadInitial]);
 
   // Limpar cache antigo a cada 30 segundos
   useEffect(() => {

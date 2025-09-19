@@ -482,7 +482,7 @@ export const useWhatsAppConversations = () => {
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (currentUserData?.id) {
-      console.log('🧹 Limpando subscriptions real-time');
+      console.log('🏢 Workspace mudou para:', selectedWorkspace?.workspace_id, '- Recarregando conversas');
       fetchConversations();
     }
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
