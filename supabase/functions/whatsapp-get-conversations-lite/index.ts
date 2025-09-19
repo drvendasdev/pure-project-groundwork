@@ -58,10 +58,14 @@ serve(async (req) => {
     });
 
     // Definir contexto do usuário para as funções RLS
-    await supabase.rpc('set_current_user_context', {
+    const { error: contextError } = await supabase.rpc('set_current_user_context', {
       user_id: systemUserId,
       user_email: systemUserEmail
     });
+
+    if (contextError) {
+      console.error('Error setting user context:', contextError);
+    }
 
     let query = supabase
       .from('conversations')
