@@ -113,6 +113,7 @@ serve(async (req) => {
       // Usuários normais veem apenas conversas atribuídas a eles ou sem atribuição
       query = query.or(`assigned_user_id.eq.${systemUserId},assigned_user_id.is.null`);
       console.log('🔒 Filtering conversations for regular user:', systemUserId);
+      console.log('🔍 Applied filter: assigned_user_id = ', systemUserId, ' OR assigned_user_id IS NULL');
     } else {
       console.log('👑 Admin/Master user - showing all conversations');
     }
@@ -124,10 +125,11 @@ serve(async (req) => {
       .order('id', { ascending: false })
       .limit(limit);
 
-    // Apply cursor pagination if provided
+    // Apply cursor pagination if provided (sem sobrescrever filtros anteriores)
     if (cursor) {
       const [cursorDate, cursorId] = cursor.split('|');
-      query = query.or(`last_activity_at.lt.${cursorDate},and(last_activity_at.eq.${cursorDate},id.lt.${cursorId})`);
+      // Aplica filtro de paginação sem interferir no filtro de usuário
+      query = query.filter('last_activity_at', 'lt', cursorDate);
     }
 
     const { data: conversations, error } = await query;
