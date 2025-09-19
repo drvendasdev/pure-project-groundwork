@@ -48,9 +48,6 @@ serve(async (req) => {
           name,
           phone,
           profile_image_url
-        ),
-        system_users(
-          name
         )
       `)
       .eq('workspace_id', workspaceId)
@@ -77,7 +74,7 @@ serve(async (req) => {
       );
     }
 
-    // Buscar última mensagem para cada conversa
+    // Buscar última mensagem e nome do usuário responsável para cada conversa
     const conversationsWithMessages = await Promise.all(
       (conversations || []).map(async (conv) => {
         const { data: lastMessage } = await supabase
@@ -87,10 +84,22 @@ serve(async (req) => {
           .order('created_at', { ascending: false })
           .limit(1);
 
+        // Buscar nome do usuário responsável se existe assigned_user_id
+        let assignedUserName = null;
+        if (conv.assigned_user_id) {
+          const { data: assignedUser } = await supabase
+            .from('system_users')
+            .select('name')
+            .eq('id', conv.assigned_user_id)
+            .single();
+          
+          assignedUserName = assignedUser?.name || null;
+        }
+
         return {
           ...conv,
           last_message: lastMessage || [],
-          assigned_user_name: conv.system_users?.name || null
+          assigned_user_name: assignedUserName
         };
       })
     );
