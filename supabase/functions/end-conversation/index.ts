@@ -59,7 +59,7 @@ serve(async (req) => {
       .from('workspace_members')
       .select('role')
       .eq('workspace_id', workspaceId)
-      .eq('system_user_id', systemUserId)
+      .eq('user_id', systemUserId)
       .single()
 
     if (membershipError || !membership) {
