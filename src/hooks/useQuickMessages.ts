@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/components/ui/use-toast';
 
 interface QuickMessage {
@@ -16,9 +17,10 @@ export const useQuickMessages = () => {
   const [messages, setMessages] = useState<QuickMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedWorkspace } = useWorkspace();
+  const { user } = useAuth();
 
   const fetchMessages = async () => {
-    if (!selectedWorkspace?.workspace_id) {
+    if (!selectedWorkspace?.workspace_id || !user) {
       setMessages([]);
       setLoading(false);
       return;
@@ -47,7 +49,14 @@ export const useQuickMessages = () => {
   };
 
   const createMessage = async (title: string, content: string) => {
-    if (!selectedWorkspace?.workspace_id) return;
+    if (!selectedWorkspace?.workspace_id || !user) {
+      toast({
+        title: 'Erro',
+        description: 'Usuário não autenticado',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -131,7 +140,7 @@ export const useQuickMessages = () => {
 
   useEffect(() => {
     fetchMessages();
-  }, [selectedWorkspace?.workspace_id]);
+  }, [selectedWorkspace?.workspace_id, user]);
 
   return {
     messages,

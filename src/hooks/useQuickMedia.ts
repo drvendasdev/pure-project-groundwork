@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/components/ui/use-toast';
 
 interface QuickMedia {
@@ -18,9 +19,10 @@ export const useQuickMedia = () => {
   const [media, setMedia] = useState<QuickMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedWorkspace } = useWorkspace();
+  const { user } = useAuth();
 
   const fetchMedia = async () => {
-    if (!selectedWorkspace?.workspace_id) {
+    if (!selectedWorkspace?.workspace_id || !user) {
       setMedia([]);
       setLoading(false);
       return;
@@ -49,7 +51,14 @@ export const useQuickMedia = () => {
   };
 
   const createMedia = async (title: string, file: File) => {
-    if (!selectedWorkspace?.workspace_id) return;
+    if (!selectedWorkspace?.workspace_id || !user) {
+      toast({
+        title: 'Erro',
+        description: 'Usuário não autenticado',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     try {
       // Upload do arquivo
@@ -175,7 +184,7 @@ export const useQuickMedia = () => {
 
   useEffect(() => {
     fetchMedia();
-  }, [selectedWorkspace?.workspace_id]);
+  }, [selectedWorkspace?.workspace_id, user]);
 
   return {
     media,

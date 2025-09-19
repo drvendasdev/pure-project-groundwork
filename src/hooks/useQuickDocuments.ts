@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/components/ui/use-toast';
 
 interface QuickDocument {
@@ -19,9 +20,10 @@ export const useQuickDocuments = () => {
   const [documents, setDocuments] = useState<QuickDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedWorkspace } = useWorkspace();
+  const { user } = useAuth();
 
   const fetchDocuments = async () => {
-    if (!selectedWorkspace?.workspace_id) {
+    if (!selectedWorkspace?.workspace_id || !user) {
       setDocuments([]);
       setLoading(false);
       return;
@@ -50,7 +52,14 @@ export const useQuickDocuments = () => {
   };
 
   const createDocument = async (title: string, file: File) => {
-    if (!selectedWorkspace?.workspace_id) return;
+    if (!selectedWorkspace?.workspace_id || !user) {
+      toast({
+        title: 'Erro',
+        description: 'Usuário não autenticado',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     try {
       // Upload do arquivo
@@ -178,7 +187,7 @@ export const useQuickDocuments = () => {
 
   useEffect(() => {
     fetchDocuments();
-  }, [selectedWorkspace?.workspace_id]);
+  }, [selectedWorkspace?.workspace_id, user]);
 
   return {
     documents,
