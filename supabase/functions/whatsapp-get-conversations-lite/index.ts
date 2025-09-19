@@ -119,6 +119,8 @@ serve(async (req) => {
     }
 
     console.log('📊 Query filters applied, fetching conversations...');
+    console.log('🎯 WORKSPACE FILTER: conversations.workspace_id =', workspaceId);
+    console.log('👤 USER FILTER:', userProfile !== 'master' && userProfile !== 'admin' ? `assigned_user_id = ${systemUserId} OR assigned_user_id IS NULL` : 'NONE (master/admin)');
 
     query = query
       .order('last_activity_at', { ascending: false, nullsFirst: false })
@@ -133,6 +135,15 @@ serve(async (req) => {
     }
 
     const { data: conversations, error } = await query;
+    
+    console.log(`✅ Query executed - Found ${conversations?.length || 0} conversations for workspace ${workspaceId}`);
+    if (conversations && conversations.length > 0) {
+      console.log('📋 First conversation sample:', {
+        id: conversations[0].id,
+        contact_name: conversations[0].contacts?.name,
+        last_activity: conversations[0].last_activity_at
+      });
+    }
 
     if (error) {
       console.error('Error fetching conversations:', error);
@@ -148,13 +159,8 @@ serve(async (req) => {
     // Buscar última mensagem e nome do usuário responsável para cada conversa
     const conversationsWithMessages = await Promise.all(
       (conversations || []).map(async (conv) => {
-        // Usar service role apenas para buscar dados complementares que não são sensíveis
-        const supabaseService = createClient(
-          Deno.env.get('SUPABASE_URL')!,
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-        );
-
-        const { data: lastMessage } = await supabaseService
+        // ✅ CRÍTICO: Usar client com RLS em vez de service role para mensagens
+        const { data: lastMessage } = await supabase
           .from('messages')
           .select('content, message_type, sender_type, created_at')
           .eq('conversation_id', conv.id)
