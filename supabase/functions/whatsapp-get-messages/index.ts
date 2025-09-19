@@ -18,11 +18,14 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const url = new URL(req.url);
-    const workspaceId = url.searchParams.get('workspace_id');
-    const conversationId = url.searchParams.get('conversation_id');
-    const limit = parseInt(url.searchParams.get('limit') || '5');
-    const before = url.searchParams.get('before'); // Format: "created_at|id"
+    // Get workspace from headers
+    const workspaceId = req.headers.get('x-workspace-id');
+    
+    // Get request body
+    const body = await req.json();
+    const conversationId = body.conversation_id;
+    const limit = parseInt(body.limit || '5');
+    const before = body.before; // Format: "created_at|id"
 
     if (!workspaceId || !conversationId) {
       return new Response(
@@ -33,6 +36,13 @@ serve(async (req) => {
         }
       );
     }
+
+    console.log('📨 WhatsApp Get Messages Request:', {
+      workspaceId,
+      conversationId,
+      limit,
+      before
+    });
 
     let query = supabase
       .from('messages')
