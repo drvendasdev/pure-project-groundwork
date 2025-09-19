@@ -105,10 +105,12 @@ serve(async (req) => {
     if (userProfile !== 'master' && userProfile !== 'admin') {
       // Usuários normais veem apenas conversas atribuídas a eles ou sem atribuição
       query = query.or(`assigned_user_id.eq.${systemUserId},assigned_user_id.is.null`);
-      console.log('🔒 Filtering conversations for regular user');
+      console.log('🔒 Filtering conversations for regular user:', systemUserId);
     } else {
       console.log('👑 Admin/Master user - showing all conversations');
     }
+
+    console.log('📊 Query filters applied, fetching conversations...');
 
     query = query
       .order('last_activity_at', { ascending: false, nullsFirst: false })
