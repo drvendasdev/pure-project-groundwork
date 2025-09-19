@@ -158,8 +158,11 @@ export const useWhatsAppConversations = () => {
     }
   };
 
-  // Accept conversation function
+  // Accept conversation function - DEPRECATED: Use useConversationAccept hook instead
+  // This is kept for backward compatibility but should not be used
   const acceptConversation = useCallback(async (conversationId: string) => {
+    console.warn('⚠️ Using deprecated acceptConversation from useWhatsAppConversations. Use useConversationAccept hook instead.');
+    
     try {
       // Get current user from localStorage (custom auth system)
       const userData = localStorage.getItem('currentUser');
@@ -198,7 +201,11 @@ export const useWhatsAppConversations = () => {
       setConversations(prev => 
         prev.map(conv => 
           conv.id === conversationId 
-            ? { ...conv, assigned_user_id: currentUserData.id }
+            ? { 
+                ...conv, 
+                assigned_user_id: currentUserData.id,
+                assigned_user_name: currentUserData.name || null 
+              }
             : conv
         )
       );

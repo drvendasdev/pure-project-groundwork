@@ -1015,7 +1015,20 @@ const stopRecording = () => {
                   <AcceptConversationButton
                     conversation={selectedConversation}
                     onAccept={async (conversationId: string) => {
-                      // Refresh conversations after accepting
+                      // Get current user info for immediate UI update
+                      const userData = localStorage.getItem('currentUser');
+                      const currentUserData = userData ? JSON.parse(userData) : null;
+                      
+                      // Update selected conversation immediately for better UX
+                      if (selectedConversation && selectedConversation.id === conversationId) {
+                        setSelectedConversation(prev => prev ? {
+                          ...prev,
+                          assigned_user_id: currentUserData?.id || null,
+                          assigned_user_name: currentUserData?.name || null
+                        } : prev);
+                      }
+                      
+                      // Refresh conversations to sync with server and update the list
                       await fetchConversations();
                     }}
                     className="h-8 px-4 bg-yellow-400 hover:bg-yellow-500 text-black font-medium rounded-md"
