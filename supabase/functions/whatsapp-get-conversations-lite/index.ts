@@ -158,6 +158,7 @@ serve(async (req) => {
           .from('messages')
           .select('content, message_type, sender_type, created_at')
           .eq('conversation_id', conv.id)
+          .eq('workspace_id', workspaceId)
           .order('created_at', { ascending: false })
           .limit(1);
 
