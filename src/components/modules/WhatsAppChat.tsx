@@ -890,14 +890,28 @@ const stopRecording = () => {
                           </TooltipProvider>
                         )}
                         
-                        {/* Small avatar */}
-                        <Avatar className="w-4 h-4 rounded-full">
-                          <AvatarImage 
-                            src="https://i.pinimg.com/236x/a8/da/22/a8da222be70a71e7858bf752065d5cc3.jpg"
-                            alt={conversation.contact?.name || conversation.contact?.phone}
-                          />
-                          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                        </Avatar>
+                        {/* Small avatar with tooltip */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Avatar className="w-4 h-4 rounded-full">
+                                <AvatarImage 
+                                  src="https://i.pinimg.com/236x/a8/da/22/a8da222be70a71e7858bf752065d5cc3.jpg"
+                                  alt={conversation.contact?.name || conversation.contact?.phone}
+                                />
+                                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                              </Avatar>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {conversation.assigned_user_name 
+                                  ? `Responsável: ${conversation.assigned_user_name}`
+                                  : "Não atribuída"
+                                }
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                       
                       {/* Timestamp */}

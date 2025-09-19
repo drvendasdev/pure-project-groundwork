@@ -33,6 +33,7 @@ export interface WhatsAppConversation {
   created_at: string;
   evolution_instance?: string | null;
   assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
   assigned_at?: string | null;
   connection_id?: string;
   workspace_id?: string;
@@ -122,6 +123,7 @@ export const useWhatsAppConversations = () => {
         last_activity_at: conv.last_activity_at,
         created_at: conv.created_at || conv.last_activity_at,
         assigned_user_id: conv.assigned_user_id,
+        assigned_user_name: conv.assigned_user_name,
         priority: conv.priority,
         last_message: conv.last_message, // ✅ Adicionado para exibir última mensagem
         messages: [] // ✅ VAZIO - mensagens carregadas sob demanda

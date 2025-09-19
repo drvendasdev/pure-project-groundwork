@@ -48,6 +48,9 @@ serve(async (req) => {
           name,
           phone,
           profile_image_url
+        ),
+        system_users(
+          name
         )
       `)
       .eq('workspace_id', workspaceId)
@@ -86,7 +89,8 @@ serve(async (req) => {
 
         return {
           ...conv,
-          last_message: lastMessage || []
+          last_message: lastMessage || [],
+          assigned_user_name: conv.system_users?.name || null
         };
       })
     );
