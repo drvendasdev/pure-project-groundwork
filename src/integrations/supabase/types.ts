@@ -1254,31 +1254,49 @@ export type Database = {
       }
       workspace_configurations: {
         Row: {
+          background_solid_color: string | null
+          background_solid_enabled: boolean | null
           contrast_color: string | null
           created_at: string
           favicon_url: string | null
           id: string
           login_banner_url: string | null
+          logo_claro: string | null
+          logo_escuro: string | null
+          logo_secundario_claro: string | null
+          logo_secundario_escuro: string | null
           primary_color: string | null
           updated_at: string
           workspace_id: string
         }
         Insert: {
+          background_solid_color?: string | null
+          background_solid_enabled?: boolean | null
           contrast_color?: string | null
           created_at?: string
           favicon_url?: string | null
           id?: string
           login_banner_url?: string | null
+          logo_claro?: string | null
+          logo_escuro?: string | null
+          logo_secundario_claro?: string | null
+          logo_secundario_escuro?: string | null
           primary_color?: string | null
           updated_at?: string
           workspace_id: string
         }
         Update: {
+          background_solid_color?: string | null
+          background_solid_enabled?: boolean | null
           contrast_color?: string | null
           created_at?: string
           favicon_url?: string | null
           id?: string
           login_banner_url?: string | null
+          logo_claro?: string | null
+          logo_escuro?: string | null
+          logo_secundario_claro?: string | null
+          logo_secundario_escuro?: string | null
           primary_color?: string | null
           updated_at?: string
           workspace_id?: string
