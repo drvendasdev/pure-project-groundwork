@@ -80,6 +80,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // 🔒 CRÍTICO: Verificar se o usuário tem permissão para acessar este workspace
+    const { data: userWorkspaceAccess } = await supabaseService
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', systemUserId)
+      .single();
+
     const { data: userData } = await supabaseService
       .from('system_users')
       .select('profile')
@@ -87,6 +95,22 @@ serve(async (req) => {
       .single();
 
     console.log('📋 User profile:', userData?.profile);
+    console.log('🔒 User workspace access:', userWorkspaceAccess);
+
+    // Verificar permissões de acesso ao workspace
+    const userProfile = userData?.profile;
+    const hasWorkspaceAccess = userProfile === 'master' || userWorkspaceAccess;
+
+    if (!hasWorkspaceAccess) {
+      console.error('❌ SECURITY: User', systemUserId, 'attempted to access workspace', workspaceId, 'without permission');
+      return new Response(
+        JSON.stringify({ error: 'Acesso negado a este workspace' }),
+        { 
+          status: 403, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
 
     let query = supabase
       .from('conversations')
@@ -108,7 +132,6 @@ serve(async (req) => {
       .eq('workspace_id', workspaceId);
 
     // Aplicar filtro baseado no perfil do usuário
-    const userProfile = userData?.profile;
     if (userProfile !== 'master' && userProfile !== 'admin') {
       // Usuários normais veem apenas conversas atribuídas a eles ou sem atribuição
       query = query.or(`assigned_user_id.eq.${systemUserId},assigned_user_id.is.null`);

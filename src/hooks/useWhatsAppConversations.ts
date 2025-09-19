@@ -66,6 +66,9 @@ export const useWhatsAppConversations = () => {
       const userData = localStorage.getItem('currentUser');
       const currentUserData = userData ? JSON.parse(userData) : null;
       
+      console.log('👤 Usuário autenticado:', currentUserData?.email, 'ID:', currentUserData?.id);
+      console.log('🏢 Workspace selecionado:', selectedWorkspace?.name, 'ID:', selectedWorkspace?.workspace_id);
+      
       if (!currentUserData?.id) {
         console.log('No user data in localStorage');
         toast({
