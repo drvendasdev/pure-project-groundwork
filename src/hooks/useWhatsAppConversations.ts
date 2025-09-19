@@ -96,13 +96,8 @@ export const useWhatsAppConversations = () => {
       }
 
       // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens)
-      const params = new URLSearchParams({
-        limit: '50'
-      });
-      
       const { data: response, error: functionError } = await supabase.functions.invoke(
-        `whatsapp-get-conversations-lite?${params}`, {
-        method: 'GET',
+        'whatsapp-get-conversations-lite', {
         headers
       });
 
