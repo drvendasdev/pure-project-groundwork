@@ -6,10 +6,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageStatusIndicator } from "@/components/ui/message-status-indicator";
 import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
+import { useConversationMessages } from "@/hooks/useConversationMessages";
 import { useAuth } from "@/hooks/useAuth";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parsePhoneNumber } from 'libphonenumber-js';
@@ -35,12 +37,12 @@ import {
   Eye,
   RefreshCw,
   Mic,
-  Square,
-  X
+  Square
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface WhatsAppChatProps {
@@ -49,10 +51,10 @@ interface WhatsAppChatProps {
 }
 
 export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: WhatsAppChatProps) {
+  // ✅ Separação total: conversas vs mensagens
   const { 
     conversations, 
     loading, 
-    sendMessage, 
     markAsRead, 
     assumirAtendimento, 
     reativarIA, 
@@ -60,47 +62,25 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     acceptConversation,
     fetchConversations
   } = useWhatsAppConversations();
+  
+  // ✅ Hook específico para mensagens (lazy loading)
+  const {
+    messages,
+    loading: messagesLoading,
+    loadingMore,
+    hasMore,
+    loadInitial: loadMessages,
+    loadMore: loadMoreMessages,
+    addMessage,
+    updateMessage,
+    clearMessages
+  } = useConversationMessages();
+  const { selectedWorkspace } = useWorkspace();
   const { user } = useAuth();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
   const { assignments } = useInstanceAssignments();
   const { toast } = useToast();
-
-  // Função para remover tag de uma conversa
-  const handleRemoveTagFromConversation = async (conversationId: string, tagId: string, tagName: string) => {
-    try {
-      const { error } = await supabase
-        .from('conversation_tags')
-        .delete()
-        .eq('conversation_id', conversationId)
-        .eq('tag_id', tagId);
-
-      if (error) {
-        console.error('Erro ao remover tag:', error);
-        toast({
-          title: "Erro",
-          description: "Não foi possível remover a tag da conversa.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: "Sucesso",
-        description: `Tag "${tagName}" removida da conversa.`,
-      });
-
-      // Refetch conversations to update the UI
-      await fetchConversations();
-    } catch (error) {
-      console.error('Erro ao remover tag:', error);
-      toast({
-        title: "Erro",
-        description: "Erro interno ao remover tag.",
-        variant: "destructive",
-      });
-    }
-  };
   
   const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
   const [messageText, setMessageText] = useState("");
@@ -181,26 +161,70 @@ const [isRecording, setIsRecording] = useState(false);
     (conv.contact.phone && conv.contact.phone.includes(searchTerm))
   );
 
-  // Função para enviar mensagem
+  // ✅ Enviar mensagem usando o hook de mensagens
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation) return;
 
     try {
-      await sendMessage(
-        selectedConversation.id,
-        messageText,
-        selectedConversation.contact.phone || '',
-        'text'
-      );
+      // Criar mensagem local otimista
+      const optimisticMessage = {
+        id: `temp-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: messageText,
+        message_type: 'text' as const,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: messageText,
+          message_type: 'text',
+          sender_id: user?.id,
+          sender_type: 'agent'
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
+      }
+
+      // Atualizar mensagem temporária com ID real
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+      
       setMessageText("");
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      // Remover mensagem temporária em caso de erro
+      // TODO: implementar removeMessage no hook
     }
   };
 
-  // Selecionar conversa e marcar como lida
-  const handleSelectConversation = (conversation: WhatsAppConversation) => {
+  // ✅ Selecionar conversa e carregar mensagens lazy
+  const handleSelectConversation = async (conversation: WhatsAppConversation) => {
     setSelectedConversation(conversation);
+    
+    // ✅ CRÍTICO: Carregar mensagens APENAS quando conversa é selecionada
+    clearMessages(); // Limpar mensagens da conversa anterior
+    await loadMessages(conversation.id);
+    
     if (conversation.unread_count > 0) {
       markAsRead(conversation.id);
     }
@@ -212,9 +236,10 @@ const [isRecording, setIsRecording] = useState(false);
     return time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Obter última mensagem
+  // ✅ Última mensagem não existe mais no array (lazy loading)
   const getLastMessage = (conv: WhatsAppConversation) => {
-    return conv.messages[conv.messages.length - 1];
+    // Retorna null - sem preview de mensagem na lista
+    return null;
   };
 
   // Obter iniciais do nome
@@ -282,14 +307,22 @@ const startRecording = async () => {
           .getPublicUrl(filePath);
 
         if (selectedConversation) {
-          await sendMessage(
-            selectedConversation.id,
-            messageText.trim() || '[AUDIO]',
-            selectedConversation.contact.phone || '',
-            'audio',
-            publicUrl,
-            fileName
-          );
+          // ✅ Enviar áudio usando nova estrutura
+          const optimisticMessage = {
+            id: `temp-audio-${Date.now()}`,
+            conversation_id: selectedConversation.id,
+            content: messageText.trim() || '[AUDIO]',
+            message_type: 'audio' as const,
+            sender_type: 'agent' as const,
+            sender_id: user?.id,
+            file_url: publicUrl,
+            file_name: fileName,
+            created_at: new Date().toISOString(),
+            status: 'sending' as const,
+            workspace_id: selectedWorkspace?.workspace_id || ''
+          };
+          
+          addMessage(optimisticMessage);
           setMessageText('');
           toast({ title: 'Áudio enviado', description: 'Seu áudio foi enviado com sucesso.' });
         }
@@ -386,7 +419,37 @@ const stopRecording = () => {
         return;
       }
 
+      // PROTEÇÃO: Verificar se não é número de alguma conexão/instância
+      const formattedPhone = phoneNumber.format('E.164').replace('+', '');
+      const phoneDigits = formattedPhone.replace(/\D/g, '');
+      
+      // Verificar contra todas as conexões do workspace atual
+      const { data: connections } = await supabase
+        .from('connections')
+        .select('phone_number, instance_name')
+        .eq('workspace_id', selectedWorkspace?.workspace_id);
+        
+      const isInstanceNumber = connections?.some(conn => {
+        const connPhone = conn.phone_number?.replace(/\D/g, '');
+        return connPhone && phoneDigits === connPhone;
+      });
+      
+      if (isInstanceNumber) {
+        toast({
+          title: "Número inválido",
+          description: "Este número pertence a uma instância WhatsApp e não pode ser usado como contato.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Call Edge Function to create quick conversation
+      console.log('📞 Criando conversa rápida:', { 
+        original: quickPhoneNumber, 
+        formatted: phoneNumber.format('E.164'),
+        national: phoneNumber.format('NATIONAL') 
+      });
+      
       const { data, error } = await supabase.functions.invoke('create-quick-conversation', {
         body: { phoneNumber: phoneNumber.format('E.164') }
       });
@@ -459,12 +522,32 @@ const stopRecording = () => {
     }
   }, [selectedConversationId, conversations, markAsRead]);
 
-  // Auto-scroll quando conversa é selecionada ou nova mensagem chega
+  // Auto-scroll quando conversa é selecionada ou mensagens carregam
   useEffect(() => {
-    if (selectedConversation) {
-      setTimeout(scrollToBottom, 100);
+    if (selectedConversation && messages.length > 0) {
+      // Scroll direto para o final sem animação no primeiro carregamento
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
-  }, [selectedConversation, selectedConversation?.messages]);
+  }, [selectedConversation, messages.length]);
+
+  // Auto-scroll suave quando novas mensagens chegam (não no carregamento inicial)
+  useEffect(() => {
+    if (selectedConversation && messages.length > 0 && !loading) {
+      const isAtBottom = () => {
+        const container = messagesEndRef.current?.parentElement;
+        if (!container) return true;
+        const threshold = 100;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      };
+
+      // Se já está próximo do final, faz scroll suave para nova mensagem
+      if (isAtBottom()) {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  }, [messages, loading]);
 
   if (loading) {
     return (
@@ -500,11 +583,11 @@ const stopRecording = () => {
                 variant="ghost" 
                 size="sm"
                 disabled={isUpdatingProfileImages}
-                className="text-blue-600 hover:bg-blue-50"
+                className="text-primary hover:bg-primary/10"
                 title="Atualizar todas as fotos de perfil"
               >
                 {isUpdatingProfileImages ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 ) : (
                  <RefreshCw className="h-4 w-4" />
                 )}
@@ -672,7 +755,7 @@ const stopRecording = () => {
           ) : (
           <div className="space-y-0">
             {getFilteredConversations().map((conversation) => {
-              const lastMessage = getLastMessage(conversation);
+              // ✅ Removido lastMessage (lazy loading)
               const lastActivity = getActivityTime(conversation);
               const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
               const avatarColor = getAvatarColor(conversation.contact?.name || conversation.contact?.phone || 'U');
@@ -729,7 +812,7 @@ const stopRecording = () => {
                     {/* Main content */}
                     <div className="flex-1 min-w-0">
                       {/* First line: Name with eye icon */}
-                      <div className="flex items-center mb-0.5">
+                       <div className="flex items-center mb-0.5">
                         <span 
                           className="text-xs font-normal text-foreground tracking-tight truncate"
                           style={{ fontWeight: 400, letterSpacing: '-0.2px', fontSize: '12px' }}
@@ -751,80 +834,61 @@ const stopRecording = () => {
         </svg>
                       </div>
                       
-                      {/* Second line: Message preview */}
+                        {/* ✅ Última mensagem da conversa */}
                       <div className="flex items-center">
                         <span 
                           className="text-foreground/87 truncate"
                           style={{ fontSize: '11px', fontWeight: 400, letterSpacing: '0px' }}
                         >
-                          {lastMessage && lastMessage.sender_type === 'agent' && 'Você: '}
-                          {lastMessage ? (
-                            lastMessage.message_type === 'text' 
-                              ? lastMessage.content 
-                              : `📎 ${lastMessage.message_type}`
-                          ) : 'Sem mensagens'}
+                          {conversation.last_message?.[0] ? (
+                            <>
+                              {conversation.last_message[0].sender_type === 'contact' ? '' : 'Você: '}
+                              {conversation.last_message[0].message_type === 'text' 
+                                ? conversation.last_message[0].content 
+                                : `${conversation.last_message[0].message_type === 'image' ? '📷' : 
+                                    conversation.last_message[0].message_type === 'video' ? '🎥' : 
+                                    conversation.last_message[0].message_type === 'audio' ? '🎵' : '📄'} ${
+                                    conversation.last_message[0].message_type.charAt(0).toUpperCase() + 
+                                    conversation.last_message[0].message_type.slice(1)
+                                  }`
+                              }
+                            </>
+                          ) : (
+                            conversation.unread_count > 0 
+                              ? `${conversation.unread_count} mensagem${conversation.unread_count > 1 ? 's' : ''} não lida${conversation.unread_count > 1 ? 's' : ''}`
+                              : 'Clique para ver mensagens'
+                          )}
                         </span>
                       </div>
                     </div>
                     
                     {/* Secondary actions */}
                     <div className="flex items-center gap-2 ml-2">
-                       {/* Tag/Label system */}
-                       <div className="flex items-center gap-2">
-                         <div className="flex items-center gap-1">
-                            {conversation.tags && conversation.tags.length > 0 ? (
-                              conversation.tags.map((tag) => (
-                                <div 
-                                  key={tag.id}
-                                  className={cn(
-                                    "rounded text-xs flex items-center gap-1 group relative",
-                                    conversation.tags.length === 1 
-                                      ? "px-1.5 py-0.5" 
-                                      : "w-5 h-5 justify-center"
-                                  )}
-                                  style={{ 
-                                    backgroundColor: `${tag.color}20`,
-                                    color: tag.color,
-                                    border: `1px solid ${tag.color}40`
-                                  }}
-                                  title={tag.name}
-                                >
-                                  <svg 
-                                    className={cn(
-                                      conversation.tags.length === 1 ? "w-3 h-3" : "w-3 h-3"
-                                    )}
-                                    viewBox="0 0 24 24" 
-                                    fill={tag.color}
-                                    style={{ stroke: 'white', strokeWidth: 1 }}
-                                  >
-                                    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.42 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
-                                  </svg>
-                                  {conversation.tags.length === 1 && (
+                      {/* Tag/Label system */}
+                      <div className="flex items-center gap-2">
+                        {conversation.tags && conversation.tags.length > 0 && (
+                          <TooltipProvider>
+                            <div className="flex items-center gap-1">
+                              {conversation.tags.map((tag) => (
+                                <Tooltip key={tag.id}>
+                                  <TooltipTrigger asChild>
+                                    <svg 
+                                      className="w-3 h-3" 
+                                      viewBox="0 0 24 24" 
+                                      fill={tag.color}
+                                      style={{ stroke: 'white', strokeWidth: 1 }}
+                                    >
+                                      <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+                                    </svg>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
                                     <span className="text-xs">{tag.name}</span>
-                                  )}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveTagFromConversation(conversation.id, tag.id, tag.name);
-                                    }}
-                                    className={cn(
-                                      "opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110",
-                                      conversation.tags.length === 1 
-                                        ? "ml-1" 
-                                        : "absolute -top-1 -right-1 bg-white rounded-full w-3 h-3 flex items-center justify-center shadow-sm"
-                                    )}
-                                    title={`Remover tag ${tag.name}`}
-                                  >
-                                    <X 
-                                      size={conversation.tags.length === 1 ? 12 : 8} 
-                                      style={{ color: tag.color }}
-                                      className="cursor-pointer"
-                                    />
-                                  </button>
-                                </div>
-                             ))
-                           ) : null}
-                         </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </TooltipProvider>
+                        )}
                         
                         {/* Small avatar */}
                         <Avatar className="w-4 h-4 rounded-full">
@@ -906,61 +970,6 @@ const stopRecording = () => {
                     <h3 className="font-medium text-gray-900 text-base">
                       {selectedConversation.contact.name}
                     </h3>
-                    
-                    {/* Tags da conversa no cabeçalho */}
-                    <div className="flex items-center gap-1">
-                      {selectedConversation.tags && selectedConversation.tags.length > 0 && (
-                        selectedConversation.tags.map((tag) => (
-                          <div 
-                            key={tag.id}
-                            className={cn(
-                              "rounded text-xs flex items-center gap-1 group",
-                              selectedConversation.tags.length === 1 
-                                ? "px-1.5 py-0.5" 
-                                : "w-6 h-6 justify-center"
-                            )}
-                            style={{ 
-                              backgroundColor: `${tag.color}20`,
-                              color: tag.color,
-                              border: `1px solid ${tag.color}40`
-                            }}
-                            title={tag.name}
-                          >
-                            <svg 
-                              className={cn(
-                                selectedConversation.tags.length === 1 ? "w-3 h-3" : "w-4 h-4"
-                              )}
-                              viewBox="0 0 24 24" 
-                              fill={tag.color}
-                              style={{ stroke: 'white', strokeWidth: 1 }}
-                            >
-                              <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.42 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
-                            </svg>
-                            {selectedConversation.tags.length === 1 && (
-                              <span className="text-xs">{tag.name}</span>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveTagFromConversation(selectedConversation.id, tag.id, tag.name);
-                              }}
-                              className={cn(
-                                "opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110",
-                                selectedConversation.tags.length === 1 ? "ml-1" : "absolute -top-1 -right-1 bg-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
-                              )}
-                              title={`Remover tag ${tag.name}`}
-                            >
-                              <X 
-                                size={selectedConversation.tags.length === 1 ? 12 : 10} 
-                                style={{ color: tag.color }}
-                                className="cursor-pointer"
-                              />
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    
                     <AddTagButton
                       conversationId={selectedConversation.id}
                       isDarkMode={isDarkMode}
@@ -980,8 +989,8 @@ const stopRecording = () => {
                     className={cn(
                       "h-8 px-3 rounded-full text-sm font-medium transition-colors",
                       selectedConversation.agente_ativo 
-                        ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        ? "bg-primary/10 text-primary hover:bg-primary/20" 
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
                     )}
                     title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
                   >
@@ -1003,8 +1012,29 @@ const stopRecording = () => {
 
             {/* Área de mensagens */}
             <ScrollArea className="flex-1 p-4">
+              {/* ✅ Loading inicial das mensagens */}
+              {messagesLoading && messages.length === 0 && (
+                <div className="flex justify-center p-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              )}
+              
+              {/* ✅ Botão Load More (scroll infinito) */}
+              {hasMore && messages.length > 0 && (
+                <div className="flex justify-center p-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={loadMoreMessages}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? 'Carregando...' : 'Carregar mensagens anteriores'}
+                  </Button>
+                </div>
+              )}
+              
               <div className="space-y-4">
-                {selectedConversation.messages.map((message) => (
+                {messages.map((message) => (
                   <div 
                     key={message.id}
                     className={cn(
@@ -1029,12 +1059,14 @@ const stopRecording = () => {
                       </Avatar>
                     )}
                     
-                    <div 
+                     <div 
                       className={cn(
-                        "rounded-lg p-3 max-w-full",
+                        "rounded-lg max-w-full",
                         message.sender_type === 'contact' 
-                          ? "bg-muted" 
-                          : "bg-primary text-primary-foreground"
+                          ? "bg-muted p-3" 
+                          : message.message_type !== 'text' && message.file_url
+                            ? "bg-primary p-3" 
+                            : "bg-primary text-primary-foreground p-3"
                       )}
                     >
                       {/* Renderizar conteúdo baseado no tipo */}
@@ -1078,15 +1110,26 @@ const stopRecording = () => {
               <div className="flex items-end gap-2">
 <MediaUpload 
   onFileSelect={(file, mediaType, fileUrl) => {
+    if (!selectedConversation) return;
+    
     const caption = messageText.trim();
-    sendMessage(
-      selectedConversation!.id,
-      caption,
-      selectedConversation!.contact.phone || '',
-      mediaType,
-      fileUrl,
-      file.name
-    );
+    
+    // ✅ Criar mensagem de mídia usando nova estrutura
+    const optimisticMessage = {
+      id: `temp-media-${Date.now()}`,
+      conversation_id: selectedConversation.id,
+      content: caption || `[${mediaType.toUpperCase()}]`,
+      message_type: mediaType as any,
+      sender_type: 'agent' as const,
+      sender_id: user?.id,
+      file_url: fileUrl,
+      file_name: file.name,
+      created_at: new Date().toISOString(),
+          status: 'sending' as const,
+      workspace_id: selectedWorkspace?.workspace_id || ''
+    };
+    
+    addMessage(optimisticMessage);
     if (caption) setMessageText('');
   }}
 />

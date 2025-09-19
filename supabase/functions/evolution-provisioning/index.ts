@@ -151,20 +151,25 @@ serve(async (req) => {
       await logEvent(supabase, connection.id, correlationId, 'CONNECTION_CREATED', 'info', 
         'Connection record created', { connectionId: connection.id });
 
-      // Prepare webhook configuration
-      let webhookConfig = {};
-      if (!webhookGlobalEnabled && supabaseFunctionsWebhook && evolutionWebhookSecret) {
-        const webhookUrl = `${supabaseFunctionsWebhook}?token=${evolutionWebhookSecret}`;
-        webhookConfig = {
-          webhook: webhookUrl,
-          webhook_by_events: true,
-          webhook_base64: false,
-          events: [
-            'MESSAGES_UPSERT',
-            'QRCODE_UPDATED'
-          ]
-        };
-      }
+      // Use evolution-webhook-v2 for proper message routing
+      const fixedWebhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook-v2`;
+      const fixedWebhookSecret = 'supabase-evolution-webhook';
+      
+      console.log('Using evolution-webhook-v2 for Evolution:', fixedWebhookUrl);
+      
+      const webhookConfig = {
+        webhook: fixedWebhookUrl,
+        webhook_by_events: true,
+        webhook_base64: false,
+        webhook_headers: {
+          "X-Secret": fixedWebhookSecret,
+          "Content-Type": "application/json"
+        },
+        events: [
+          'MESSAGES_UPSERT',
+          'QRCODE_UPDATED'
+        ]
+      };
 
       // Create Evolution instance
       const createInstanceBody = {

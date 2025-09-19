@@ -61,11 +61,11 @@ serve(async (req) => {
       }
 
       if (action === 'list') {
-        // Return global cards (workspace_id IS NULL) and compatibility cards (workspace_id = '00000000-0000-0000-0000-000000000000')
+        // Return global cards (workspace_id IS NULL)
         const { data: cards, error } = await supabase
           .from('dashboard_cards')
           .select('*')
-          .or('workspace_id.is.null,workspace_id.eq.00000000-0000-0000-0000-000000000000')
+          .is('workspace_id', null)
           .order('order_position', { ascending: true });
 
         if (error) {

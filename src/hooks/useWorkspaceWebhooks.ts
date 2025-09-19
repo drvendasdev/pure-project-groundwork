@@ -10,21 +10,76 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
 
-  // Fetch webhook configuration
+  // Fetch webhook configuration with fallback to secrets table
   const fetchWebhookConfig = async () => {
-    if (!workspaceId) return;
+    console.log('🔧 fetchWebhookConfig called with workspaceId:', workspaceId);
+    if (!workspaceId) {
+      console.log('🔧 No workspaceId provided, returning early');
+      return;
+    }
     
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      console.log('🔧 Attempting to fetch webhook settings for workspace:', workspaceId);
+      
+      // First try to get from workspace_webhook_settings
+      let { data: settingsData, error: settingsError } = await supabase
         .from('workspace_webhook_settings')
         .select('*')
         .eq('workspace_id', workspaceId)
         .maybeSingle();
 
-      if (error) throw error;
+      console.log('🔧 Settings query result:', { settingsData, settingsError });
       
-      setWebhookConfig(data);
+      if (settingsError) {
+        console.error('🔧 Error fetching settings:', settingsError);
+        throw settingsError;
+      }
+      console.log('Settings data:', settingsData);
+
+      // If no data in settings, try to get from secrets as fallback
+      if (!settingsData) {
+        console.log('No webhook settings found, checking secrets...');
+        const secretName = `N8N_WEBHOOK_URL_${workspaceId}`;
+        const { data: secretsData, error: secretsError } = await supabase
+          .from('workspace_webhook_secrets')
+          .select('webhook_url')
+          .eq('workspace_id', workspaceId)
+          .eq('secret_name', secretName)
+          .maybeSingle();
+
+        console.log('Secrets data:', secretsData);
+
+        if (secretsError) {
+          console.error('Error fetching webhook secrets:', secretsError);
+        } else if (secretsData?.webhook_url) {
+          console.log('Found webhook URL in secrets, migrating to settings...');
+          // Generate a random secret for the migration
+          const newSecret = crypto.randomUUID();
+          
+          // Migrate from secrets to settings
+          const { data: migratedData, error: migrateError } = await supabase
+            .from('workspace_webhook_settings')
+            .upsert({
+              workspace_id: workspaceId,
+              webhook_url: secretsData.webhook_url,
+              webhook_secret: newSecret
+            })
+            .select()
+            .single();
+
+          if (migrateError) {
+            console.error('Error migrating webhook config:', migrateError);
+          } else {
+            settingsData = migratedData;
+            console.log('Successfully migrated webhook config:', settingsData);
+          }
+        }
+      }
+      
+      console.log('🔧 Final webhook config:', settingsData);
+      setWebhookConfig(settingsData);
+      console.log('🔧 setWebhookConfig called with:', settingsData);
     } catch (error) {
       console.error('Error fetching webhook config:', error);
       toast({
@@ -37,7 +92,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     }
   };
 
-  // Save webhook configuration
+  // Save webhook configuration to both tables for consistency
   const saveWebhookConfig = async (url: string, secret: string) => {
     if (!workspaceId) {
       toast({
@@ -50,6 +105,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     
     setIsLoading(true);
     try {
+      // Save to workspace_webhook_settings (primary) - always upsert to avoid duplicates
       const { data, error } = await supabase
         .from('workspace_webhook_settings')
         .upsert({
@@ -57,11 +113,61 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
           webhook_url: url,
           webhook_secret: secret,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'workspace_id'
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      // Use the correct secret name format: N8N_WEBHOOK_URL_{workspace_id}
+      const secretName = `N8N_WEBHOOK_URL_${workspaceId}`;
+      
+      // Check if ANY record exists for this workspace (regardless of secret_name)
+      const { data: existingSecret, error: checkError } = await supabase
+        .from('workspace_webhook_secrets')
+        .select('id, secret_name')
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking existing secret:', checkError);
+      }
+
+      // Update existing record or insert new one
+      if (existingSecret) {
+        // Update existing record and also update the secret_name to the new format
+        const { error: updateError } = await supabase
+          .from('workspace_webhook_secrets')
+          .update({
+            secret_name: secretName, // Update to new format
+            webhook_url: url,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSecret.id);
+
+        if (updateError) {
+          console.error('Error updating webhook secrets:', updateError);
+        } else {
+          console.log(`Updated existing webhook secret from "${existingSecret.secret_name}" to "${secretName}"`);
+        }
+      } else {
+        // Insert new record only if none exists
+        const { error: insertError } = await supabase
+          .from('workspace_webhook_secrets')
+          .insert({
+            workspace_id: workspaceId,
+            secret_name: secretName,
+            webhook_url: url
+          });
+
+        if (insertError) {
+          console.error('Error inserting webhook secrets:', insertError);
+        } else {
+          console.log(`Created new webhook secret with name "${secretName}"`);
+        }
+      }
       
       setWebhookConfig(data);
       toast({
@@ -184,40 +290,38 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     const startTime = performance.now();
     
     try {
-      const testPayload = {
-        type: 'test',
-        timestamp: new Date().toISOString(),
-        workspace_id: workspaceId
-      };
-
-      const response = await fetch(webhookConfig.webhook_url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Secret': webhookConfig.webhook_secret
-        },
-        body: JSON.stringify(testPayload)
+      // Use edge function to test webhook (avoid CORS issues)
+      const { data: testResult, error } = await supabase.functions.invoke('test-webhook-reception', {
+        body: { 
+          webhook_url: webhookConfig.webhook_url,
+          webhook_secret: webhookConfig.webhook_secret,
+          workspace_id: workspaceId
+        }
       });
 
       const endTime = performance.now();
       const latency = Math.round(endTime - startTime);
-      const responseText = await response.text().catch(() => '');
 
-      // Log the test result
-      await supabase.from('webhook_logs').insert({
-        workspace_id: workspaceId,
-        event_type: 'test',
-        status: response.ok ? 'success' : 'error',
-        payload_json: testPayload,
-        response_status: response.status,
-        response_body: responseText
-      });
+      if (error) {
+        console.error('Error testing webhook:', error);
+        toast({
+          title: "Erro no teste",
+          description: error.message || "Falha ao testar webhook",
+          variant: "destructive",
+        });
+        return {
+          success: false,
+          status: 500,
+          latency,
+          error: error.message
+        };
+      }
 
       const result: TestWebhookResponse = {
-        success: response.ok,
-        status: response.status,
+        success: testResult.success,
+        status: testResult.status,
         latency,
-        error: response.ok ? undefined : `HTTP ${response.status}: ${responseText}`
+        error: testResult.success ? undefined : testResult.error
       };
       
       if (result.success) {
@@ -344,10 +448,17 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
   };
 
   useEffect(() => {
+    console.log('🔧 useWorkspaceWebhooks useEffect - workspaceId:', workspaceId);
     if (workspaceId) {
+      console.log('🔧 Calling fetchWebhookConfig, fetchInstances, fetchWebhookLogs');
       fetchWebhookConfig();
       fetchInstances();
       fetchWebhookLogs();
+    } else {
+      console.log('🔧 No workspaceId, clearing states');
+      setWebhookConfig(null);
+      setInstances([]);
+      setLogs([]);
     }
   }, [workspaceId]);
 
@@ -365,6 +476,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     fetchWebhookLogs,
     getAppliedCount,
     getFilteredInstances,
-    refetch: fetchWebhookConfig
+    refetch: fetchWebhookConfig,
+    refreshConfig: fetchWebhookConfig // Added this for explicit refresh
   };
 };

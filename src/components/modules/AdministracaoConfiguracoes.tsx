@@ -5,64 +5,98 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
+import { EvolutionApiConfig } from "./EvolutionApiConfig";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export function AdministracaoConfiguracoes() {
   const [connectionLimit, setConnectionLimit] = useState("1");
-  const [defaultOrgId, setDefaultOrgId] = useState("");
   const [loading, setLoading] = useState(false);
+  const { selectedWorkspace } = useWorkspace();
 
-  // Load default org ID and settings
+  // Load current settings for selected workspace
   useEffect(() => {
     const loadData = async () => {
+      if (!selectedWorkspace?.workspace_id) return;
+      
       try {
-        // Get the first available workspace as default
-        const { data: workspaceData } = await supabase
-          .from('workspaces')
-          .select('id')
-          .limit(1)
-          .maybeSingle();
+        console.log('🔍 Loading workspace limits for workspace:', selectedWorkspace.workspace_id);
         
-        const orgId = workspaceData?.id || null;
-        setDefaultOrgId(orgId);
+        // Use edge function to get workspace limits to avoid RLS issues
+        const userData = localStorage.getItem('currentUser');
+        const currentUserData = userData ? JSON.parse(userData) : null;
+        
+        if (!currentUserData?.id) {
+          console.error('❌ User not authenticated');
+          return;
+        }
 
-        // Get current settings
-        const { data } = await supabase.functions.invoke('manage-evolution-connections', {
-          body: {
-            action: 'get_settings',
-            orgId
-          }
+        const headers = {
+          'x-system-user-id': currentUserData.id,
+          'x-system-user-email': currentUserData.email || '',
+          'x-workspace-id': selectedWorkspace.workspace_id
+        };
+
+        const { data, error } = await supabase.functions.invoke('get-workspace-limits', {
+          body: { workspaceId: selectedWorkspace.workspace_id },
+          headers
         });
 
-        if (data?.success && data.settings) {
-          setConnectionLimit(data.settings.connection_limit.toString());
+        if (error) {
+          console.error('❌ Error getting workspace limits:', error);
+          throw error;
+        }
+
+        if (data?.connection_limit) {
+          setConnectionLimit(data.connection_limit.toString());
+          console.log('✅ Loaded connection limit:', data.connection_limit);
         }
       } catch (error) {
-        console.error('Error loading settings:', error);
+        console.error('❌ Error loading settings:', error);
       }
     };
     
     loadData();
-  }, []);
+  }, [selectedWorkspace?.workspace_id]);
 
   const handleConnectionLimitChange = async (value: string) => {
-    if (!defaultOrgId) return;
+    if (!selectedWorkspace?.workspace_id) return;
 
     setLoading(true);
     try {
       const numericValue = value === "unlimited" ? 999 : parseInt(value);
       
-      const { data } = await supabase.functions.invoke('manage-evolution-connections', {
-        body: {
-          action: 'set_connection_limit',
-          orgId: defaultOrgId,
-          connectionLimit: numericValue
-        }
+      console.log('💾 Updating connection limit for workspace:', selectedWorkspace.workspace_id);
+      console.log('🔢 New limit:', numericValue);
+      
+      // Use edge function to update limits to avoid RLS issues
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': selectedWorkspace.workspace_id
+      };
+
+      const { data, error } = await supabase.functions.invoke('update-workspace-limits', {
+        body: { 
+          workspaceId: selectedWorkspace.workspace_id,
+          connectionLimit: numericValue 
+        },
+        headers
       });
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Erro ao atualizar limite');
+      if (error) {
+        console.error('❌ Error updating workspace limits:', error);
+        throw error;
       }
+
+      console.log('✅ Connection limit updated successfully:', data);
 
       setConnectionLimit(value);
       toast({
@@ -70,7 +104,7 @@ export function AdministracaoConfiguracoes() {
         description: 'Limite de conexões atualizado com sucesso'
       });
     } catch (error: any) {
-      console.error('Error updating connection limit:', error);
+      console.error('❌ Error updating connection limit:', error);
       toast({
         title: 'Erro ao atualizar',
         description: error.message,
@@ -90,7 +124,7 @@ export function AdministracaoConfiguracoes() {
       
       <div className="bg-card rounded-lg shadow-sm border border-border">
         <Tabs defaultValue="opcoes" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
+          <TabsList className="grid w-full grid-cols-4 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
             <TabsTrigger 
               value="opcoes" 
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
@@ -102,6 +136,12 @@ export function AdministracaoConfiguracoes() {
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
             >
               Webhooks (Evolution)
+            </TabsTrigger>
+            <TabsTrigger 
+              value="evolution-api" 
+              className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
+            >
+              Evolution API
             </TabsTrigger>
             <TabsTrigger 
               value="whitelabel" 
@@ -239,6 +279,10 @@ export function AdministracaoConfiguracoes() {
 
           <TabsContent value="webhooks" className="p-0 mt-0">
             <WebhooksEvolutionConfig />
+          </TabsContent>
+
+          <TabsContent value="evolution-api" className="p-0 mt-0">
+            <EvolutionApiConfig />
           </TabsContent>
 
           <TabsContent value="whitelabel" className="p-6 mt-0">

@@ -36,12 +36,18 @@ export interface WhatsAppConversation {
   assigned_at?: string | null;
   connection_id?: string;
   workspace_id?: string;
-  messages: WhatsAppMessage[];
   tags?: Array<{
     id: string;
     name: string;
     color: string;
   }>;
+  last_message?: Array<{
+    content: string;
+    message_type: string;
+    sender_type: string;
+    created_at: string;
+  }>;
+  messages: WhatsAppMessage[];
 }
 
 export const useWhatsAppConversations = () => {
@@ -82,7 +88,14 @@ export const useWhatsAppConversations = () => {
         console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
       }
 
-      const { data: response, error: functionError } = await supabase.functions.invoke('whatsapp-get-conversations', {
+      // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens) via query params
+      const params = new URLSearchParams({
+        workspace_id: selectedWorkspace.workspace_id,
+        limit: '50'
+      });
+      
+      const { data: response, error: functionError } = await supabase.functions.invoke(
+        `whatsapp-get-conversations-lite?${params}`, {
         method: 'GET',
         headers
       });
@@ -91,16 +104,33 @@ export const useWhatsAppConversations = () => {
         throw functionError;
       }
 
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to fetch conversations');
-      }
-
-      const conversationsWithMessages = response.data || [];
+      // ✅ Conversas SEM mensagens (apenas metadados)
+      const conversationsOnly = response.items || [];
       
-      setConversations(conversationsWithMessages);
-      console.log(`✅ ${conversationsWithMessages.length} conversas carregadas`);
+      // ✅ Mapear para formato compatível (SEM array de mensagens)
+      const formattedConversations = conversationsOnly.map(conv => ({
+        id: conv.id,
+        contact: {
+          id: conv.contacts.id,
+          name: conv.contacts.name,
+          phone: conv.contacts.phone,
+          profile_image_url: conv.contacts.profile_image_url
+        },
+        agente_ativo: false, // Será carregado sob demanda se necessário
+        status: conv.status,
+        unread_count: conv.unread_count || 0,
+        last_activity_at: conv.last_activity_at,
+        created_at: conv.created_at || conv.last_activity_at,
+        assigned_user_id: conv.assigned_user_id,
+        priority: conv.priority,
+        last_message: conv.last_message, // ✅ Adicionado para exibir última mensagem
+        messages: [] // ✅ VAZIO - mensagens carregadas sob demanda
+      }));
       
-      if (conversationsWithMessages.length === 0) {
+      setConversations(formattedConversations);
+      console.log(`✅ ${formattedConversations.length} conversas carregadas (SEM mensagens)`);
+      
+      if (formattedConversations.length === 0) {
         console.log('ℹ️ Nenhuma conversa encontrada. Verifique se há conexões configuradas e conversas ativas.');
       }
     } catch (error) {
@@ -229,9 +259,8 @@ export const useWhatsAppConversations = () => {
       let workspaceId = selectedWorkspace?.workspace_id;
       
       if (!workspaceId) {
-        // Fallback para workspace padrão se não há selecionado
-        workspaceId = "00000000-0000-0000-0000-000000000000";
-        console.warn('⚠️ Nenhum workspace selecionado, usando workspace padrão');
+        console.warn('⚠️ Nenhum workspace selecionado');
+        return;
       }
 
       // Montar payload conforme novo contrato da função (workspace_id é opcional)
@@ -250,12 +279,14 @@ export const useWhatsAppConversations = () => {
         'x-system-user-email': currentUserData.email || ''
       };
 
-      // Add workspace context if available (send-message derives workspace from conversation)
+      // Add workspace context if available (send-message-simple version)
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
       }
 
-      const { data: sendResult, error: apiError } = await supabase.functions.invoke('send-message', {
+      console.log('🚀 Chamando send-message-simple com payload:', payload);
+      console.log('🚀 Headers enviados:', headers);
+      const { data: sendResult, error: apiError } = await supabase.functions.invoke('test-send-msg', {
         body: payload,
         headers
       });
@@ -636,32 +667,10 @@ export const useWhatsAppConversations = () => {
       )
       .subscribe();
 
-    // Subscription for conversation tags changes
-    const tagsChannel = supabase
-      .channel('conversation-tags')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'conversation_tags' },
-        (payload) => {
-          console.log('🔔 Tag adicionada à conversa:', payload.new);
-          // Refetch conversations to update tags
-          fetchConversations();
-        }
-      )
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'conversation_tags' },
-        (payload) => {
-          console.log('🔔 Tag removida da conversa:', payload.old);
-          // Refetch conversations to update tags
-          fetchConversations();
-        }
-      )
-      .subscribe();
-
     return () => {
       console.log('🧹 Limpando subscriptions real-time');
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
-      supabase.removeChannel(tagsChannel);
     };
   }, []);
 

@@ -1,47 +1,5 @@
 project_id = "zldeaozqxjwvzgrblyrh"
 
-[functions.evolution-create-instance]
-verify_jwt = false
-
-[functions.evolution-list-connections]
-verify_jwt = false
-
-[functions.evolution-get-qr]
-verify_jwt = false
-
-[functions.evolution-manage-instance]
-verify_jwt = false
-
-[functions.manage-whatsapp-instances]
-
-[functions.delete-cargo]
-verify_jwt = false
-
-[functions.check-cargo-usage]
-
-verify_jwt = false
-
-[functions.evolution-instance-actions]
-verify_jwt = false
-
-[functions.batch-update-profile-images]
-verify_jwt = false
-
-[functions.evolution-webhook]
-verify_jwt = false
-
-[functions.fetch-whatsapp-profile]
-verify_jwt = false
-
-[functions.send-message]
-verify_jwt = false
-
-[functions.upload-media]
-verify_jwt = false
-
-[functions.get-chat-data]
-verify_jwt = false
-
 [api]
 enabled = true
 port = 54321
@@ -102,6 +60,63 @@ enable_confirmations = false
 enabled = true
 port = 54330
 
+[functions.get-evolution-config]
+verify_jwt = false
+
+[functions.save-evolution-config]
+verify_jwt = false
+
+[functions.test-evolution-api]
+verify_jwt = false
+
+[functions.get-workspace-limits]
+verify_jwt = false
+
+[functions.update-workspace-limits]
+verify_jwt = false
+
+[functions.evolution-create-instance]
+verify_jwt = false
+
+[functions.evolution-list-connections]
+verify_jwt = false
+
+[functions.evolution-get-qr]
+verify_jwt = false
+
+[functions.evolution-manage-instance]
+verify_jwt = false
+
+[functions.manage-whatsapp-instances]
+verify_jwt = false
+
+[functions.delete-cargo]
+verify_jwt = false
+
+[functions.check-cargo-usage]
+verify_jwt = false
+
+[functions.evolution-instance-actions]
+verify_jwt = false
+
+[functions.batch-update-profile-images]
+verify_jwt = false
+
+[functions.evolution-webhook]
+verify_jwt = false
+
+[functions.fetch-whatsapp-profile]
+verify_jwt = false
+
+[functions.send-message]
+verify_jwt = false
+
+[functions.upload-media]
+verify_jwt = false
+
+[functions.get-chat-data]
+verify_jwt = false
+
 [functions.whatsapp-webhook]
 verify_jwt = false
 
@@ -123,9 +138,6 @@ verify_jwt = false
 [functions.ai-chat-response]
 verify_jwt = false
 
-[functions.test-evolution-api]
-verify_jwt = false
-
 [functions.list-evolution-instances]
 verify_jwt = false
 
@@ -145,9 +157,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.n8n-media-processor]
-verify_jwt = false
-
-[functions.n8n-response]
 verify_jwt = false
 
 [functions.set-default-instance]
@@ -181,4 +190,28 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.manage-dashboard-cards]
+verify_jwt = false
+
+[functions.manage-workspace-webhook-secret]
+verify_jwt = false
+
+[functions.configure-evolution-webhook]
+verify_jwt = false
+
+[functions.test-webhook-config]
+verify_jwt = false
+
+[functions.fix-webhook]
+verify_jwt = false
+
+[functions.debug-webhook]
+verify_jwt = false
+
+[functions.webhook-to-n8n]
+verify_jwt = false
+
+[functions.n8n-response-v2]
+verify_jwt = false
+
+[functions.evolution-webhook-v2]
 verify_jwt = false

@@ -1,66 +1,106 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+}
 
-Deno.serve(async (req) => {
-  // Handle CORS preflight requests
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { workspaceId, instance } = await req.json();
-
-    if (!workspaceId || !instance) {
-      return new Response(
-        JSON.stringify({ error: 'workspaceId and instance are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const systemUserId = req.headers.get('x-system-user-id');
+    const body = await req.json();
+    const { connectionId } = body;
+    
+    console.log('🔄 Setting default connection for user:', systemUserId, 'connection:', connectionId);
+    
+    if (!systemUserId) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'User authentication required (x-system-user-id header missing)' 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (!connectionId) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Connection ID is required' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    console.log(`Setting default instance for workspace ${workspaceId}: ${instance}`);
+    // Verify connection exists and get instance name
+    const { data: connectionData, error: connectionError } = await supabase
+      .from('connections')
+      .select('instance_name, workspace_id')
+      .eq('id', connectionId)
+      .single();
 
-    // Upsert the default instance setting
-    const { data, error } = await supabase
-      .from('workspace_messaging_settings')
-      .upsert({
-        workspace_id: workspaceId,
-        default_instance: instance,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'workspace_id'
-      })
-      .select();
-
-    if (error) {
-      console.error('Error setting default instance:', error);
-      return new Response(
-        JSON.stringify({ error: 'Failed to set default instance' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (connectionError || !connectionData) {
+      console.error('Connection not found:', connectionError);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Connection not found' 
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log('Default instance set successfully:', data);
+    // Instead of updating a single user, we'll store this as the workspace default
+    // This will be used for users who don't have a specific connection assigned
+    // For now, we'll update the current user as requested, but this could be expanded
+    // to a workspace-level default connection setting
+    
+    // Update user's default channel
+    const { error: updateError } = await supabase
+      .from('system_users')
+      .update({ default_channel: connectionId })
+      .eq('id', systemUserId);
+
+    if (updateError) {
+      console.error('Error updating default channel:', updateError);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Failed to update default connection' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log('✅ Default connection set successfully');
 
     return new Response(
-      JSON.stringify({ success: true, data }),
+      JSON.stringify({
+        success: true,
+        message: `${connectionData.instance_name} defined as default connection`
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in set-default-instance:', error);
+    console.error('Error setting default connection:', error);
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Internal server error' 
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+})

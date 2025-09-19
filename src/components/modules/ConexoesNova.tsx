@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star, Bug } from 'lucide-react';
+import { TestWebhookReceptionModal } from "@/components/modals/TestWebhookReceptionModal";
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -67,6 +69,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSettingDefault, setIsSettingDefault] = useState(false);
   
   // Form states
   const [instanceName, setInstanceName] = useState('');
@@ -133,7 +136,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     }
   };
 
-  const createInstance = async () => {
+  const createInstance = async (retryCount = 0) => {
     if (!instanceName.trim()) {
       toast({
         title: 'Erro',
@@ -176,7 +179,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         workspaceId
       });
 
-      console.log('Created connection:', connection);
+      console.log('✅ Created connection successfully:', connection);
 
       toast({
         title: 'Sucesso',
@@ -192,17 +195,48 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
 
       // If connection has QR code, automatically open QR modal
       if (connection.qr_code) {
+        console.log('QR Code already available, opening modal');
         setSelectedConnection(connection);
         setIsQRModalOpen(true);
-        // Start polling for connection status
         startPolling(connection.id);
+      } else {
+        // Try to get QR code immediately after creation
+        console.log('No QR code in response, trying to get one...');
+        connectInstance(connection);
       }
 
     } catch (error) {
-      console.error('Error creating instance:', error);
+      console.error('❌ Error creating instance:', error);
+      
+      // Check if it's a CORS or network error and retry up to 3 times
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      const isCorsError = errorMessage.toLowerCase().includes('cors') || 
+                         errorMessage.toLowerCase().includes('network') ||
+                         errorMessage.toLowerCase().includes('fetch');
+      
+      if (isCorsError && retryCount < 3) {
+        console.log(`🔄 Retrying connection creation (attempt ${retryCount + 1}/3)...`);
+        
+        // Show retry toast
+        toast({
+          title: 'Reconectando...',
+          description: `Tentativa ${retryCount + 1} de 3. Aguarde...`,
+        });
+        
+        // Wait 2 seconds before retry
+        setTimeout(() => {
+          createInstance(retryCount + 1);
+        }, 2000);
+        
+        return;
+      }
+      
+      // Show final error message
       toast({
         title: 'Erro',
-        description: `Erro ao criar instância: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        description: retryCount > 0 
+          ? `Erro após ${retryCount + 1} tentativas: ${errorMessage}`
+          : `Erro ao criar instância: ${errorMessage}`,
         variant: 'destructive',
       });
     } finally {
@@ -392,7 +426,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
           loadConnections();
           
           toast({
-            title: 'Sucesso',
+            title: '✅ Conectado!',
             description: connectionStatus.phone_number ? 
               `WhatsApp conectado como ${connectionStatus.phone_number}!` : 
               'WhatsApp conectado com sucesso!',
@@ -459,6 +493,102 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     }
   };
 
+  const configureWebhook = async (connection: Connection) => {
+    try {
+      setIsDisconnecting(true); // Reuse loading state
+      
+      console.log('🔧 Configuring webhook for connection:', connection.instance_name);
+      
+      const { data, error } = await supabase.functions.invoke('configure-evolution-webhook', {
+        body: {
+          instance_name: connection.instance_name,
+          workspace_id: workspaceId
+        }
+      });
+
+      if (error) {
+        console.error('Error configuring webhook:', error);
+        toast({
+          title: 'Erro',
+          description: 'Erro ao configurar webhook',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      console.log('✅ Webhook configured successfully:', data);
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Webhook configurado com sucesso! Agora você receberá mensagens.',
+      });
+      
+      // Reload connections to show updated webhook status
+      loadConnections();
+
+    } catch (error) {
+      console.error('Error configuring webhook:', error);
+      toast({
+        title: 'Erro',
+        description: `Erro ao configurar webhook: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  const setDefaultConnection = async (connection: Connection) => {
+    try {
+      setIsSettingDefault(true);
+      
+      // Get user data for headers (same pattern as EvolutionProvider)
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': workspaceId
+      };
+      
+      const { data, error } = await supabase.functions.invoke('set-default-instance', {
+        body: { connectionId: connection.id },
+        headers
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to set default connection');
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: data.message || `${connection.instance_name} definida como conexão padrão`,
+      });
+      
+      // Reload connections to update UI
+      loadConnections();
+      
+    } catch (error) {
+      console.error('Error setting default connection:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao definir conexão padrão',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSettingDefault(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
@@ -502,6 +632,10 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               </span>
             )}
           </p>
+        </div>
+        
+        <div className="flex gap-2">
+          <TestWebhookReceptionModal />
         </div>
         
         <Dialog open={isCreateModalOpen} onOpenChange={(open) => {
@@ -584,7 +718,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
             
             <DialogFooter>
               <Button 
-                onClick={isEditMode ? editConnection : createInstance} 
+                onClick={isEditMode ? editConnection : () => createInstance()} 
                 disabled={
                   isCreating || 
                   (!isEditMode && !currentUsage.canCreateMore)
@@ -636,7 +770,15 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setDefaultConnection(connection)}>
+                        <Star className="mr-2 h-4 w-4" />
+                        Definir como Padrão
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => configureWebhook(connection)}>
+                        <Webhook className="mr-2 h-4 w-4" />
+                        Configurar Webhook
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openEditModal(connection)}>
                         <Edit3 className="mr-2 h-4 w-4" />
                         Editar
@@ -648,15 +790,27 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                         <Trash2 className="mr-2 h-4 w-4" />
                         Excluir
                       </DropdownMenuItem>
-                    </DropdownMenuContent>
+                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">
-                    Número: {formatPhoneNumberDisplay(connection.phone_number || '')}
+                  <div className="text-xs text-muted-foreground flex items-center justify-between">
+                    <span>Número: {formatPhoneNumberDisplay(connection.phone_number || '')}</span>
+                    {/* Star icon for default connection */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDefaultConnection(connection)}
+                      disabled={isSettingDefault}
+                      className="h-6 w-6 p-0"
+                      title="Definir como conexão padrão"
+                    >
+                      <Star className="w-3 h-3" />
+                    </Button>
                   </div>
+                  
                   <div className="flex gap-2">
                     {connection.status === 'connected' ? (
                       <Button
@@ -719,56 +873,97 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         }
         setIsQRModalOpen(open);
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Conectar WhatsApp - {selectedConnection?.instance_name}</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-primary mb-2">
+              Passos para conectar
+            </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
-            {selectedConnection?.qr_code ? (
-              <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 py-4">
+            {/* Instruções à esquerda */}
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium">Abra o <strong>WhatsApp</strong> no seu celular</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium">No Android toque em <strong>Menu</strong> : ou no iPhone em <strong>Ajustes</strong></p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  3
+                </div>
+                <div>
+                  <p className="font-medium">Toque em <strong>Dispositivos conectados</strong> e depois <strong>Conectar um dispositivo</strong></p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-semibold text-sm">
+                  4
+                </div>
+                <div>
+                  <p className="font-medium">Escaneie o QR Code à direita para confirmar</p>
+                </div>
+              </div>
+
+              {/* Botão para atualizar QR Code */}
+              <div className="pt-4">
+                <Button 
+                  onClick={() => selectedConnection && refreshQRCode(selectedConnection.id)}
+                  variant="outline" 
+                  size="sm"
+                  disabled={isRefreshing}
+                  className="w-full"
+                >
+                  {isRefreshing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                      Atualizando QR Code...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Atualizar QR Code
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* QR Code à direita */}
+            <div className="flex items-center justify-center">
+              {selectedConnection?.qr_code ? (
                 <div className="text-center space-y-4">
                   <img 
                     src={selectedConnection.qr_code} 
                     alt="QR Code" 
-                    className="mx-auto border border-border rounded-lg"
-                    style={{ maxWidth: '300px', maxHeight: '300px' }}
+                    className="mx-auto border border-border rounded-lg bg-white p-4"
+                    style={{ width: '280px', height: '280px' }}
                   />
-                  
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Escaneie o código QR com seu WhatsApp
-                    </p>
-                    
-                    <div className="flex gap-2 justify-center">
-                      <Button 
-                        onClick={() => selectedConnection && refreshQRCode(selectedConnection.id)}
-                        variant="outline" 
-                        size="sm"
-                        disabled={isRefreshing}
-                      >
-                        {isRefreshing ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                            Atualizando...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                            Atualizar QR
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-sm text-muted-foreground font-medium">
+                    {selectedConnection.instance_name}
+                  </p>
                 </div>
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Gerando QR Code...</p>
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-8">
+                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Gerando QR Code...</p>
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

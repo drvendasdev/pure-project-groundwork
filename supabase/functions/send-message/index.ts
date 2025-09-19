@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
 };
 
 // Gerar ID único para cada request
@@ -14,8 +14,6 @@ function generateRequestId(): string {
 // Validar schema de entrada
 function validateRequestBody(body: any): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
-  // workspace_id is now optional - can be derived from conversation_id
   
   if (!body.conversation_id || typeof body.conversation_id !== 'string') {
     errors.push('conversation_id is required and must be a string');
@@ -49,56 +47,43 @@ function extractUserDataFromJWT(authHeader: string | null): { email: string | nu
   }
   
   try {
-    const token = authHeader.substring(7);
+    const token = authHeader.split(' ')[1];
     const payload = JSON.parse(atob(token.split('.')[1]));
     
-    // Try to get system information from user metadata first
-    const systemUserId = payload.user_metadata?.system_user_id || payload.system_user_id;
-    const systemEmail = payload.user_metadata?.system_email || payload.system_email;
-    
-    // Return system email if available, otherwise regular email
-    return { 
-      email: systemEmail || payload.email || null,
-      systemUserId,
-      systemEmail 
+    return {
+      email: payload.email || null,
+      systemUserId: payload.system_user_id || null,
+      systemEmail: payload.system_email || null
     };
-  } catch {
+  } catch (error) {
+    console.error('Error extracting JWT data:', error);
     return { email: null, systemUserId: null, systemEmail: null };
   }
 }
 
 serve(async (req) => {
-  const requestId = generateRequestId();
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({
-      code: 'METHOD_NOT_ALLOWED',
-      message: 'Only POST method is allowed',
-      requestId
-    }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  const requestId = generateRequestId();
+  console.log(`🚀 [${requestId}] Send message request started`);
 
   try {
-    console.log(`🚀 [${requestId}] Send message request initiated - ROUTING VIA N8N`);
-    console.log(`🔍 [${requestId}] Headers received:`, {
-      'x-system-user-id': req.headers.get('x-system-user-id'),
-      'x-system-user-email': req.headers.get('x-system-user-email'),
-      'authorization': req.headers.get('authorization') ? 'present' : 'missing'
-    });
-    
-    // Parse e validação do body
+    // Parse request body
     const body = await req.json();
+    console.log(`📝 [${requestId}] Request body:`, { 
+      conversation_id: body.conversation_id,
+      message_type: body.message_type,
+      sender_type: body.sender_type,
+      hasContent: !!body.content,
+      hasFile: !!body.file_url
+    });
+
+    // Validate request body
     const { isValid, errors } = validateRequestBody(body);
-    
     if (!isValid) {
-      console.error(`❌ [${requestId}] Validation failed:`, errors);
+      console.error(`❌ [${requestId}] Validation errors:`, errors);
       return new Response(JSON.stringify({
         code: 'VALIDATION_ERROR',
         message: 'Request validation failed',
@@ -110,104 +95,45 @@ serve(async (req) => {
       });
     }
 
-    const { conversation_id, content, message_type, sender_id, sender_type, file_url, file_name } = body;
-    let { workspace_id } = body;
-
+    // Extract headers
     const authHeader = req.headers.get('authorization');
     const systemUserIdHeader = req.headers.get('x-system-user-id');
     const systemUserEmailHeader = req.headers.get('x-system-user-email');
-    
-    // Inicializar Supabase com Service Role
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error(`❌ [${requestId}] Missing environment variables`);
-      return new Response(JSON.stringify({
-        code: 'CONFIGURATION_ERROR',
-        message: 'Missing required environment variables',
-        requestId
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    const workspaceIdHeader = req.headers.get('x-workspace-id');
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    // Extract user data from JWT
+    const { email: currentUserEmail, systemUserId: jwtSystemUserId, systemEmail: jwtSystemEmail } = extractUserDataFromJWT(authHeader);
+    const systemUserId = systemUserIdHeader || jwtSystemUserId;
 
-    // Determinar informações do usuário (headers customizados > JWT > body)
-    let currentUserEmail: string | null = null;
-    let systemUserId: string | null = null;
-    
-    if (systemUserIdHeader || systemUserEmailHeader) {
-      // Use custom headers if provided
-      systemUserId = systemUserIdHeader;
-      currentUserEmail = systemUserEmailHeader;
-      console.log(`🔍 [${requestId}] Using custom headers - user_id: ${systemUserId}, email: ${currentUserEmail}`);
-    } else if (authHeader) {
-      // Fall back to JWT if available
-      const { email, systemUserId: jwtSystemUserId } = extractUserDataFromJWT(authHeader);
-      currentUserEmail = email;
-      systemUserId = jwtSystemUserId;
-      console.log(`🔍 [${requestId}] Using JWT data - user_id: ${systemUserId}, email: ${currentUserEmail}`);
-    } else {
-      // Last resort: use sender_id from body
-      systemUserId = body.sender_id;
-      console.log(`🔍 [${requestId}] Using sender_id from body: ${systemUserId}`);
-    }
-    
-    if (!systemUserId && !currentUserEmail) {
-      console.error(`❌ [${requestId}] No user identification found`);
-      return new Response(JSON.stringify({
-        code: 'NO_USER_IDENTIFICATION',
-        message: 'No user identification found',
-        details: 'Please provide x-system-user-id header or valid authentication',
-        requestId
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    console.log(`👤 [${requestId}] User context:`, {
+      systemUserId: systemUserId?.substring(0, 8) + '***',
+      currentUserEmail: currentUserEmail?.substring(0, 5) + '***',
+      workspaceIdHeader: workspaceIdHeader?.substring(0, 8) + '***'
+    });
 
-    console.log(`🔍 [${requestId}] Validating system user: ${currentUserEmail || 'N/A'} (system_id: ${systemUserId})`);
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    // Validar que o usuário existe no sistema customizado
-    let userQuery = supabase.from('system_users').select('id, profile, status');
-    
-    if (systemUserId) {
-      userQuery = userQuery.eq('id', systemUserId);
-    } else if (currentUserEmail) {
-      userQuery = userQuery.eq('email', currentUserEmail);
-    }
-    
-    const { data: systemUser, error: userError } = await userQuery.eq('status', 'active').single();
-
-    if (userError || !systemUser) {
-      console.error(`❌ [${requestId}] System user not found or inactive:`, userError);
-      return new Response(JSON.stringify({
-        code: 'FORBIDDEN',
-        reason: 'INVALID_USER',
-        message: 'User not found or inactive in system',
-        requestId
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    console.log(`✅ [${requestId}] System user authorized: ${systemUser.id} (${systemUser.profile})`);
-
-    // Verificar que a conversa pertence ao mesmo workspace
-    const { data: conversation, error: convError } = await supabase
+    // Get conversation details with contact and connection info
+    const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('workspace_id, connection_id, contact_id')
-      .eq('id', conversation_id)
+      .select(`
+        id,
+        workspace_id,
+        connection_id,
+        contact:contacts(id, phone, name),
+        connection:connections(id, instance_name, status)
+      `)
+      .eq('id', body.conversation_id)
       .single();
 
-    if (convError || !conversation) {
-      console.error(`❌ [${requestId}] Conversation not found:`, convError);
+    if (conversationError || !conversation) {
+      console.error(`❌ [${requestId}] Conversation not found:`, conversationError);
       return new Response(JSON.stringify({
-        code: 'NOT_FOUND',
+        code: 'CONVERSATION_NOT_FOUND',
         message: 'Conversation not found',
         requestId
       }), {
@@ -216,15 +142,15 @@ serve(async (req) => {
       });
     }
 
-    // If workspace_id not provided, derive from conversation
-    if (!workspace_id) {
-      workspace_id = conversation.workspace_id;
-      console.log(`📝 [${requestId}] Derived workspace_id from conversation: ${workspace_id}`);
-    } else if (conversation.workspace_id !== workspace_id) {
-      console.error(`❌ [${requestId}] Workspace mismatch: conversation(${conversation.workspace_id}) != request(${workspace_id})`);
+    // Validate connection
+    if (!conversation.connection || conversation.connection.status !== 'connected') {
+      console.error(`❌ [${requestId}] Connection not ready:`, {
+        hasConnection: !!conversation.connection,
+        status: conversation.connection?.status
+      });
       return new Response(JSON.stringify({
-        code: 'WORKSPACE_MISMATCH',
-        message: 'Conversation does not belong to the specified workspace',
+        code: 'CONNECTION_NOT_READY',
+        message: 'WhatsApp connection is not ready',
         requestId
       }), {
         status: 409,
@@ -232,173 +158,43 @@ serve(async (req) => {
       });
     }
 
-    console.log(`🔗 [${requestId}] Conversation validated, connection_id: ${conversation.connection_id}`);
+    console.log(`✅ [${requestId}] Conversation and connection validated:`, {
+      conversationId: conversation.id,
+      workspaceId: conversation.workspace_id,
+      connectionId: conversation.connection_id,
+      instanceName: conversation.connection.instance_name,
+      contactPhone: conversation.contact?.phone?.substring(0, 8) + '***'
+    });
 
-    // Buscar dados do contato para obter o telefone
-    const { data: contact, error: contactError } = await supabase
-      .from('contacts')
-      .select('phone')
-      .eq('id', conversation.contact_id)
-      .single();
-
-    if (contactError || !contact) {
-      console.error(`❌ [${requestId}] Contact not found:`, contactError);
-      return new Response(JSON.stringify({
-        code: 'NOT_FOUND',
-        message: 'Contact not found for conversation',
-        requestId
-      }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Buscar configurações da conexão (token/URL da Evolution)
-    if (!conversation.connection_id) {
-      console.error(`❌ [${requestId}] No connection_id for conversation`);
-      return new Response(JSON.stringify({
-        code: 'MISSING_CONNECTION',
-        message: 'Conversation has no associated connection',
-        requestId
-      }), {
-        status: 409,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    const { data: connectionSecrets, error: secretsError } = await supabase
-      .from('connection_secrets')
-      .select('evolution_url, token')
-      .eq('connection_id', conversation.connection_id)
-      .single();
-
-    if (secretsError || !connectionSecrets) {
-      console.error(`❌ [${requestId}] Connection secrets not found:`, secretsError);
-      return new Response(JSON.stringify({
-        code: 'MISSING_CONNECTION_SECRET',
-        message: 'Connection configuration not found',
-        requestId
-      }), {
-        status: 409,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Buscar nome da instância da conexão
-    const { data: connection, error: connectionError } = await supabase
-      .from('connections')
-      .select('instance_name')
-      .eq('id', conversation.connection_id)
-      .single();
-
-    if (connectionError || !connection) {
-      console.error(`❌ [${requestId}] Connection not found:`, connectionError);
-      return new Response(JSON.stringify({
-        code: 'NOT_FOUND',
-        message: 'Connection not found',
-        requestId
-      }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    console.log(`📡 [${requestId}] Sending to Evolution instance: ${connection.instance_name}`);
-
-    // Preparar payload para Evolution
-    let evolutionPayload: any;
-    let endpoint: string;
-
-    const phoneNumber = contact.phone;
-
-    if (message_type === 'text') {
-      evolutionPayload = {
-        number: phoneNumber,
-        text: content
-      };
-      endpoint = `${connectionSecrets.evolution_url}/message/sendText/${connection.instance_name}`;
-    } else if (message_type === 'image') {
-      evolutionPayload = {
-        number: phoneNumber,
-        mediaMessage: {
-          mediatype: 'image',
-          media: file_url || content,
-          caption: content === file_url ? '' : content
-        }
-      };
-      endpoint = `${connectionSecrets.evolution_url}/message/sendMedia/${connection.instance_name}`;
-    } else if (message_type === 'video') {
-      evolutionPayload = {
-        number: phoneNumber,
-        mediaMessage: {
-          mediatype: 'video',
-          media: file_url || content,
-          caption: content === file_url ? '' : content
-        }
-      };
-      endpoint = `${connectionSecrets.evolution_url}/message/sendMedia/${connection.instance_name}`;
-    } else if (message_type === 'audio') {
-      evolutionPayload = {
-        number: phoneNumber,
-        audioMessage: {
-          audio: file_url || content
-        }
-      };
-      endpoint = `${connectionSecrets.evolution_url}/message/sendWhatsAppAudio/${connection.instance_name}`;
-    } else if (message_type === 'file' || message_type === 'document') {
-      // file/document
-      evolutionPayload = {
-        number: phoneNumber,
-        mediaMessage: {
-          mediatype: 'document',
-          media: file_url || content,
-          fileName: file_name || 'document'
-        }
-      };
-      endpoint = `${connectionSecrets.evolution_url}/message/sendMedia/${connection.instance_name}`;
-    } else {
-      console.error(`❌ [${requestId}] Unsupported message type: ${message_type}`);
-      return new Response(JSON.stringify({
-        code: 'UNSUPPORTED_MESSAGE_TYPE',
-        message: `Message type '${message_type}' is not supported`,
-        requestId
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Insert message into database with "sending" status first
-    console.log(`📝 [${requestId}] Inserting message with "sending" status`);
-    
+    // Create message record in database
     const { data: message, error: messageError } = await supabase
       .from('messages')
       .insert({
-        conversation_id,
-        workspace_id,
-        sender_id,
-        sender_type,
-        content,
-        message_type,
-        file_url,
-        file_name,
+        conversation_id: conversation.id,
+        workspace_id: conversation.workspace_id,
+        content: body.content,
+        message_type: body.message_type,
+        sender_type: body.sender_type,
+        sender_id: body.sender_id,
+        file_url: body.file_url,
+        file_name: body.file_name,
+        mime_type: body.mime_type,
         status: 'sending',
-        origem_resposta: 'manual',
-        metadata: { 
-          sent_via: 'n8n_route', 
+        external_id: requestId, // Usar requestId como external_id
+        metadata: {
           requestId,
-          timestamp: new Date().toISOString()
+          created_at: new Date().toISOString()
         }
       })
       .select()
       .single();
 
-    if (messageError) {
-      console.error(`❌ [${requestId}] Failed to insert message:`, messageError);
+    if (messageError || !message) {
+      console.error(`❌ [${requestId}] Failed to create message:`, messageError);
       return new Response(JSON.stringify({
-        code: 'DATABASE_ERROR',
-        message: 'Failed to save message to database',
-        details: messageError.message,
+        code: 'MESSAGE_CREATION_ERROR',
+        message: 'Failed to create message record',
+        details: messageError?.message,
         requestId
       }), {
         status: 500,
@@ -406,37 +202,45 @@ serve(async (req) => {
       });
     }
 
-    // Route through N8N by calling n8n-send-message function
-    console.log(`🚀 [${requestId}] Routing message through N8N...`);
+    console.log(`💾 [${requestId}] Message created in database:`, { messageId: message.id });
+
+    // REFATORADO: Usar centralizador inteligente com fallback automático
+    console.log(`🚀 [${requestId}] Send message request initiated - ROUTING VIA SMART SENDER`);
     
-    const n8nPayload = {
+    // Preparar payload para o centralizador
+    const senderPayload = {
       messageId: message.id,
-      phoneNumber: contact.phone,
-      content,
-      messageType: message_type,
-      fileUrl: file_url,
-      fileName: file_name
+      phoneNumber: conversation.contact?.phone,
+      content: body.content,
+      messageType: body.message_type || 'text',
+      fileUrl: body.file_url,
+      fileName: body.file_name,
+      evolutionInstance: conversation.connection.instance_name,
+      conversationId: conversation.id,
+      workspaceId: conversation.workspace_id,
+      external_id: message.external_id // Incluir external_id no payload
     };
 
-    const { data: n8nResponse, error: n8nError } = await supabase.functions.invoke('n8n-send-message', {
-      body: n8nPayload,
+    // Chamar centralizador inteligente
+    const { data: senderResult, error: senderError } = await supabase.functions.invoke('message-sender', {
+      body: senderPayload,
       headers: {
-        'x-system-user-id': systemUserId || sender_id,
+        'x-system-user-id': systemUserId || body.sender_id,
         'x-system-user-email': currentUserEmail || systemUserEmailHeader || ''
       }
     });
 
-    if (n8nError) {
-      console.error(`❌ [${requestId}] N8N routing failed:`, n8nError);
+    if (senderError) {
+      console.error(`❌ [${requestId}] Message sender error:`, senderError);
       
-      // Mark message as failed
+      // Atualizar status da mensagem para erro
       await supabase
         .from('messages')
         .update({ 
           status: 'failed',
           metadata: { 
-            error: n8nError.message,
-            sent_via: 'n8n_route_failed',
+            error: senderError.message,
+            sent_via: 'sender_error',
             requestId,
             timestamp: new Date().toISOString()
           }
@@ -444,56 +248,51 @@ serve(async (req) => {
         .eq('id', message.id);
 
       return new Response(JSON.stringify({
-        code: 'N8N_ROUTING_ERROR',
-        message: 'Failed to route message through N8N',
-        details: n8nError.message,
+        code: 'MESSAGE_SENDER_ERROR',
+        message: 'Failed to send message',
+        details: senderError.message,
         requestId
       }), {
-        status: 502,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log(`✅ [${requestId}] Message routed through N8N successfully`);
-    
-    // N8N function will handle updating the message status to 'sent'
-    // Return success with message details
-
-
-    // Atualizar timestamp da conversa
+    // Sucesso - atualizar metadata da mensagem
     await supabase
-      .from('conversations')
+      .from('messages')
       .update({ 
-        updated_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        last_message_at: new Date().toISOString()
+        status: 'sent',
+        metadata: { 
+          sent_via: senderResult.method,
+          fallback_reason: senderResult.fallback || null,
+          requestId,
+          timestamp: new Date().toISOString(),
+          external_response: senderResult.result
+        }
       })
-      .eq('id', conversation_id);
+      .eq('id', message.id);
 
-    console.log(`✅ [${requestId}] Message sent and saved successfully`);
+    console.log(`✅ [${requestId}] Message sent successfully via ${senderResult.method}`);
 
     return new Response(JSON.stringify({
       success: true,
-      message: {
-        id: message.id,
-        conversation_id: message.conversation_id,
-        content: message.content,
-        message_type: message.message_type,
-        status: 'sending', // Will be updated to 'sent' by N8N function
-        created_at: message.created_at
-      },
-      n8nResponse: n8nResponse,
+      message_id: message.id,
+      conversation_id: conversation.id,
+      sent_via: senderResult.method,
+      fallback_reason: senderResult.fallback || null,
       requestId
     }), {
-      status: 201,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error(`❌ [${requestId}] Unexpected error:`, error);
+    console.error(`💥 [${requestId}] Unexpected error in send-message:`, error);
+    
     return new Response(JSON.stringify({
-      code: 'UNEXPECTED_ERROR',
-      message: 'An unexpected error occurred',
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+      details: error.message,
       requestId
     }), {
       status: 500,

@@ -1346,6 +1346,33 @@ export type Database = {
           },
         ]
       }
+      workspace_webhook_secrets: {
+        Row: {
+          created_at: string | null
+          id: string
+          secret_name: string
+          updated_at: string | null
+          webhook_url: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          secret_name: string
+          updated_at?: string | null
+          webhook_url: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          secret_name?: string
+          updated_at?: string | null
+          webhook_url?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       workspace_webhook_settings: {
         Row: {
           created_at: string | null
@@ -1474,6 +1501,14 @@ export type Database = {
       }
       delete_connection_anon: {
         Args: { p_connection_id: string }
+        Returns: undefined
+      }
+      delete_workspace_cascade: {
+        Args: { p_workspace_id: string }
+        Returns: undefined
+      }
+      ensure_master_users_in_all_workspaces: {
+        Args: Record<PropertyKey, never>
         Returns: undefined
       }
       get_current_user_profile: {

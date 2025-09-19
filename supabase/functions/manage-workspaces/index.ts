@@ -160,13 +160,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Prevent updating the reserved workspace ID
-      if (workspaceId === '00000000-0000-0000-0000-000000000000') {
-        return new Response(
-          JSON.stringify({ error: 'Não é possível atualizar o workspace reservado do sistema' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      // No special workspace validation needed - all workspaces are editable
 
       // Update workspace
       const { error: workspaceError } = await supabase
@@ -246,48 +240,15 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Check if workspace has connections
-      const { data: connections, error: connectionsError } = await supabase
-        .from('connections')
-        .select('id')
-        .eq('workspace_id', workspaceId)
-        .limit(1);
-
-      if (connectionsError) {
-        console.error('Error checking connections:', connectionsError);
-        return new Response(
-          JSON.stringify({ error: 'Erro ao verificar conexões' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      if (connections && connections.length > 0) {
-        return new Response(
-          JSON.stringify({ error: 'Não é possível excluir uma empresa que possui conexões ativas' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Delete workspace limits first
-      const { error: limitsError } = await supabase
-        .from('workspace_limits')
-        .delete()
-        .eq('workspace_id', workspaceId);
-
-      if (limitsError) {
-        console.error('Error deleting workspace limits:', limitsError);
-      }
-
-      // Delete workspace
-      const { error: deleteError } = await supabase
-        .from('workspaces')
-        .delete()
-        .eq('id', workspaceId);
+      // Use cascade deletion function to safely delete workspace and all related data
+      const { error: deleteError } = await supabase.rpc('delete_workspace_cascade', {
+        p_workspace_id: workspaceId
+      });
 
       if (deleteError) {
         console.error('Error deleting workspace:', deleteError);
         return new Response(
-          JSON.stringify({ error: 'Falha ao excluir workspace' }),
+          JSON.stringify({ error: 'Falha ao excluir workspace e dados relacionados' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

@@ -262,8 +262,8 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir a empresa "{workspaceToDelete?.name}"? 
-              Esta ação não pode ser desfeita e todos os dados relacionados serão perdidos.
+              ⚠️ Tem certeza que deseja excluir a empresa "{workspaceToDelete?.name}"?<br/>
+              Esta ação não pode ser desfeita e irá deletar permanentemente TODOS os dados relacionados: conversas, contatos, conexões, configurações, tags, etc.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

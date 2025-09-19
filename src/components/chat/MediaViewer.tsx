@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Image, Music, Video } from 'lucide-react';
+import { Download, FileText, AlertCircle, Loader2, Eye } from 'lucide-react';
 import { AudioPlayer } from './AudioPlayer';
 import { ImageModal } from './ImageModal';
+import { PdfModal } from './PdfModal';
+import { VideoModal } from './VideoModal';
 
 interface MediaViewerProps {
   fileUrl: string;
@@ -18,122 +20,180 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   className = ''
 }) => {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  // Debug logging
-  console.log('MediaViewer debug:', { fileUrl, fileName, messageType });
-
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.error('Erro ao carregar mídia:', fileUrl);
-    console.log('Tentando reprocessar arquivo corrompido...');
-    e.currentTarget.style.display = 'none';
-    // Mostrar fallback
-    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-    if (fallback) {
-      fallback.style.display = 'block';
-    }
-  };
-
-  // Simplificar validação - usar URLs diretas
-  const getValidImageUrl = (url: string) => {
-    if (!url) return null;
-    
-    // URLs do storage Supabase sempre funcionam
-    if (url.includes('supabase.co/storage/v1/object/public')) {
-      return url;
-    }
-    
-    // URLs blob também são válidas
-    if (url.startsWith('blob:')) {
-      return url;
-    }
-    
-    // Outras URLs externas
-    return url;
-  };
-
-  // Força renderização como imagem se o arquivo terminar com extensões de imagem
-  const isImageFile = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
-  const effectiveMessageType = (messageType === 'document' && isImageFile) ? 'image' : messageType;
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   
-  // Verifica se URL é válida antes de renderizar
-  const validImageUrl = getValidImageUrl(fileUrl);
-  
+  // Log para debug
+  console.log('🟡 MediaViewer render:', { 
+    fileUrl, 
+    fileName, 
+    messageType,
+    detectionsAfterPriority: {
+      isAudioFile: messageType === 'audio' || /\.(mp3|wav|ogg|aac|flac|webm|m4a|opus)$/i.test(fileName || fileUrl || ''),
+      isPdfFile: messageType === 'document' || /\.pdf$/i.test(fileName || fileUrl || ''),
+      isImageFile: messageType === 'image',
+      isVideoFile: messageType === 'video'
+    }
+  });
+
+  // Detectar tipos de arquivos - PRIORIZAR messageType
+  const isAudioFile = messageType === 'audio' ||
+                      (messageType !== 'document' && messageType !== 'image' && messageType !== 'video' && 
+                       /\.(mp3|wav|ogg|aac|flac|webm|m4a|opus)$/i.test(fileName || fileUrl || ''));
+                       
+  const isPdfFile = messageType === 'document' || 
+                    (messageType !== 'audio' && messageType !== 'image' && messageType !== 'video' &&
+                     (/\.pdf$/i.test(fileName || '') || /\.pdf$/i.test(fileUrl) || 
+                      fileName?.toLowerCase().includes('pdf') || fileUrl?.toLowerCase().includes('pdf')));
+                      
+  const isImageFile = messageType === 'image' ||
+                      (messageType !== 'audio' && messageType !== 'document' && messageType !== 'video' &&
+                       /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || fileUrl || ''));
+                       
+  const isVideoFile = messageType === 'video' ||
+                      (messageType !== 'audio' && messageType !== 'document' && messageType !== 'image' &&
+                       /\.(mp4|avi|mov|wmv|flv|webm)$/i.test(fileName || fileUrl || ''));
+                       
+  const isExcelFile = /\.(xlsx|xls)$/i.test(fileName || '') || /\.(xlsx|xls)$/i.test(fileUrl);
+  const isWordFile = /\.(docx|doc)$/i.test(fileName || '') || /\.(docx|doc)$/i.test(fileUrl);
+  const isPowerPointFile = /\.(pptx|ppt)$/i.test(fileName || '') || /\.(pptx|ppt)$/i.test(fileUrl);
+
+  // Log específico para detecções
+  console.log('🔍 DETECÇÃO FINAL:', {
+    fileName,
+    fileUrl,
+    messageType,
+    finalDetections: {
+      isAudioFile,
+      isPdfFile,
+      isImageFile,
+      isVideoFile
+    },
+    priorityUsed: 'messageType tem prioridade sobre extensão'
+  });
+
   const handleDownload = () => {
     const link = document.createElement('a');
-    link.href = validImageUrl || fileUrl;
+    link.href = fileUrl;
     link.download = fileName || 'download';
     link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
-  
-  console.log('MediaViewer renderização:', {
-    originalType: messageType,
-    effectiveType: effectiveMessageType,
-    fileName,
-    fileUrl,
-    isImageFile,
-    validImageUrl
-  });
 
-  const renderMediaContent = () => {
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    console.error('Image load error:', fileUrl);
+    setImageError('Erro ao carregar imagem');
+    setIsLoading(false);
+  }, [fileUrl]);
 
-    switch (effectiveMessageType) {
-      case 'image':
-        // Se URL é inválida, mostra erro amigável
-        if (!validImageUrl) {
-          return (
-            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] border border-destructive/20">
-              <Image className="h-8 w-8 text-destructive" />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-destructive">
-                  {fileName || 'Imagem'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Arquivo não disponível
-                </p>
+  // PRIMEIRA VERIFICAÇÃO: PDF
+  if (isPdfFile) {
+    console.log('🔴 RENDERIZANDO PDF:', { fileName, fileUrl, messageType });
+    return (
+      <div className={className}>
+        <div className="relative group">
+          <div 
+            className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-red-300" 
+            onClick={() => setIsPdfModalOpen(true)}
+          >
+            <div className="relative">
+              <FileText className="h-12 w-12 text-red-600" />
+              <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs px-1 rounded font-medium">
+                PDF
               </div>
             </div>
-          );
-        }
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">
+                {fileName || 'Documento PDF'}
+              </p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                Clique para visualizar
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDownload();
+            }}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </div>
+        <PdfModal
+          isOpen={isPdfModalOpen}
+          onClose={() => setIsPdfModalOpen(false)}
+          pdfUrl={fileUrl}
+          fileName={fileName}
+        />
+      </div>
+    );
+  }
 
-        return (
-          <div className="relative group">
+  // SEGUNDA VERIFICAÇÃO: IMAGEM
+  if (isImageFile || messageType === 'image') {
+    return (
+      <div className={className}>
+        <div className="relative group">
+          {isLoading && !hasLoaded && (
+            <div className="flex items-center justify-center max-w-[300px] max-h-[200px] rounded-lg bg-muted/20 border border-dashed border-muted-foreground/20">
+              <div className="flex flex-col items-center gap-2 p-6">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Carregando imagem...</p>
+              </div>
+            </div>
+          )}
+          
+          {!imageError && (
             <img
-              src={validImageUrl}
+              src={fileUrl}
               alt={fileName || 'Imagem'}
-              className="max-w-[300px] max-h-[200px] rounded-lg object-cover cursor-pointer"
+              className={`max-w-[300px] max-h-[200px] rounded-lg object-cover cursor-pointer transition-opacity duration-200 ${
+                isLoading && !hasLoaded ? 'opacity-0 absolute' : 'opacity-100'
+              }`}
               onClick={() => setIsImageModalOpen(true)}
-              onError={(e) => {
-                console.error('Erro ao carregar imagem:', validImageUrl);
-                console.error('Tentando recarregar sem crossOrigin...');
-                e.currentTarget.removeAttribute('crossorigin');
-                // Força reload da imagem
-                const src = e.currentTarget.src;
-                e.currentTarget.src = '';
-                setTimeout(() => {
-                  e.currentTarget.src = src + '?reload=' + Date.now();
-                }, 100);
-                handleImageError(e);
+              onError={handleImageError}
+              onLoad={() => {
+                setImageError(null);
+                setIsLoading(false);
+                setHasLoaded(true);
               }}
-              onLoad={() => console.log('Imagem carregada com sucesso:', validImageUrl)}
+              onLoadStart={() => {
+                setIsLoading(true);
+                setHasLoaded(false);
+              }}
               loading="lazy"
             />
+          )}
+          
+          {imageError && (
             <div 
-              className="hidden flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors" 
+              className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border border-destructive/20"
               onClick={handleDownload}
             >
-              <Image className="h-8 w-8 text-muted-foreground" />
+              <AlertCircle className="h-8 w-8 text-destructive flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">
                   {fileName || 'Imagem'}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-destructive">
                   Erro ao carregar - Clique para baixar
                 </p>
               </div>
-              <Download className="h-4 w-4 text-muted-foreground" />
+              <Download className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </div>
+          )}
+          
+          {hasLoaded && !imageError && (
             <Button
               size="sm"
               variant="secondary"
@@ -142,108 +202,166 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             >
               <Download className="h-4 w-4" />
             </Button>
-          </div>
-        );
+          )}
+        </div>
+        
+        <ImageModal
+          isOpen={isImageModalOpen}
+          onClose={() => setIsImageModalOpen(false)}
+          imageUrl={fileUrl}
+          fileName={fileName}
+        />
+      </div>
+    );
+  }
 
-      case 'video':
-        return (
-          <div className="relative group max-w-[300px]">
-            <video
-              src={validImageUrl || fileUrl}
-              controls
-              className="w-full rounded-lg"
-              style={{ maxHeight: '200px' }}
-            >
-              Seu navegador não suporta o elemento de vídeo.
-            </video>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleDownload}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-          </div>
-        );
+  // TERCEIRA VERIFICAÇÃO: VÍDEO
+  if (isVideoFile || messageType === 'video') {
+    return (
+      <div className={className}>
+        <div className="relative group max-w-[300px]">
+          <video
+            src={fileUrl}
+            controls
+            className="w-full rounded-lg cursor-pointer"
+            style={{ maxHeight: '200px' }}
+            onClick={() => setIsVideoModalOpen(true)}
+          >
+            Seu navegador não suporta o elemento de vídeo.
+          </video>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDownload();
+            }}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <VideoModal
+          isOpen={isVideoModalOpen}
+          onClose={() => setIsVideoModalOpen(false)}
+          videoUrl={fileUrl}
+          fileName={fileName}
+        />
+      </div>
+    );
+  }
 
-      case 'audio':
-        return (
-          <AudioPlayer
-            audioUrl={validImageUrl || fileUrl}
-            fileName={fileName}
-            onDownload={handleDownload}
-          />
-        );
+  // QUARTA VERIFICAÇÃO: ÁUDIO
+  if (isAudioFile || messageType === 'audio') {
+    return (
+      <div className={className}>
+        <AudioPlayer
+          audioUrl={fileUrl}
+          fileName={fileName}
+          onDownload={handleDownload}
+        />
+      </div>
+    );
+  }
 
-      case 'document':
-        return (
-          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors" onClick={handleDownload}>
-            <FileText className="h-8 w-8 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">
-                {fileName || 'Documento'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Clique para baixar
-              </p>
+  // QUINTA VERIFICAÇÃO: OUTROS ARQUIVOS
+  if (isExcelFile) {
+    return (
+      <div className={className}>
+        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-green-300" 
+             onClick={handleDownload}>
+          <div className="relative">
+            <FileText className="h-12 w-12 text-green-600" />
+            <div className="absolute -top-1 -right-1 bg-green-600 text-white text-xs px-1 rounded font-medium">
+              XLS
             </div>
-            <Download className="h-4 w-4 text-muted-foreground" />
           </div>
-        );
-
-      case 'sticker':
-        return (
-          <div className="relative group">
-            <img
-              src={validImageUrl || fileUrl}
-              alt="Sticker"
-              className="max-w-[150px] max-h-[150px] rounded-lg object-cover"
-              onError={(e) => {
-                console.error('Erro ao carregar sticker:', validImageUrl || fileUrl);
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleDownload}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">
+              {fileName || 'Planilha Excel'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Clique para baixar
+            </p>
           </div>
-        );
+          <Download className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
-      default:
-        return (
-          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px]">
-            <FileText className="h-8 w-8 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm truncate">
-                {fileName || 'Arquivo'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Arquivo de mídia
-              </p>
+  if (isWordFile) {
+    return (
+      <div className={className}>
+        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-primary/30" 
+             onClick={handleDownload}>
+          <div className="relative">
+            <FileText className="h-12 w-12 text-primary" />
+            <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs px-1 rounded font-medium">
+              DOC
             </div>
-            <Button size="sm" variant="ghost" onClick={handleDownload}>
-              <Download className="h-4 w-4" />
-            </Button>
           </div>
-        );
-    }
-  };
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">
+              {fileName || 'Documento Word'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Clique para baixar
+            </p>
+          </div>
+          <Download className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
+  if (isPowerPointFile) {
+    return (
+      <div className={className}>
+        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-orange-300" 
+             onClick={handleDownload}>
+          <div className="relative">
+            <FileText className="h-12 w-12 text-orange-600" />
+            <div className="absolute -top-1 -right-1 bg-orange-600 text-white text-xs px-1 rounded font-medium">
+              PPT
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">
+              {fileName || 'Apresentação PowerPoint'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Clique para baixar
+            </p>
+          </div>
+          <Download className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  // PADRÃO: ARQUIVO GENÉRICO
   return (
     <div className={className}>
-      {renderMediaContent()}
-      <ImageModal
-        isOpen={isImageModalOpen}
-        onClose={() => setIsImageModalOpen(false)}
-        imageUrl={validImageUrl || fileUrl}
-        fileName={fileName}
-      />
+      <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-[300px] cursor-pointer hover:bg-muted/80 transition-colors border-2 border-dashed border-gray-300" 
+           onClick={handleDownload}>
+        <div className="relative">
+          <FileText className="h-12 w-12 text-gray-600" />
+          <div className="absolute -top-1 -right-1 bg-gray-600 text-white text-xs px-1 rounded font-medium">
+            FILE
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">
+            {fileName || 'Arquivo'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Clique para baixar
+          </p>
+        </div>
+        <Download className="h-4 w-4 text-muted-foreground" />
+      </div>
     </div>
   );
 };

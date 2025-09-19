@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -22,296 +21,214 @@ serve(async (req) => {
       requestBodyCache = {};
     }
 
-    const { messageId, phoneNumber, content, messageType = 'text', fileUrl, fileName, mimeType: mimeTypeFromBody, evolutionInstance: evolutionInstanceFromBody } = requestBodyCache;
+    const { 
+      messageId, 
+      phoneNumber, 
+      content, 
+      messageType = 'text', 
+      fileUrl, 
+      fileName, 
+      mimeType: mimeTypeFromBody, 
+      evolutionInstance: evolutionInstanceFromBody,
+      conversationId,
+      workspaceId,
+      external_id 
+    } = requestBodyCache;
+    
     receivedMessageId = messageId;
-    console.log('N8N Send Message - Dados recebidos:', { messageId, phoneNumber, content, messageType, fileUrl, fileName });
+    console.log(`📨 [${messageId}] N8N Send Message - Dados recebidos:`, { 
+      messageId, 
+      phoneNumber: phoneNumber?.substring(0, 8) + '***', 
+      content: content?.substring(0, 50), 
+      messageType, 
+      hasFile: !!fileUrl 
+    });
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Resolver workspace se não fornecido
+    let finalWorkspaceId = workspaceId;
+    if (!finalWorkspaceId && conversationId) {
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('workspace_id')
+        .eq('id', conversationId)
+        .single();
+      
+      finalWorkspaceId = conversation?.workspace_id;
+    }
+
     // Buscar dados da mensagem para ter contexto completo (incluindo sender_id)
-    let conversationId: string | null = null;
+    let conversationIdResolved: string | null = conversationId || null;
     let contactName: string | null = null;
     let contactEmail: string | null = null;
-    let contactPhone: string | null = null;
-    let evolutionInstance: string | null = null;
+    let contactPhone: string | null = phoneNumber || null;
+    let evolutionInstance: string | null = evolutionInstanceFromBody || null;
     let senderId: string | null = null;
 
-    const { data: msgRow, error: msgErr } = await supabase
-      .from('messages')
-      .select('conversation_id, sender_id')
-      .eq('id', messageId)
-      .maybeSingle();
-
-    if (msgRow) {
-      senderId = msgRow.sender_id;
-    }
-
-    // Log se senderId está vazio para debugging
-    if (!senderId) {
-      console.log('⚠️ senderId is empty, message might fail instance resolution');
-    }
-
-    if (msgRow?.conversation_id) {
-      conversationId = msgRow.conversation_id as string;
-
-      const { data: convRow } = await supabase
-        .from('conversations')
-        .select('contact_id, evolution_instance')
-        .eq('id', conversationId)
-        .maybeSingle();
-
-      evolutionInstance = (convRow?.evolution_instance as string | null) ?? null;
-
-      const contactId = convRow?.contact_id as string | undefined;
-      if (contactId) {
-        const { data: contactRow } = await supabase
-          .from('contacts')
-          .select('name,email,phone')
-          .eq('id', contactId)
-          .maybeSingle();
-        contactName = contactRow?.name ?? null;
-        contactEmail = contactRow?.email ?? null;
-        contactPhone = contactRow?.phone ?? null;
-      }
-    } else if (msgErr) {
-      console.warn('Não foi possível carregar a conversa da mensagem:', msgErr.message);
-    }
-
-    // Resolver evolutionInstance - Nova hierarquia (usuário específico -> org default)
-    let resolvedEvolutionInstance: string | null = null;
-    let instanceSource = 'not_found';
-    
-    // Prioridade 1: Body (explicit override)
-    if (evolutionInstanceFromBody) {
-      resolvedEvolutionInstance = evolutionInstanceFromBody;
-      instanceSource = 'body';
-    }
-    
-    // Prioridade 2: última mensagem inbound (mais atual)
-    if (!resolvedEvolutionInstance && conversationId) {
-      const { data: lastInbound } = await supabase
+    if (messageId) {
+      const { data: msgRow, error: msgErr } = await supabase
         .from('messages')
-        .select('metadata, created_at')
-        .eq('conversation_id', conversationId)
-        .eq('sender_type', 'contact')
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .select('conversation_id, sender_id')
+        .eq('id', messageId)
         .maybeSingle();
-      const metaInst = (lastInbound as any)?.metadata?.evolution_instance;
-      if (metaInst) {
-        resolvedEvolutionInstance = String(metaInst);
-        instanceSource = 'lastInbound';
+
+      if (msgRow) {
+        senderId = msgRow.sender_id;
+        conversationIdResolved = msgRow.conversation_id;
       }
     }
-    
-    // Prioridade 3: conversa
-    if (!resolvedEvolutionInstance && evolutionInstance) {
-      resolvedEvolutionInstance = evolutionInstance;
-      instanceSource = 'conversation';
-    }
-    
-    // Prioridade 4: user assignments (instância específica do usuário)
-    if (!resolvedEvolutionInstance && senderId) {
-      // Primeiro tentar instance_user_assignments com is_default=true
-      const { data: userDefaultAssignment } = await supabase
-        .from('instance_user_assignments')
-        .select('instance')
-        .eq('user_id', senderId)
-        .eq('is_default', true)
-        .maybeSingle();
+
+    // Buscar informações do contato e conversação se necessário
+    if (conversationIdResolved && !contactPhone) {
+      console.log(`🔍 [${messageId}] Buscando informações de conversa: ${conversationIdResolved}`);
       
-      if (userDefaultAssignment?.instance) {
-        resolvedEvolutionInstance = userDefaultAssignment.instance;
-        instanceSource = 'userAssignmentDefault';
-        console.log('🔄 Usando instância padrão do usuário (assignments):', {
-          userId: senderId?.substring(0, 8) + '***',
-          instance: resolvedEvolutionInstance
-        });
-      } else {
-        // Fallback para default_channel do system_users
-        const { data: userData } = await supabase
-          .from('system_users')
-          .select('default_channel')
-          .eq('id', senderId)
-          .eq('status', 'active')
-          .maybeSingle();
-        
-        if (userData?.default_channel) {
-          const { data: channelData } = await supabase
-            .from('channels')
-            .select('instance')
-            .eq('id', userData.default_channel)
-            .maybeSingle();
-          
-          if (channelData?.instance) {
-            resolvedEvolutionInstance = channelData.instance;
-            instanceSource = 'userDefaultChannel';
-            console.log('🔄 Usando instância do default_channel do usuário:', {
-              userId: senderId?.substring(0, 8) + '***',
-              instance: resolvedEvolutionInstance
-            });
-          }
-        }
-      }
-    }
-    
-    // Prioridade 5: org default (instância padrão da organização)
-    if (!resolvedEvolutionInstance && conversationId) {
-      const { data: convData } = await supabase
+      const { data: convData, error: convErr } = await supabase
         .from('conversations')
-        .select('org_id')
-        .eq('id', conversationId)
-        .maybeSingle();
-      
-      if (convData?.org_id) {
-        const { data: orgSettings } = await supabase
-          .from('org_messaging_settings')
-          .select('default_instance')
-          .eq('org_id', convData.org_id)
-          .maybeSingle();
-        
-        if (orgSettings?.default_instance) {
-          resolvedEvolutionInstance = orgSettings.default_instance;
-          instanceSource = 'orgDefault';
-        }
+        .select(`
+          id,
+          workspace_id,
+          contact:contacts(phone, name, email),
+          connection:connections(instance_name)
+        `)
+        .eq('id', conversationIdResolved)
+        .single();
+
+      if (convData) {
+        contactPhone = convData.contact?.phone;
+        contactName = convData.contact?.name;
+        contactEmail = convData.contact?.email;
+        evolutionInstance = convData.connection?.instance_name;
+        finalWorkspaceId = convData.workspace_id;
       }
     }
-    
-    // Se não conseguiu resolver, retornar erro
-    if (!resolvedEvolutionInstance) {
+
+    if (!contactPhone) {
+      if (!phoneNumber) {
+        console.error(`❌ [${messageId}] senderId is empty, message might fail instance resolution`);
+      }
+      contactPhone = phoneNumber;
+    }
+
+    if (!evolutionInstance) {
+      console.error(`❌ [${messageId}] evolutionInstance is empty, message might fail`);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Nenhuma instância Evolution encontrada. Configure uma instância padrão ou atribua uma instância ao usuário.'
+        error: 'Could not resolve evolutionInstance',
+        message: messageId
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    
-    // Atualizar conversa com a instância resolvida (sempre que diferente da atual ou se estava vazia)
-    if (resolvedEvolutionInstance && conversationId && (resolvedEvolutionInstance !== evolutionInstance || !evolutionInstance)) {
-      console.log('🔄 Atualizando evolution_instance da conversa:', {
-        conversationId: conversationId.substring(0, 8) + '***',
-        old: evolutionInstance || 'EMPTY',
-        new: resolvedEvolutionInstance
+
+    const finalEvolutionInstance = evolutionInstance;
+
+    // Buscar configurações da instância Evolution
+    const { data: instanceConfig, error: instanceErr } = await supabase
+      .from('evolution_instance_tokens')
+      .select('*')
+      .eq('instance_name', finalEvolutionInstance)
+      .maybeSingle();
+
+    if (!instanceConfig) {
+      console.error(`❌ [${messageId}] Instância não encontrada:`, finalEvolutionInstance);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Instância não encontrada: ${finalEvolutionInstance}`,
+        message: messageId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-      
-      await supabase
-        .from('conversations')
-        .update({ evolution_instance: resolvedEvolutionInstance })
-        .eq('id', conversationId);
     }
+
+    // MELHORADO: Verificar se workspace tem webhook N8N configurado antes de tentar
+    if (!finalWorkspaceId) {
+      console.error(`❌ [${messageId}] Could not resolve workspace_id`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Could not resolve workspace_id',
+        message: messageId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${finalWorkspaceId}`;
     
-    console.log('Resolved Evolution Instance:', { 
-      resolvedEvolutionInstance: resolvedEvolutionInstance || 'EMPTY', 
-      source: instanceSource,
-      conversationId: conversationId?.substring(0, 8) + '***'
-    });
+    const { data: webhookData, error: webhookError } = await supabase
+      .from('workspace_webhook_secrets')
+      .select('webhook_url')
+      .eq('workspace_id', finalWorkspaceId)
+      .eq('secret_name', workspaceWebhookSecretName)
+      .maybeSingle();
+
+    let workspaceWebhookUrl: string | null = null;
     
-    // Alert se instância não resolvida
-    if (!resolvedEvolutionInstance) {
-      console.warn('ALERTA: Evolution instance não resolvida! Mensagem pode ser enviada para instância incorreta.');
+    if (!webhookError && webhookData?.webhook_url) {
+      workspaceWebhookUrl = webhookData.webhook_url;
+      console.log(`📤 [${messageId}] Found workspace webhook for N8N`);
+    } else {
+      console.log(`⚠️ [${messageId}] No workspace webhook configured - N8N unavailable`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'N8N webhook not configured for workspace',
+        message: messageId
+      }), {
+        status: 424,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Resolver destino priorizando o contato da conversa
-    const normalizePhone = (p?: string | null): string | undefined => {
-      if (!p) return undefined;
-      const digits = String(p).replace(/\D/g, '');
-      return digits.length ? digits : undefined;
-    };
-
-    let resolvedRemoteJid: string | undefined;
-    if (contactPhone) {
-      if (contactPhone.includes('@')) resolvedRemoteJid = contactPhone;
-      else {
-        const digits = normalizePhone(contactPhone);
-        if (digits) resolvedRemoteJid = `${digits}@s.whatsapp.net`;
-      }
-    } else if (phoneNumber) {
-      if (String(phoneNumber).includes('@')) resolvedRemoteJid = String(phoneNumber);
-      else {
-        const digits = normalizePhone(String(phoneNumber));
-        if (digits) resolvedRemoteJid = `${digits}@s.whatsapp.net`;
-      }
-    }
-
-    if (!resolvedRemoteJid) {
-      throw new Error('Destino remoto não resolvido: sem phone do contato e sem phoneNumber no body');
-    }
-
-    const remoteJid = resolvedRemoteJid;
-
-    // Inferir mimetype se não vier do frontend
-    const inferMime = (url?: string, name?: string): string | undefined => {
-      const target = (name ?? url ?? '').toLowerCase();
-      if (target.endsWith('.jpg') || target.endsWith('.jpeg')) return 'image/jpeg';
-      if (target.endsWith('.png')) return 'image/png';
-      if (target.endsWith('.gif')) return 'image/gif';
-      if (target.endsWith('.webp')) return 'image/webp';
-      if (target.endsWith('.mp4')) return 'video/mp4';
-      if (target.endsWith('.mp3')) return 'audio/mpeg';
-      if (target.endsWith('.ogg')) return 'audio/ogg';
-      if (target.endsWith('.pdf')) return 'application/pdf';
-      return undefined;
-    };
-
-    const resolvedMime = mimeTypeFromBody ?? inferMime(fileUrl, fileName);
-
-    // Montar "message" e "messageType" no padrão Evolution
+    // Preparar payload para N8N baseado no tipo de mensagem
     let evolutionMessage: any = {};
     let evolutionMessageType = 'conversation';
 
-    if (messageType === 'image') {
+    if (messageType === 'text' || !fileUrl) {
+      evolutionMessage = {
+        conversation: content ?? ''
+      };
+      evolutionMessageType = 'conversation';
+    } else if (messageType === 'image') {
+      evolutionMessageType = 'imageMessage';
       evolutionMessage = {
         imageMessage: {
           url: fileUrl,
-          mimetype: resolvedMime,
-          fileName: fileName,
-          caption: content && content !== '[IMAGE]' ? content : undefined,
+          caption: content || '',
+          fileName: fileName || 'image.jpg'
         }
       };
-      evolutionMessageType = 'imageMessage';
     } else if (messageType === 'video') {
+      evolutionMessageType = 'videoMessage';
       evolutionMessage = {
         videoMessage: {
           url: fileUrl,
-          mimetype: resolvedMime,
-          fileName: fileName,
-          caption: content && content !== '[VIDEO]' ? content : undefined,
+          caption: content || '',
+          fileName: fileName || 'video.mp4'
         }
       };
-      evolutionMessageType = 'videoMessage';
     } else if (messageType === 'audio') {
+      evolutionMessageType = 'audioMessage';
       evolutionMessage = {
         audioMessage: {
           url: fileUrl,
-          mimetype: resolvedMime,
-          fileName: fileName,
+          fileName: fileName || 'audio.ogg'
         }
       };
-      evolutionMessageType = 'audioMessage';
-    } else if (messageType === 'document') {
+    } else if (messageType === 'document' || messageType === 'file') {
+      evolutionMessageType = 'documentMessage';
       evolutionMessage = {
         documentMessage: {
           url: fileUrl,
-          mimetype: resolvedMime,
-          fileName: fileName,
-          caption: content && content !== '[DOCUMENT]' ? content : undefined,
+          caption: content || '',
+          fileName: fileName || 'document'
         }
       };
-      evolutionMessageType = 'documentMessage';
-    } else if (messageType === 'sticker') {
-      evolutionMessage = {
-        stickerMessage: {
-          url: fileUrl,
-          mimetype: resolvedMime,
-          fileName: fileName,
-        }
-      };
-      evolutionMessageType = 'stickerMessage';
     } else {
       evolutionMessage = { conversation: content ?? '' };
       evolutionMessageType = 'conversation';
@@ -319,150 +236,92 @@ serve(async (req) => {
 
     const n8nPayload = {
       event: 'send.message',
-      instance: resolvedEvolutionInstance || undefined,
+      instance: finalEvolutionInstance,
+      external_id: external_id || messageId, // Usar external_id se fornecido, senão messageId
       data: {
         key: {
-          remoteJid,
+          remoteJid: `${contactPhone}@s.whatsapp.net`,
           fromMe: true,
-          id: messageId,
+          id: external_id || messageId // Usar external_id como ID também
         },
-        pushName: contactName ?? '',
-        status: 'PENDING',
         message: evolutionMessage,
-        contextInfo: null,
         messageType: evolutionMessageType,
-        messageTimestamp: Math.floor(Date.now() / 1000),
-        instanceId: resolvedEvolutionInstance || null,
-        source: 'crm',
+        messageTimestamp: Date.now()
       },
+      destination: workspaceWebhookUrl,
       date_time: new Date().toISOString(),
-      sender: remoteJid,
-      server_url: Deno.env.get('EVOLUTION_API_URL') ?? undefined,
-      apikey: Deno.env.get('EVOLUTION_API_KEY') ?? undefined,
-
-      // Metadados adicionais úteis e compatibilidade retro
-      meta: {
-        conversationId: conversationId ?? undefined,
-        contactEmail: contactEmail ?? undefined,
-        evolution_instance: resolvedEvolutionInstance ?? undefined,
-      },
+      sender: contactPhone,
+      server_url: instanceConfig.evolution_url,
+      apikey: instanceConfig.token
     };
 
-    // Chamar webhook do N8N
-    const webhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
-    if (!webhookUrl) {
-      console.error('❌ N8N_WEBHOOK_URL não configurada - tentando fallback para Evolution direto');
-      
-      // Fallback: tentar enviar via send-evolution-message com evolutionInstance resolvida
-      try {
-        const fallbackResult = await supabase.functions.invoke('send-evolution-message', {
-          body: { ...requestBodyCache, evolutionInstance: resolvedEvolutionInstance }
-        });
-        
-        if (fallbackResult.error) {
-          throw new Error(`Fallback Evolution API failed: ${fallbackResult.error.message}`);
-        }
-        
-        console.log('✅ Mensagem enviada via fallback Evolution API');
-        return new Response(JSON.stringify({
-          success: true,
-          message: 'Mensagem enviada via fallback Evolution API',
-          data: { messageId, status: 'sent', via: 'evolution_fallback' }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch (fallbackError) {
-        throw new Error(`N8N não configurado e fallback falhou: ${fallbackError.message}`);
-      }
-    }
-    
-    if (webhookUrl.includes('/test/')) {
-      console.warn('⚠️ N8N_WEBHOOK_URL usando Test URL - considere usar Production URL');
-    }
+    console.log(`📡 [${messageId}] Enviando para N8N workspace webhook`);
 
-    // Anexar destino ao payload para compatibilidade com Evolution
-    (n8nPayload as any).destination = webhookUrl;
-
-    console.log('Enviando para N8N (payload Evolution):', n8nPayload);
-
-    const n8nResponse = await fetch(webhookUrl, {
+    // Chamar N8N com timeout e detecção de falhas melhorada
+    const n8nResponse = await fetch(workspaceWebhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify(n8nPayload),
+      signal: AbortSignal.timeout(15000) // 15 segundos timeout
     });
 
     const responseText = await n8nResponse.text();
-    let responseJson: any = null;
-    try {
-      responseJson = JSON.parse(responseText);
-    } catch (_) {
-      // resposta não é JSON; manter texto bruto
-    }
-
+    
+    // Verificação melhorada de sucesso do N8N
     if (!n8nResponse.ok) {
-      throw new Error(`N8N webhook error ${n8nResponse.status}: ${responseText}`);
+      console.error(`❌ [${messageId}] N8N webhook failed (${n8nResponse.status}):`, responseText);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `N8N webhook failed with status ${n8nResponse.status}`,
+        details: responseText,
+        message: messageId
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Atualizar status da mensagem baseado na resposta do N8N
-    const updateData: any = { status: 'sent' };
-
-    // Tentar extrair um possível ID externo
-    const extId = responseJson?.external_id || responseJson?.id || responseJson?.data?.id;
-    if (extId) updateData.external_id = String(extId);
-
-    updateData.metadata = { n8n_response: responseJson ?? responseText, evolution_instance: resolvedEvolutionInstance ?? undefined };
-
-    const { error: updateError } = await supabase
-      .from('messages')
-      .update(updateData)
-      .eq('id', messageId);
-
-    if (updateError) {
-      console.error('Erro ao atualizar mensagem:', updateError);
+    // Verificar se a resposta contém erro mesmo com status 200
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+      if (responseData.error || responseData.success === false) {
+        console.error(`❌ [${messageId}] N8N returned error in response:`, responseData);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'N8N processing failed',
+          details: responseData,
+          message: messageId
+        }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } catch (parseError) {
+      // Se não conseguir fazer parse, assumir que é texto simples e sucesso
+      responseData = { response: responseText };
     }
+
+    console.log(`✅ [${messageId}] N8N webhook executado com sucesso`);
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Mensagem processada via N8N',
-      data: {
-        messageId,
-        status: 'sent',
-        via: 'n8n',
-        response: responseJson ?? responseText
-      }
+      method: 'n8n',
+      message: messageId,
+      response: responseData
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('Erro no N8N Send Message:', error);
-    
-    // Marcar mensagem como falha
-    try {
-      if (receivedMessageId) {
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
-        
-        await supabase
-          .from('messages')
-          .update({ 
-            status: 'failed',
-            metadata: { 
-              error: String((error as any)?.message ?? error),
-              error_stack: String((error as any)?.stack ?? '')
-            }
-          })
-          .eq('id', receivedMessageId);
-      }
-    } catch (updateError) {
-      console.error('Erro ao marcar mensagem como falha:', updateError);
-    }
-    
+    console.error(`❌ [${receivedMessageId}] Erro no N8N Send Message:`, error);
     return new Response(JSON.stringify({
       success: false,
-      error: (error as any)?.message ?? String(error)
+      error: 'Internal server error',
+      details: error.message,
+      message: receivedMessageId
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

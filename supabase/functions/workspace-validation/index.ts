@@ -22,17 +22,6 @@ serve(async (req) => {
       );
     }
 
-    // Validate workspace_id is not the deprecated UUID-zero
-    if (workspaceId === '00000000-0000-0000-0000-000000000000') {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid workspace_id - UUID-zero is deprecated',
-          action: 'migrate_to_real_workspace'
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     

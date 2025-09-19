@@ -5,8 +5,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User, X } from "lucide-react";
+import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ProfileImageDebug } from "@/components/debug/ProfileImageDebug";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +16,6 @@ import { format } from "date-fns";
 import { DeletarTicketModal } from "@/components/modals/DeletarTicketModal";
 import { useToast } from "@/components/ui/use-toast";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { SelectTagModal } from "@/components/modals/SelectTagModal";
 
 interface Contact {
   id: string;
@@ -43,14 +43,14 @@ export function CRMContatos() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(false);
-  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
-  const [selectedContactForTag, setSelectedContactForTag] = useState<string | null>(null);
+  const [showDebugModal, setShowDebugModal] = useState(false);
+  const [debugContact, setDebugContact] = useState<Contact | null>(null);
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
   
   const { tags } = useTags();
   const { toast } = useToast();
 
-  // Fetch all contacts from workspace
+  // Fetch contacts directly from contacts table
   const fetchContacts = async () => {
     try {
       setIsLoading(true);
@@ -61,7 +61,7 @@ export function CRMContatos() {
         return;
       }
 
-      // Get all contact details filtered by workspace
+      // Get all contacts from the workspace
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('*')
@@ -125,33 +125,34 @@ export function CRMContatos() {
     fetchContacts();
   }, [selectedWorkspace]);
 
-  // Real-time subscription for new contacts
+  // Real-time subscription for contacts changes
   useEffect(() => {
+    if (!selectedWorkspace) return;
+
     const channel = supabase
-      .channel('contacts-realtime')
+      .channel('contacts-changes')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'contacts'
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
         },
-        (payload) => {
-          // Add new contact to the list if it's from the current workspace
-          if (payload.new.workspace_id === selectedWorkspace?.workspace_id) {
-            const newContact: Contact = {
-              id: payload.new.id,
-              name: payload.new.name,
-              phone: payload.new.phone || '',
-              email: payload.new.email || '',
-              createdAt: format(new Date(payload.new.created_at), 'dd/MM/yyyy HH:mm:ss'),
-              tags: [],
-              profile_image_url: payload.new.profile_image_url,
-              extra_info: payload.new.extra_info as Record<string, any> || {}
-            };
-            
-            setContacts(prev => [newContact, ...prev]);
-          }
+        async (payload) => {
+          const newContactData = payload.new;
+          const newContact: Contact = {
+            id: newContactData.id,
+            name: newContactData.name,
+            phone: newContactData.phone || '',
+            email: newContactData.email || '',
+            createdAt: format(new Date(newContactData.created_at), 'dd/MM/yyyy HH:mm:ss'),
+            tags: [],
+            profile_image_url: newContactData.profile_image_url,
+            extra_info: newContactData.extra_info as Record<string, any> || {}
+          };
+
+          setContacts(prev => [newContact, ...prev]);
         }
       )
       .on(
@@ -159,23 +160,25 @@ export function CRMContatos() {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'contacts'
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        () => {
+          // Refetch all contacts when any contact is updated
+          fetchContacts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
         },
         (payload) => {
-          // Update contact in the list
-          if (payload.new.workspace_id === selectedWorkspace?.workspace_id) {
-            setContacts(prev => prev.map(contact => 
-              contact.id === payload.new.id 
-                ? {
-                    ...contact,
-                    name: payload.new.name,
-                    phone: payload.new.phone || '',
-                    email: payload.new.email || '',
-                    extra_info: payload.new.extra_info as Record<string, any> || {}
-                  }
-                : contact
-            ));
-          }
+          const deletedId = payload.old.id;
+          setContacts(prev => prev.filter(c => c.id !== deletedId));
         }
       )
       .subscribe();
@@ -183,7 +186,8 @@ export function CRMContatos() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedWorkspace, contacts]);
+  }, [selectedWorkspace]);
+
   // Filter contacts based on search and tag filter
   const filteredContacts = contacts.filter(contact => {
     const matchesSearch = !searchTerm || 
@@ -315,51 +319,6 @@ export function CRMContatos() {
       toast({
         title: "Erro na exclusão em massa",
         description: "Ocorreu um erro ao excluir os contatos. Tente novamente.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleRemoveTagFromContact = async (contactId: string, tagName: string) => {
-    try {
-      // Find the tag by name to get its ID
-      const { data: tagData, error: tagError } = await supabase
-        .from('tags')
-        .select('id')
-        .eq('name', tagName)
-        .single();
-
-      if (tagError) throw tagError;
-
-      // Remove the tag from contact_tags
-      const { error } = await supabase
-        .from('contact_tags')
-        .delete()
-        .eq('contact_id', contactId)
-        .eq('tag_id', tagData.id);
-
-      if (error) throw error;
-
-      // Update local state
-      setContacts(prev => prev.map(contact => 
-        contact.id === contactId 
-          ? {
-              ...contact,
-              tags: contact.tags.filter(tag => tag.name !== tagName)
-            }
-          : contact
-      ));
-
-      toast({
-        title: "Tag removida",
-        description: `A tag "${tagName}" foi removida do contato.`,
-      });
-
-    } catch (error) {
-      console.error('Error removing tag from contact:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível remover a tag. Tente novamente.",
         variant: "destructive",
       });
     }
@@ -651,11 +610,7 @@ export function CRMContatos() {
                         variant="outline" 
                         size="sm" 
                         className="h-6 w-6 p-0 border-dashed border-muted-foreground/30 rounded-full hover:border-muted-foreground/50"
-                        aria-label="Adicionar Tag"
-                        onClick={() => {
-                          setSelectedContactForTag(contact.id);
-                          setIsTagModalOpen(true);
-                        }}
+                        aria-label="Adicionar"
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -666,24 +621,14 @@ export function CRMContatos() {
                           <Badge 
                             key={index}
                             variant="secondary" 
-                            className="text-xs flex items-center gap-1 pr-1"
+                            className="text-xs"
                             style={{ 
                               backgroundColor: `${tag.color}20`, 
                               color: tag.color,
                               border: `1px solid ${tag.color}40`
                             }}
                           >
-                            <span>{tag.name}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveTagFromContact(contact.id, tag.name);
-                              }}
-                              className="ml-1 hover:bg-black/10 rounded-full p-0.5 transition-colors"
-                              aria-label={`Remover tag ${tag.name}`}
-                            >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
+                            {tag.name}
                           </Badge>
                         ))}
                       </div>
@@ -714,6 +659,17 @@ export function CRMContatos() {
                       onClick={() => setDeletingContact(contact)}
                     >
                       <Trash2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDebugContact(contact);
+                        setShowDebugModal(true);
+                      }}
+                      title="Debug imagem de perfil"
+                    >
+                      🐛
                     </Button>
                   </div>
                 </TableCell>
@@ -865,19 +821,23 @@ export function CRMContatos() {
         onConfirm={handleBulkDelete}
       />
 
-      {/* Add Tag Modal */}
-      <SelectTagModal
-        isOpen={isTagModalOpen}
-        onClose={() => {
-          setIsTagModalOpen(false);
-          setSelectedContactForTag(null);
-        }}
-        onTagAdded={() => {
-          // Refresh contacts to show new tag
-          fetchContacts();
-        }}
-        contactId={selectedContactForTag || ""}
-      />
+      {/* Debug Profile Image Modal */}
+      {showDebugModal && debugContact && selectedWorkspace && (
+        <Dialog open={showDebugModal} onOpenChange={setShowDebugModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Debug - Imagem de Perfil</DialogTitle>
+            </DialogHeader>
+            <ProfileImageDebug
+              contactId={debugContact.id}
+              contactName={debugContact.name}
+              contactPhone={debugContact.phone || ''}
+              workspaceId={selectedWorkspace.workspace_id}
+              currentImageUrl={debugContact.profile_image_url || undefined}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

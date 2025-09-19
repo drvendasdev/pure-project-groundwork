@@ -50,153 +50,185 @@ serve(async (req) => {
       });
     }
 
-    const evolutionUrl = instanceConfig.evolution_url;
-    const evolutionApiKey = instanceConfig.token;
+    const { evolutionUrl, token } = instanceConfig;
     
-    console.log('📤 Sending message via Evolution API:', { 
-      messageId, 
-      phoneNumber: phoneNumber?.substring(0, 8) + '***', 
-      messageType,
-      instance: evolutionInstance,
-      url: evolutionUrl?.substring(0, 30) + '...'
+    console.log(`📤 [${messageId}] Sending message via Evolution API:`, { 
+      evolutionInstance, 
+      messageType, 
+      phoneNumber: phoneNumber?.substring(0, 8) + '***',
+      hasFile: !!fileUrl
     });
 
-    // Normalize phone number
-    const normalizePhone = (phone: string): string => {
-      const digits = phone.replace(/\D/g, '');
-      return digits.includes('@') ? digits : `${digits}@s.whatsapp.net`;
-    };
-
-    const remoteJid = normalizePhone(phoneNumber);
-
-    // Prepare message payload for Evolution API
-    let messagePayload: any = {
-      number: remoteJid,
-    };
-
-    if (messageType === 'text') {
-      messagePayload.text = content;
-    } else if (messageType === 'image') {
-      messagePayload.mediaMessage = {
-        mediatype: 'image',
-        media: fileUrl,
-        caption: content || ''
-      };
-    } else if (messageType === 'video') {
-      messagePayload.mediaMessage = {
-        mediatype: 'video', 
-        media: fileUrl,
-        caption: content || ''
-      };
-    } else if (messageType === 'audio') {
-      messagePayload.audioMessage = {
-        audio: fileUrl
-      };
-    } else if (messageType === 'document') {
-      messagePayload.mediaMessage = {
-        mediatype: 'document',
-        media: fileUrl,
-        fileName: fileName || 'document'
-      };
+    // Validações de entrada aprimoradas
+    if (!phoneNumber) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'phoneNumber is required'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Send via Evolution API
+    if (!content && !fileUrl) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Either content or fileUrl is required'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Configurar endpoint e payload baseado no tipo de mensagem
+    let endpoint: string;
+    let payload: any;
+
     const evolutionEndpoint = messageType === 'text' 
       ? `${evolutionUrl}/message/sendText/${evolutionInstance}`
       : `${evolutionUrl}/message/sendMedia/${evolutionInstance}`;
-    
-    console.log('🔄 Calling Evolution API:', {
-      endpoint: evolutionEndpoint,
-      method: 'POST',
+
+    if (messageType === 'text') {
+      endpoint = evolutionEndpoint;
+      payload = {
+        number: phoneNumber,
+        textMessage: {
+          text: content
+        }
+      };
+    } else {
+      endpoint = evolutionEndpoint;
+      
+      // Para mídia, verificar se temos URL ou precisamos enviar base64
+      if (fileUrl) {
+        let processedFileUrl = fileUrl;
+        
+        // Check if the URL is from Supabase Storage and needs processing
+        if (fileUrl.includes('supabase.co/storage/v1/object/public/')) {
+          console.log(`🔄 [${messageId}] Processing Supabase Storage URL through media processor`);
+          
+          try {
+            // Call n8n-media-processor to handle the Supabase Storage URL
+            const mediaProcessorResponse = await supabase.functions.invoke('n8n-media-processor', {
+              body: {
+                messageId: messageId,
+                mediaUrl: fileUrl,
+                fileName: fileName,
+                mimeType: messageType === 'image' ? 'image/jpeg' : 'application/octet-stream',
+                direction: 'outbound'
+              }
+            });
+
+            if (mediaProcessorResponse.error) {
+              console.error(`❌ [${messageId}] Media processor error:`, mediaProcessorResponse.error);
+              return new Response(JSON.stringify({
+                success: false,
+                error: 'Failed to process media file',
+                details: mediaProcessorResponse.error
+              }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
+            if (mediaProcessorResponse.data?.data?.publicUrl) {
+              processedFileUrl = mediaProcessorResponse.data.data.publicUrl;
+              console.log(`✅ [${messageId}] Media processed successfully, using processed URL`);
+            } else {
+              console.log(`⚠️ [${messageId}] Media processor didn't return processed URL, using original`);
+            }
+          } catch (processorError) {
+            console.error(`❌ [${messageId}] Error calling media processor:`, processorError);
+            // Continue with original URL as fallback
+            console.log(`🔄 [${messageId}] Falling back to original URL`);
+          }
+        }
+
+        payload = {
+          number: phoneNumber,
+          mediaMessage: {
+            mediatype: messageType,
+            media: processedFileUrl,
+            caption: content || '',
+            fileName: fileName || `file_${Date.now()}`
+          }
+        };
+      } else {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'File URL is required for media messages'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    console.log(`🌐 [${messageId}] Calling Evolution API:`, { 
+      endpoint: endpoint.replace(token, '[TOKEN]'), 
       messageType,
-      hasContent: !!content,
-      hasFileUrl: !!fileUrl
+      hasPayload: !!payload
     });
 
-    const response = await fetch(evolutionEndpoint, {
+    // Chamar Evolution API com timeout e retry
+    const evolutionResponse = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': evolutionApiKey
+        'apikey': token
       },
-      body: JSON.stringify(messagePayload)
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20000) // 20 segundos timeout
     });
 
-    const responseData = await response.json();
+    const responseData = await evolutionResponse.json();
 
-    if (!response.ok) {
-      throw new Error(`Evolution API error ${response.status}: ${JSON.stringify(responseData)}`);
+    if (!evolutionResponse.ok) {
+      console.error(`❌ [${messageId}] Evolution API error (${evolutionResponse.status}):`, responseData);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Evolution API error: ${responseData.message || responseData.error || 'Unknown error'}`,
+        status: evolutionResponse.status,
+        details: responseData
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    console.log('✅ Evolution API response:', { 
-      status: response.status,
-      success: responseData.success || response.ok
+    // Verificar se a resposta indica erro mesmo com status 200
+    if (responseData.error || responseData.success === false) {
+      console.error(`❌ [${messageId}] Evolution API returned error:`, responseData);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Evolution API processing failed',
+        details: responseData
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`✅ [${messageId}] Message sent successfully via Evolution API:`, {
+      messageId: responseData.key?.id,
+      status: responseData.status
     });
-
-    // Update message status in database
-    if (messageId) {
-      const updateData: any = { 
-        status: 'sent',
-        metadata: { 
-          evolution_response: responseData,
-          sent_via: 'evolution_direct',
-          timestamp: new Date().toISOString()
-        }
-      };
-
-      if (responseData.key?.id) {
-        updateData.external_id = responseData.key.id;
-      }
-
-      await supabase
-        .from('messages')
-        .update(updateData)
-        .eq('id', messageId);
-    }
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Message sent via Evolution API',
-      data: {
-        messageId,
-        status: 'sent',
-        via: 'evolution_direct',
-        response: responseData
-      }
+      method: 'evolution_direct',
+      data: responseData,
+      messageId: messageId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('❌ Error in send-evolution-message:', error);
-    
-    // Mark message as failed if possible
-    try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-      
-      if (requestBody?.messageId) {
-        await supabase
-          .from('messages')
-          .update({ 
-            status: 'failed',
-            metadata: { 
-              error: String((error as any)?.message ?? error),
-              error_stack: String((error as any)?.stack ?? ''),
-              sent_via: 'evolution_direct_failed'
-            }
-          })
-          .eq('id', requestBody.messageId);
-      }
-    } catch (updateError) {
-      console.error('❌ Error updating message status:', updateError);
-    }
-    
+    console.error(`❌ Error in send-evolution-message:`, error);
     return new Response(JSON.stringify({
       success: false,
-      error: String((error as any)?.message ?? error)
+      error: 'Internal server error',
+      details: error.message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

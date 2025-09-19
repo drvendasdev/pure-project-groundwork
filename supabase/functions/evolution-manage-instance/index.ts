@@ -6,8 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets
-function getEvolutionConfig() {
+// Get Evolution API configuration from workspace-specific settings
+async function getEvolutionConfig(supabase: any, workspaceId: string) {
+  console.log('🔧 Getting Evolution config for workspace:', workspaceId);
+  
+  try {
+    // Get workspace-specific config
+    const { data: config, error } = await supabase
+      .from('evolution_instance_tokens')
+      .select('token, evolution_url')
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (!error && config) {
+      console.log('✅ Using workspace-specific Evolution config');
+      return {
+        url: config.evolution_url,
+        apiKey: config.token
+      };
+    }
+    
+    console.log('⚠️ No workspace config found, using environment fallback');
+  } catch (error) {
+    console.log('⚠️ Error getting workspace config:', error);
+  }
+
+  // Fallback to environment variables
   const url = Deno.env.get('EVOLUTION_API_URL') || 
               Deno.env.get('EVOLUTION_URL') || 
               'https://evo.eventoempresalucrativa.com.br';
@@ -25,7 +49,9 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🚀 evolution-manage-instance started')
     const { action, connectionId, instanceName } = await req.json()
+    console.log('📋 Request body:', { action, connectionId, instanceName })
 
     if (!action || (!connectionId && !instanceName)) {
       return new Response(
@@ -38,7 +64,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const evolutionConfig = getEvolutionConfig()
 
     // Get connection details
     let query = supabase.from('connections').select('*')
@@ -57,6 +82,9 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    // Get Evolution config after we have the connection (for workspace_id)
+    const evolutionConfig = await getEvolutionConfig(supabase, connection.workspace_id)
 
     if (!evolutionConfig.apiKey) {
       return new Response(
@@ -86,27 +114,59 @@ serve(async (req) => {
         break
 
       case 'delete':
+        console.log(`🗑️ Deleting instance: ${connection.instance_name}`)
+        
         response = await fetch(`${evolutionConfig.url}/instance/delete/${connection.instance_name}`, {
           method: 'DELETE',
           headers: { 'apikey': evolutionConfig.apiKey }
         })
         
+        console.log(`📡 Evolution API delete response status: ${response.status}`)
+        
         // Check if deletion was successful or if instance doesn't exist (404)
         if (response.ok || response.status === 404) {
+          console.log('✅ Evolution API deletion successful, removing from database')
+          
           // Remove from our database regardless of Evolution API response
-          await supabase
+          const { error: secretsError } = await supabase
             .from('connection_secrets')
             .delete()
             .eq('connection_id', connection.id)
+          
+          if (secretsError) {
+            console.error('❌ Error deleting connection secrets:', secretsError)
+          } else {
+            console.log('✅ Connection secrets deleted')
+          }
 
-          await supabase
+          const { error: connectionError } = await supabase
             .from('connections')
             .delete()
             .eq('id', connection.id)
-
+          
+          if (connectionError) {
+            console.error('❌ Error deleting connection:', connectionError)
+            return new Response(
+              JSON.stringify({ success: false, error: `Database deletion failed: ${connectionError.message}` }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+          
+          console.log('✅ Connection deleted from database successfully')
           return new Response(
             JSON.stringify({ success: true, message: 'Connection deleted successfully' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } else {
+          console.error(`❌ Evolution API deletion failed with status: ${response.status}`)
+          const errorData = await response.json().catch(() => ({}))
+          console.error('❌ Evolution API error details:', errorData)
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `Evolution API deletion failed: ${errorData.message || response.statusText}` 
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         break
@@ -156,7 +216,8 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
-      const errorData = await response.json()
+      const errorData = await response.json().catch(() => ({}))
+      console.error(`❌ Evolution API operation failed:`, errorData)
       return new Response(
         JSON.stringify({ 
           success: false, 
