@@ -69,7 +69,7 @@ serve(async (req) => {
         status: 'em_atendimento'
       })
       .eq('id', conversation_id)
-      .eq('assigned_user_id', null) // Condição crítica para evitar corrida
+      .is('assigned_user_id', null) // Condição crítica para evitar corrida - usar .is() para NULL
       .select('id, assigned_user_id, status');
 
     if (updateError) {
