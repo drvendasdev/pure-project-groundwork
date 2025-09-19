@@ -19,6 +19,7 @@ import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
 import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
 import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
+import { EndConversationButton } from "@/components/chat/EndConversationButton";
 import { AddTagButton } from "@/components/chat/AddTagButton";
 import { 
   Search, 
@@ -104,23 +105,23 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     if (userProfile === 'master') {
       // MentorMaster: mesmas vistas do Admin
       return [
-        { id: 'all', label: 'Todas', count: conversations.length },
-        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'all', label: 'Todas', count: conversations.filter(c => c.status !== 'closed').length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id && c.status !== 'closed').length },
         { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
         { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
       ];
     } else if (userProfile === 'admin') {
       // Admin: todas as abas do workspace
       return [
-        { id: 'all', label: 'Todas', count: conversations.length },
-        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'all', label: 'Todas', count: conversations.filter(c => c.status !== 'closed').length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id && c.status !== 'closed').length },
         { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
         { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
       ];
     } else {
-      // User: apenas suas conversas e não designadas
-      const myConversations = conversations.filter(c => c.assigned_user_id === user?.id);
-      const unassignedConversations = conversations.filter(c => !c.assigned_user_id);
+      // User: apenas suas conversas e não designadas (excluindo encerradas)
+      const myConversations = conversations.filter(c => c.assigned_user_id === user?.id && c.status !== 'closed');
+      const unassignedConversations = conversations.filter(c => !c.assigned_user_id && c.status !== 'closed');
       
       return [
         { id: 'mine', label: 'Minhas', count: myConversations.length },
@@ -135,17 +136,21 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   const getFilteredConversations = () => {
     switch (activeTab) {
       case 'all':
-        return conversations;
+        // Para "Todas", exclui conversas encerradas (exceto para masters/admins que têm aba específica)
+        if (user?.profile === 'master' || user?.profile === 'admin') {
+          return conversations.filter(c => c.status !== 'closed');
+        }
+        return conversations.filter(c => c.status !== 'closed');
       case 'mine':
-        return conversations.filter(c => c.assigned_user_id === user?.id);
+        return conversations.filter(c => c.assigned_user_id === user?.id && c.status !== 'closed');
       case 'unassigned':
-        return conversations.filter(c => !c.assigned_user_id);
+        return conversations.filter(c => !c.assigned_user_id && c.status !== 'closed');
       case 'in_progress':
         return conversations.filter(c => c.status === 'em_atendimento');
       case 'closed':
         return conversations.filter(c => c.status === 'closed');
       default:
-        return conversations;
+        return conversations.filter(c => c.status !== 'closed');
     }
   };
   const [peekModalOpen, setPeekModalOpen] = useState(false);
@@ -1032,6 +1037,29 @@ const stopRecording = () => {
                       await fetchConversations();
                     }}
                     className="h-8 px-4 bg-yellow-400 hover:bg-yellow-500 text-black font-medium rounded-md"
+                  />
+                  
+                  <EndConversationButton
+                    conversation={selectedConversation}
+                    onEnd={async (conversationId: string) => {
+                      // Update selected conversation status immediately for better UX
+                      if (selectedConversation && selectedConversation.id === conversationId) {
+                        setSelectedConversation(prev => prev ? {
+                          ...prev,
+                          status: 'closed'
+                        } : prev);
+                      }
+                      
+                      // Refresh conversations to sync with server and update the list
+                      await fetchConversations();
+                      
+                      // Clear selected conversation if it was the one ended
+                      if (selectedConversation?.id === conversationId) {
+                        setSelectedConversation(null);
+                        clearMessages();
+                      }
+                    }}
+                    className="h-8 px-4 bg-red-500 hover:bg-red-600 text-white font-medium rounded-md"
                   />
                 </div>
               </div>
