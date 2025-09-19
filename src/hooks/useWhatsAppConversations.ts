@@ -91,7 +91,6 @@ export const useWhatsAppConversations = () => {
 
       // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens) via query params
       const params = new URLSearchParams({
-        workspace_id: selectedWorkspace.workspace_id,
         limit: '50'
       });
       
