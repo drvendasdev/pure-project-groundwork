@@ -82,11 +82,17 @@ export const useWhatsAppConversations = () => {
         'x-system-user-email': currentUserData.email || ''
       };
 
-      // Add workspace context - OBRIGATÓRIO para Masters e Admins
+      // Add workspace context - OBRIGATÓRIO para todos os usuários
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
       } else {
-        console.warn('⚠️ Workspace não selecionado - Masters/Admins precisam selecionar workspace');
+        console.error('❌ Workspace não selecionado - obrigatório para carregar conversas');
+        toast({
+          title: "Erro",
+          description: "Selecione um workspace para ver as conversas.",
+          variant: "destructive",
+        });
+        return;
       }
 
       // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens) via query params

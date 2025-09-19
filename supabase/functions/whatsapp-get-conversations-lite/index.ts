@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Cache-Control': 'public, max-age=30', // 30 seconds cache
 };
 
@@ -23,12 +24,18 @@ serve(async (req) => {
     const workspaceId = req.headers.get('x-workspace-id');
 
     console.log('🔍 WhatsApp Conversations Lite Request - User:', systemUserId, 'Workspace:', workspaceId);
+    console.log('📋 Headers received:', {
+      'x-system-user-id': systemUserId,
+      'x-system-user-email': systemUserEmail,
+      'x-workspace-id': workspaceId
+    });
 
     const url = new URL(req.url);
     const limit = parseInt(url.searchParams.get('limit') || '50');
     const cursor = url.searchParams.get('cursor');
 
     if (!workspaceId) {
+      console.error('❌ Missing workspace_id in headers');
       return new Response(
         JSON.stringify({ error: 'workspace_id é obrigatório' }),
         { 
