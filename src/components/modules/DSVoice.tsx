@@ -212,48 +212,42 @@ export function DSVoice() {
     switch (activeCategory) {
       case "mensagens":
         return (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Mensagens Rápidas</h3>
-              <Button onClick={() => setIsMessageModalOpen(true)} className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Nova Mensagem
-              </Button>
-            </div>
-            
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredMessages.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="col-span-full text-center py-8 text-muted-foreground">
                 Nenhuma mensagem rápida encontrada.
               </div>
             ) : (
-              <div className="grid gap-4">
-                {filteredMessages.map((message) => (
-                  <Card key={message.id} className="p-4">
+              filteredMessages.map((message) => (
+                <Card key={message.id} className="bg-purple-100 border-purple-200 hover:bg-purple-50 transition-colors">
+                  <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h4 className="font-medium">{message.title}</h4>
-                        <p className="text-sm text-muted-foreground mt-1">{message.content}</p>
-                      </div>
-                      <div className="flex gap-2 ml-4">
+                      <h3 className="font-medium text-purple-900 text-sm leading-tight">{message.title}</h3>
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-6 w-6 p-0 text-purple-600 hover:text-purple-800"
                           onClick={() => handleEditMessage(message)}
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit className="h-3 w-3" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-6 w-6 p-0 text-purple-600 hover:text-purple-800"
                           onClick={() => handleDeleteMessage(message.id)}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
-                  </Card>
-                ))}
-              </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <p className="text-xs text-purple-700 leading-relaxed">{message.content}</p>
+                  </CardContent>
+                </Card>
+              ))
             )}
           </div>
         );
@@ -455,53 +449,62 @@ export function DSVoice() {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="border-b p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">DS Voice</h2>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 flex">
-        {/* Sidebar */}
-        <div className="w-64 border-r bg-muted/30">
-          <div className="p-4 space-y-2">
+      {/* Categories Tabs */}
+      <div className="border-b">
+        <div className="p-4 pb-0">
+          <div className="flex space-x-1">
             {categories.map((category) => {
               const Icon = category.icon;
               return (
-                <button
+                <Button
                   key={category.id}
-                  onClick={() => setActiveCategory(category.id)}
+                  variant={activeCategory === category.id ? "default" : "ghost"}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors",
+                    "flex items-center gap-2 rounded-b-none",
                     activeCategory === category.id
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      ? "bg-yellow-500 text-black hover:bg-yellow-400"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
+                  onClick={() => setActiveCategory(category.id)}
                 >
                   <Icon className="h-4 w-4" />
                   {category.label}
-                </button>
+                </Button>
               );
             })}
           </div>
         </div>
+      </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-6">
-          {renderContent()}
+      {/* Header com busca e botão */}
+      <div className="border-b p-4">
+        <div className="flex items-center justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar item"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Button 
+            className="bg-yellow-500 text-black hover:bg-yellow-400 ml-4"
+            onClick={() => {
+              if (activeCategory === "mensagens") setIsMessageModalOpen(true);
+              else if (activeCategory === "audios") setIsAudioModalOpen(true);
+              else if (activeCategory === "midias") setIsMediaModalOpen(true);
+              else if (activeCategory === "documentos") setIsDocumentModalOpen(true);
+            }}
+          >
+            Novo Item
+          </Button>
         </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 p-6 overflow-auto">
+        {renderContent()}
       </div>
 
       {/* Modal para Mensagens */}
