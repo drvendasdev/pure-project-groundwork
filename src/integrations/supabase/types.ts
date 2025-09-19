@@ -1165,20 +1165,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fk_tags_org"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fk_tags_org"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces_view"
-            referencedColumns: ["workspace_id"]
-          },
-          {
             foreignKeyName: "tags_workspace_fk"
             columns: ["workspace_id"]
             isOneToOne: false
@@ -1261,6 +1247,54 @@ export type Database = {
             foreignKeyName: "webhook_logs_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
+      workspace_configurations: {
+        Row: {
+          contrast_color: string | null
+          created_at: string
+          favicon_url: string | null
+          id: string
+          login_banner_url: string | null
+          primary_color: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          contrast_color?: string | null
+          created_at?: string
+          favicon_url?: string | null
+          id?: string
+          login_banner_url?: string | null
+          primary_color?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          contrast_color?: string | null
+          created_at?: string
+          favicon_url?: string | null
+          id?: string
+          login_banner_url?: string | null
+          primary_color?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_configurations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_configurations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
             referencedRelation: "workspaces_view"
             referencedColumns: ["workspace_id"]
           },
