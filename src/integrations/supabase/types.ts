@@ -1633,6 +1633,10 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      set_current_user_context: {
+        Args: { user_email?: string; user_id: string }
+        Returns: undefined
+      }
       slugify: {
         Args: { txt: string }
         Returns: string
