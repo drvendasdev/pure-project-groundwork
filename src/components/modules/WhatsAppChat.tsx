@@ -154,7 +154,7 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
     }
   };
   const [peekModalOpen, setPeekModalOpen] = useState(false);
-  const [peekConversation, setPeekConversation] = useState<WhatsAppConversation | null>(null);
+  const [peekConversationId, setPeekConversationId] = useState<string | null>(null);
 const messagesEndRef = useRef<HTMLDivElement>(null);
 const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 const audioChunksRef = useRef<Blob[]>([]);
@@ -831,7 +831,7 @@ const stopRecording = () => {
           style={{ fontSize: '12px' }}
           onClick={(e) => {
             e.stopPropagation();
-            setPeekConversation(conversation);
+            setPeekConversationId(conversation.id);
             setPeekModalOpen(true);
           }}
         >
@@ -1236,8 +1236,11 @@ const stopRecording = () => {
         
         <PeekConversationModal
           isOpen={peekModalOpen}
-          onClose={() => setPeekModalOpen(false)}
-          conversation={peekConversation}
+          onClose={() => {
+            setPeekModalOpen(false);
+            setPeekConversationId(null);
+          }}
+          conversationId={peekConversationId}
         />
       </div>
 

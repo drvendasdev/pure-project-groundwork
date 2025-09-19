@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -8,6 +8,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format } from 'date-fns';
+import { usePeekConversation } from '@/hooks/usePeekConversation';
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Message {
   id: string;
@@ -35,11 +37,21 @@ interface Conversation {
 interface PeekConversationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  conversation: Conversation | null;
+  conversationId: string | null;
 }
 
-export function PeekConversationModal({ isOpen, onClose, conversation }: PeekConversationModalProps) {
-  if (!conversation) return null;
+export function PeekConversationModal({ isOpen, onClose, conversationId }: PeekConversationModalProps) {
+  const { conversationData, isLoading, loadConversationMessages, clearConversation } = usePeekConversation();
+
+  useEffect(() => {
+    if (isOpen && conversationId) {
+      loadConversationMessages(conversationId);
+    } else if (!isOpen) {
+      clearConversation();
+    }
+  }, [isOpen, conversationId]);
+
+  if (!conversationId) return null;
 
   const getInitials = (name?: string) => {
     if (!name) return "?";
@@ -55,21 +67,35 @@ export function PeekConversationModal({ isOpen, onClose, conversation }: PeekCon
       <DialogContent className="max-w-md h-[500px] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={conversation.contact.profile_image_url} />
-              <AvatarFallback className="text-xs">
-                {getInitials(conversation.contact.name)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-sm">
-              {conversation.contact.name || conversation.contact.phone}
-            </span>
+            {conversationData ? (
+              <>
+                <Avatar className="w-8 h-8">
+                  <AvatarImage src={conversationData.contact.profile_image_url} />
+                  <AvatarFallback className="text-xs">
+                    {getInitials(conversationData.contact.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm">
+                  {conversationData.contact.name || conversationData.contact.phone}
+                </span>
+              </>
+            ) : (
+              <Skeleton className="h-8 w-full" />
+            )}
           </DialogTitle>
         </DialogHeader>
         
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-2">
-            {conversation.messages.map((message) => (
+            {isLoading ? (
+              // Loading skeletons
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+                  <Skeleton className="h-12 w-[70%] rounded-lg" />
+                </div>
+              ))
+            ) : conversationData?.messages ? (
+              conversationData.messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex ${message.sender_type === 'contact' ? 'justify-start' : 'justify-end'}`}
@@ -115,7 +141,12 @@ export function PeekConversationModal({ isOpen, onClose, conversation }: PeekCon
                   </div>
                 </div>
               </div>
-            ))}
+              ))
+            ) : (
+              <div className="text-center text-muted-foreground text-sm">
+                Nenhuma mensagem encontrada
+              </div>
+            )}
           </div>
         </ScrollArea>
       </DialogContent>

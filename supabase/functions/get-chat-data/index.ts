@@ -38,9 +38,33 @@ serve(async (req) => {
     );
 
     if (conversationId) {
-      // Buscar mensagens de uma conversa específica
-      console.log(`📋 Buscando mensagens da conversa: ${conversationId}`);
+      // Buscar conversa específica com mensagens e dados do contato
+      console.log(`📋 Buscando conversa completa: ${conversationId}`);
       
+      let conversationQuery = supabase
+        .from('conversations')
+        .select(`
+          id,
+          contact:contacts (
+            id,
+            name,
+            phone,
+            profile_image_url
+          )
+        `)
+        .eq('id', conversationId)
+        .single();
+      
+      // Apply workspace filtering if provided
+      if (workspaceId) {
+        conversationQuery = conversationQuery.eq('workspace_id', workspaceId);
+      }
+      
+      const { data: conversation, error: conversationError } = await conversationQuery;
+
+      if (conversationError) throw conversationError;
+
+      // Buscar mensagens da conversa
       let messagesQuery = supabase
         .from('messages')
         .select('*')
@@ -56,9 +80,16 @@ serve(async (req) => {
 
       if (messagesError) throw messagesError;
 
+      // Montar resposta com conversa completa
+      const conversationData = {
+        id: conversation.id,
+        contact: conversation.contact,
+        messages: messages || []
+      };
+
       return new Response(JSON.stringify({
         success: true,
-        messages: messages || []
+        conversation: conversationData
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
