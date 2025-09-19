@@ -483,7 +483,15 @@ export const useWhatsAppConversations = () => {
     
     if (currentUserData?.id) {
       console.log('🏢 Workspace mudou para:', selectedWorkspace?.workspace_id, '- Recarregando conversas');
-      fetchConversations();
+      
+      // Forçar limpeza completa das conversas quando workspace muda
+      setConversations([]);
+      setLoading(true);
+      
+      // Aguardar um pouco para garantir que o estado foi limpo antes de recarregar
+      setTimeout(() => {
+        fetchConversations();
+      }, 100);
     }
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
 
