@@ -38,14 +38,15 @@ serve(async (req) => {
     );
 
     if (conversationId) {
-      // Buscar conversa específica com mensagens e dados do contato
+      // Buscar conversa específica com dados do contato
       console.log(`📋 Buscando conversa completa: ${conversationId}`);
       
       let conversationQuery = supabase
         .from('conversations')
         .select(`
           id,
-          contact:contacts (
+          contact_id,
+          contacts (
             id,
             name,
             phone,
@@ -62,7 +63,10 @@ serve(async (req) => {
       
       const { data: conversation, error: conversationError } = await conversationQuery;
 
-      if (conversationError) throw conversationError;
+      if (conversationError) {
+        console.error('Error fetching conversation:', conversationError);
+        throw conversationError;
+      }
 
       // Buscar mensagens da conversa
       let messagesQuery = supabase
@@ -78,12 +82,15 @@ serve(async (req) => {
       
       const { data: messages, error: messagesError } = await messagesQuery;
 
-      if (messagesError) throw messagesError;
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError);
+        throw messagesError;
+      }
 
       // Montar resposta com conversa completa
       const conversationData = {
         id: conversation.id,
-        contact: conversation.contact,
+        contact: conversation.contacts,
         messages: messages || []
       };
 

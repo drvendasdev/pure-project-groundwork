@@ -15,11 +15,25 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    
+    // Usar chave anônima para respeitar RLS
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: req.headers.get('Authorization') || '',
+        }
+      }
+    });
+
+    // Extrair informações do usuário dos headers
+    const systemUserId = req.headers.get('x-system-user-id');
+    const systemUserEmail = req.headers.get('x-system-user-email');
+    const workspaceId = req.headers.get('x-workspace-id');
+
+    console.log('🔍 WhatsApp Conversations Lite Request - User:', systemUserId, 'Workspace:', workspaceId);
 
     const url = new URL(req.url);
-    const workspaceId = url.searchParams.get('workspace_id');
     const limit = parseInt(url.searchParams.get('limit') || '50');
     const cursor = url.searchParams.get('cursor');
 
@@ -28,6 +42,16 @@ serve(async (req) => {
         JSON.stringify({ error: 'workspace_id é obrigatório' }),
         { 
           status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    if (!systemUserId) {
+      return new Response(
+        JSON.stringify({ error: 'Autenticação é obrigatória' }),
+        { 
+          status: 401, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
@@ -77,7 +101,13 @@ serve(async (req) => {
     // Buscar última mensagem e nome do usuário responsável para cada conversa
     const conversationsWithMessages = await Promise.all(
       (conversations || []).map(async (conv) => {
-        const { data: lastMessage } = await supabase
+        // Usar service role apenas para buscar dados complementares que não são sensíveis
+        const supabaseService = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        );
+
+        const { data: lastMessage } = await supabaseService
           .from('messages')
           .select('content, message_type, sender_type, created_at')
           .eq('conversation_id', conv.id)
@@ -87,7 +117,7 @@ serve(async (req) => {
         // Buscar nome do usuário responsável se existe assigned_user_id
         let assignedUserName = null;
         if (conv.assigned_user_id) {
-          const { data: assignedUser } = await supabase
+          const { data: assignedUser } = await supabaseService
             .from('system_users')
             .select('name')
             .eq('id', conv.assigned_user_id)
