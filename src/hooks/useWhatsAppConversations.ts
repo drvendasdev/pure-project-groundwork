@@ -95,15 +95,12 @@ export const useWhatsAppConversations = () => {
         return;
       }
 
-      // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens) via query params
-      const params = new URLSearchParams({
-        limit: '50'
-      });
-      
+      // ✅ CRÍTICO: Use whatsapp-get-conversations-lite (SEM mensagens)
       const { data: response, error: functionError } = await supabase.functions.invoke(
-        `whatsapp-get-conversations-lite?${params}`, {
+        'whatsapp-get-conversations-lite', {
         method: 'GET',
-        headers
+        headers,
+        body: { limit: 50 }
       });
 
       if (functionError) {
