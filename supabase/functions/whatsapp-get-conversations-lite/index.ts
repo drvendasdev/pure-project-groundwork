@@ -17,15 +17,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     
-    // Usar chave anônima para respeitar RLS
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: req.headers.get('Authorization') || '',
-        }
-      }
-    });
-
     // Extrair informações do usuário dos headers
     const systemUserId = req.headers.get('x-system-user-id');
     const systemUserEmail = req.headers.get('x-system-user-email');
@@ -56,6 +47,21 @@ serve(async (req) => {
         }
       );
     }
+
+    // Usar chave anônima para respeitar RLS
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: req.headers.get('Authorization') || '',
+        }
+      }
+    });
+
+    // Definir contexto do usuário para as funções RLS
+    await supabase.rpc('set_current_user_context', {
+      user_id: systemUserId,
+      user_email: systemUserEmail
+    });
 
     let query = supabase
       .from('conversations')
