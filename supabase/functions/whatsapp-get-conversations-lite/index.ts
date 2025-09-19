@@ -159,8 +159,13 @@ serve(async (req) => {
     // Buscar última mensagem e nome do usuário responsável para cada conversa
     const conversationsWithMessages = await Promise.all(
       (conversations || []).map(async (conv) => {
-        // ✅ CRÍTICO: Usar client com RLS em vez de service role para mensagens
-        const { data: lastMessage } = await supabase
+        // Usar service role apenas para buscar dados complementares que não são sensíveis
+        const supabaseService = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        );
+
+        const { data: lastMessage } = await supabaseService
           .from('messages')
           .select('content, message_type, sender_type, created_at')
           .eq('conversation_id', conv.id)
