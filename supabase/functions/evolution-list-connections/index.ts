@@ -24,13 +24,8 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
     }
 
     if (!configData?.evolution_url || !configData?.token || configData.token === 'config_only') {
-      console.log('❌ No valid workspace Evolution configuration found, using fallback');
-      // Fallback to environment variables
-      const url = Deno.env.get('EVOLUTION_URL') || 'https://evo.eventoempresalucrativa.com.br';
-      const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                     Deno.env.get('EVOLUTION_APIKEY') || 
-                     Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-      return { url, apiKey };
+      console.log('❌ No valid workspace Evolution configuration found');
+      throw new Error('Evolution API not configured for workspace. Please configure URL and API key in Evolution settings.');
     }
     
     console.log('✅ Using workspace-specific Evolution config');
@@ -40,12 +35,7 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
     };
   } catch (error) {
     console.error('Error getting Evolution config:', error);
-    // Fallback to environment variables
-    const url = Deno.env.get('EVOLUTION_URL') || 'https://evo.eventoempresalucrativa.com.br';
-    const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                   Deno.env.get('EVOLUTION_APIKEY') || 
-                   Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-    return { url, apiKey };
+    throw error;
   }
 }
 

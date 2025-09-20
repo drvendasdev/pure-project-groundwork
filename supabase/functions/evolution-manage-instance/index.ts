@@ -31,10 +31,8 @@ async function getEvolutionConfig(supabase: any, workspaceId: string) {
     console.log('⚠️ Error getting workspace config:', error);
   }
 
-  // Fallback to environment variables
-  const url = Deno.env.get('EVOLUTION_API_URL') || 
-              Deno.env.get('EVOLUTION_URL') || 
-              'https://evo.eventoempresalucrativa.com.br';
+  // No fallback - require workspace configuration
+  throw new Error('Evolution API not configured for workspace. Please configure URL and API key in Evolution settings.');
   
   const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
                  Deno.env.get('EVOLUTION_APIKEY') || 

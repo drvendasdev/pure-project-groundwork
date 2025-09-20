@@ -40,16 +40,17 @@ class EvolutionProvider {
 
       if (error) throw error;
 
+      if (!data?.url) {
+        throw new Error('Evolution API URL não configurada para este workspace. Configure nas configurações da Evolution API.');
+      }
+      
       return {
-        url: data?.url || 'https://evo.eventoempresalucrativa.com.br',
+        url: data.url,
         apiKey: data?.apiKey
       };
     } catch (error) {
       console.error('Error getting evolution config:', error);
-      return {
-        url: 'https://evo.eventoempresalucrativa.com.br',
-        apiKey: null
-      };
+      throw new Error('Configuração da Evolution API não encontrada. Configure a URL e API Key nas configurações do workspace.');
     }
   }
 

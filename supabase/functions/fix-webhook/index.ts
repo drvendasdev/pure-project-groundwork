@@ -8,13 +8,27 @@ serve(async (req) => {
   }
 
   try {
+    const { evolutionUrl, evolutionApiKey, instanceName } = await req.json();
+
+    if (!evolutionUrl || !evolutionApiKey || !instanceName) {
+      return new Response(JSON.stringify({ 
+        error: 'Missing required parameters: evolutionUrl, evolutionApiKey, and instanceName are required' 
+      }), { 
+        status: 400,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+
     console.log('Configurando webhook...');
     
-    const response = await fetch('https://evo.eventoempresalucrativa.com.br/webhook/set/Empresa-3', {
+    const response = await fetch(`${evolutionUrl}/webhook/set/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': 'd843ef5a77e944c6b711b0654e3654a1'
+        'apikey': evolutionApiKey
       },
       body: JSON.stringify({
         url: "https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-webhook",

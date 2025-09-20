@@ -11,12 +11,22 @@ serve(async (req) => {
   }
 
   try {
+    const { evolutionUrl, evolutionApiKey, instanceName } = await req.json();
+
+    if (!evolutionUrl || !evolutionApiKey || !instanceName) {
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'Missing required parameters: evolutionUrl, evolutionApiKey, and instanceName are required' 
+      }), { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.log('🧪 Test webhook config started');
+    console.log(`🔧 Instance: ${instanceName}`);
+    console.log(`🔗 Evolution URL: ${evolutionUrl}`);
     
-    // Manual webhook configuration to Evolution API
-    const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br';
-    const instanceName = 'Empresa-3';
-    const token = 'd843ef5a77e944c6b711b0654e3654a1';
     const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-webhook';
     
     console.log(`🔧 Configuring webhook for instance: ${instanceName}`);
@@ -26,7 +36,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': token
+        'apikey': evolutionApiKey
       },
       body: JSON.stringify({
         url: webhookUrl,

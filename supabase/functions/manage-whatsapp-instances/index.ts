@@ -20,9 +20,15 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get Evolution API configuration
-    const evolutionUrl = 'https://evo.eventoempresalucrativa.com.br';
-    const evolutionApiKey = Deno.env.get('EVOLUTION_ADMIN_API_KEY') || '9CF683F53F111493D7122C674139C';
+    // Get Evolution API configuration - require from request parameters
+    const { evolutionUrl, evolutionApiKey } = await req.json();
+    
+    if (!evolutionUrl || !evolutionApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'Evolution URL and API Key are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     console.log(`Using Evolution API Key: ${evolutionApiKey ? 'Available' : 'Missing'}`);
 

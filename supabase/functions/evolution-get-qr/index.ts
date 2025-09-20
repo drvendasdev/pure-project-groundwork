@@ -6,16 +6,36 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get Evolution API configuration from secrets - FORCE CORRECT URL
-function getEvolutionConfig() {
-  // FORCE the correct Evolution URL regardless of what's in secrets
-  const url = 'https://evo.eventoempresalucrativa.com.br';
-  
-  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                 Deno.env.get('EVOLUTION_APIKEY') || 
-                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-  
-  return { url, apiKey };
+// Get Evolution API configuration from workspace settings
+async function getEvolutionConfig(workspaceId: string, supabase: any) {
+  try {
+    console.log('🔧 Getting Evolution config for workspace:', workspaceId);
+    
+    const { data: configData, error: configError } = await supabase
+      .from('evolution_instance_tokens')
+      .select('evolution_url, token')
+      .eq('workspace_id', workspaceId)
+      .eq('instance_name', '_master_config')
+      .maybeSingle();
+
+    if (configError) {
+      console.log('⚠️ Error querying evolution_instance_tokens:', configError);
+      throw configError;
+    }
+
+    if (!configData?.evolution_url || !configData?.token || configData.token === 'config_only') {
+      throw new Error('Evolution API not configured for workspace. Please configure URL and API key in Evolution settings.');
+    }
+    
+    console.log('✅ Using workspace-specific Evolution config');
+    return {
+      url: configData.evolution_url,
+      apiKey: configData.token
+    };
+  } catch (error) {
+    console.error('Error getting Evolution config:', error);
+    throw error;
+  }
 }
 
 serve(async (req) => {
@@ -37,7 +57,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const evolutionConfig = getEvolutionConfig()
 
     // Get connection details
     let query = supabase.from('connections').select('*')
@@ -57,9 +76,12 @@ serve(async (req) => {
       )
     }
 
+    // Get Evolution config for this connection's workspace
+    const evolutionConfig = await getEvolutionConfig(connection.workspace_id, supabase)
+
     if (!evolutionConfig.apiKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Evolution API key not configured' }),
+        JSON.stringify({ success: false, error: 'Evolution API key not configured for workspace' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }

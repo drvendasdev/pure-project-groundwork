@@ -8,13 +8,27 @@ serve(async (req) => {
   }
 
   try {
+    const { evolutionUrl, evolutionApiKey, instanceName } = await req.json();
+
+    if (!evolutionUrl || !evolutionApiKey || !instanceName) {
+      return new Response(JSON.stringify({ 
+        error: 'Missing required parameters: evolutionUrl, evolutionApiKey, and instanceName are required' 
+      }), { 
+        status: 400,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+
     console.log('Verificando instância...');
     
     // Primeiro vamos verificar se a instância existe
-    const checkResponse = await fetch('https://evo.eventoempresalucrativa.com.br/instance/fetchInstances', {
+    const checkResponse = await fetch(`${evolutionUrl}/instance/fetchInstances`, {
       method: 'GET',
       headers: {
-        'apikey': 'd843ef5a77e944c6b711b0654e3654a1'
+        'apikey': evolutionApiKey
       }
     });
 
@@ -24,11 +38,11 @@ serve(async (req) => {
     // Agora vamos tentar configurar via settings
     console.log('Configurando webhook via settings...');
     
-    const settingsResponse = await fetch('https://evo.eventoempresalucrativa.com.br/settings/set/Empresa-3', {
+    const settingsResponse = await fetch(`${evolutionUrl}/settings/set/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': 'd843ef5a77e944c6b711b0654e3654a1'
+        'apikey': evolutionApiKey
       },
       body: JSON.stringify({
         webhook: {

@@ -141,11 +141,15 @@ serve(async (req) => {
         });
       }
 
-      // Store connection secrets
+      // Store connection secrets - require valid evolutionApiUrl
+      if (!evolutionApiUrl) {
+        throw new Error('Evolution API URL not configured');
+      }
+      
       await supabase.from('connection_secrets').insert({
         connection_id: connection.id,
         token: instanceToken,
-        evolution_url: evolutionApiUrl || 'https://evo.eventoempresalucrativa.com.br'
+        evolution_url: evolutionApiUrl
       });
 
       await logEvent(supabase, connection.id, correlationId, 'CONNECTION_CREATED', 'info', 

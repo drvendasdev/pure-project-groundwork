@@ -3,8 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-workspace-id',
 }
 
 serve(async (req) => {
@@ -13,16 +12,13 @@ serve(async (req) => {
   }
 
   try {
-    const { workspaceId, evolutionUrl, evolutionApiKey } = await req.json();
+    const { workspaceId, evolutionUrl, evolutionApiKey } = await req.json()
 
     if (!workspaceId || !evolutionUrl || !evolutionApiKey) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Workspace ID, Evolution URL e API Key são obrigatórios' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: 'Missing required fields: workspaceId, evolutionUrl, and evolutionApiKey are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Initialize Supabase client
@@ -30,67 +26,53 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    console.log('💾 Saving Evolution config for workspace:', workspaceId);
-    console.log('🔗 URL:', evolutionUrl);
-    console.log('🔑 API Key provided:', !!evolutionApiKey);
+    console.log('🔧 Saving Evolution config for workspace:', workspaceId)
+    console.log('🔗 URL:', evolutionUrl)
 
-    // First, try to update existing configuration
-    const { data: updateData, error: updateError } = await supabase
+    // Upsert the configuration
+    const { data, error } = await supabase
       .from('evolution_instance_tokens')
-      .update({
-        evolution_url: evolutionUrl,
-        token: evolutionApiKey,
-        updated_at: new Date().toISOString()
-      })
-      .eq('workspace_id', workspaceId)
-      .eq('instance_name', '_master_config')
-      .select();
-
-    let data;
-    
-    // If no rows were updated, create a new record
-    if (updateData && updateData.length === 0) {
-      const { data: insertData, error: insertError } = await supabase
-        .from('evolution_instance_tokens')
-        .insert({
+      .upsert(
+        {
           workspace_id: workspaceId,
           instance_name: '_master_config',
-          evolution_url: evolutionUrl,
-          token: evolutionApiKey
-        })
-        .select();
+          evolution_url: evolutionUrl.trim(),
+          token: evolutionApiKey.trim(),
+          updated_at: new Date().toISOString()
+        },
+        {
+          onConflict: 'workspace_id,instance_name'
+        }
+      )
+      .select()
 
-      if (insertError) {
-        console.error('❌ Database error inserting evolution config:', insertError);
-        throw insertError;
-      }
-      
-      data = insertData;
-    } else if (updateError) {
-      console.error('❌ Database error updating evolution config:', updateError);
-      throw updateError;
-    } else {
-      data = updateData;
+    if (error) {
+      console.error('Error saving evolution config:', error)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to save configuration' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    console.log('✅ Evolution config saved successfully:', data);
+    console.log('✅ Evolution config saved successfully')
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      message: 'Configuração salva com sucesso',
-      data: data 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Evolution API configuration saved successfully',
+        data
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
   } catch (error) {
-    console.error('❌ Error saving evolution config:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    console.error('Error saving evolution config:', error)
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Internal server error' 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 })

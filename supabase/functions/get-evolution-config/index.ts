@@ -3,8 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-workspace-id',
 }
 
 serve(async (req) => {
@@ -13,17 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const workspaceId = req.headers.get('x-workspace-id') || 
-                       (await req.json().catch(() => ({})))?.workspaceId;
+    // Get workspace ID from headers or body
+    const workspaceId = req.headers.get('x-workspace-id') || (await req.json()).workspaceId
 
     if (!workspaceId) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Workspace ID is required' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: 'Workspace ID is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Initialize Supabase client
@@ -31,45 +27,51 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Try to get workspace-specific Evolution API configuration
-    const { data: configData, error } = await supabase
+    // Get Evolution API configuration for the workspace
+    const { data: configData, error: configError } = await supabase
       .from('evolution_instance_tokens')
       .select('evolution_url, token')
       .eq('workspace_id', workspaceId)
       .eq('instance_name', '_master_config')
-      .maybeSingle();
+      .maybeSingle()
 
-    let evolutionUrl = null;
-    let apiKey = null;
-    
-    if (configData?.evolution_url) {
-      evolutionUrl = configData.evolution_url;
-    } else {
-      throw new Error('Evolution URL not configured for workspace. Please configure it in the Evolution settings.');
-    }
-    
-    if (configData?.token && configData.token !== 'config_only') {
-      apiKey = configData.token; // Use workspace-specific API Key
-    } else {
-      throw new Error('Evolution API key not configured for workspace. Please configure it in the Evolution settings.');
+    if (configError) {
+      console.error('Error querying evolution_instance_tokens:', configError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Error loading configuration' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      url: evolutionUrl,
-      apiKey: apiKey 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    if (!configData) {
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          url: null, 
+          apiKey: null,
+          message: 'No configuration found for workspace' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        url: configData.evolution_url,
+        apiKey: configData.token !== 'config_only' ? configData.token : null
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
   } catch (error) {
-    console.error('Error getting evolution config:', error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error.message 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    console.error('Error getting evolution config:', error)
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Internal server error' 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 })

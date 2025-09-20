@@ -44,8 +44,8 @@ export function EvolutionApiConfig() {
         if (data?.url) {
           setEvolutionUrl(data.url);
         } else {
-          // Set default URL if no configuration exists
-          setEvolutionUrl('https://evo.eventoempresalucrativa.com.br');
+          // No default URL - user must configure it
+          setEvolutionUrl('');
         }
         
         if (data?.apiKey) {
@@ -53,8 +53,12 @@ export function EvolutionApiConfig() {
         }
       } catch (error) {
         console.error('❌ Error loading evolution config:', error);
-        // Set default URL on error
-        setEvolutionUrl('https://evo.eventoempresalucrativa.com.br');
+        // No default URL on error - user must configure it
+        toast({
+          title: 'Configuração não encontrada',
+          description: 'Por favor, configure a URL e API Key da Evolution API',
+          variant: 'destructive'
+        });
       }
     };
     
