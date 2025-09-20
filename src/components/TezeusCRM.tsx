@@ -2,11 +2,9 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { useSessionManager } from "@/hooks/useSessionManager";
-
 import { useUnifiedTheme } from "@/hooks/useUnifiedTheme";
 import { useGlobalThemeSync } from "@/hooks/useGlobalThemeSync";
 import { useFavicon } from "@/hooks/useFavicon";
-
 
 import { Dashboard } from "./Dashboard";
 import { Conversas } from "./modules/Conversas";
@@ -70,7 +68,6 @@ export function TezeusCRM() {
   // Monitor de sessão global
   useSessionManager();
   
-
   // Update favicon and apply unified theme colors
   useFavicon();
   const { backgroundSolidEnabled, backgroundSolidColor } = useUnifiedTheme();
@@ -78,7 +75,6 @@ export function TezeusCRM() {
   // Enable global theme synchronization across all tabs/devices
   useGlobalThemeSync();
   
-
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();

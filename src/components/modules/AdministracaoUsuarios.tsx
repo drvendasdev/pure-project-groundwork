@@ -31,7 +31,6 @@ export function AdministracaoUsuarios() {
   useEffect(() => {
     refreshUsers();
   }, []);
-
   const filteredUsers = users.filter(user => {
     const searchLower = searchTerm.toLowerCase();
     const empresa = user.empresa || user.workspaces?.map(w => w.name).join(", ") || "";
@@ -41,7 +40,6 @@ export function AdministracaoUsuarios() {
            user.profile.toLowerCase().includes(searchLower) ||
            empresa.toLowerCase().includes(searchLower);
   });
-
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -192,11 +190,9 @@ export function AdministracaoUsuarios() {
             </TableCell>
                 <TableCell>
                   <Badge 
-
                     variant={user.status === 'active' ? 'default' : 'outline'} 
                     className={user.status === 'active' 
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-3 py-1" 
-
                       : "border-destructive text-destructive rounded-full px-3 py-1"
                     }
                   >

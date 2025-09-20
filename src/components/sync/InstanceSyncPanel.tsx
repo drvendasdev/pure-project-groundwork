@@ -136,9 +136,7 @@ export const InstanceSyncPanel = () => {
                 <span className="font-medium ml-1">{summary.errors}</span>
               </div>
               <div>
-
                 <span className="text-primary">Ignorados:</span>
-
                 <span className="font-medium ml-1">{summary.skipped}</span>
               </div>
             </div>
