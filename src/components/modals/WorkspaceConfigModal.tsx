@@ -1,23 +1,20 @@
 import { Settings, Wifi, Bot, Headphones } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConexoesNova } from "@/components/modules/ConexoesNova";
-
 interface WorkspaceConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
   workspaceName: string;
 }
-
-export function WorkspaceConfigModal({ open, onOpenChange, workspaceId, workspaceName }: WorkspaceConfigModalProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+export function WorkspaceConfigModal({
+  open,
+  onOpenChange,
+  workspaceId,
+  workspaceName
+}: WorkspaceConfigModalProps) {
+  return <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -32,14 +29,8 @@ export function WorkspaceConfigModal({ open, onOpenChange, workspaceId, workspac
               <Wifi className="w-4 h-4" />
               Conexões
             </TabsTrigger>
-            <TabsTrigger value="automations" className="flex items-center gap-2">
-              <Bot className="w-4 h-4" />
-              Automações
-            </TabsTrigger>
-            <TabsTrigger value="dsvoice" className="flex items-center gap-2">
-              <Headphones className="w-4 h-4" />
-              DS Voice
-            </TabsTrigger>
+            
+            
           </TabsList>
 
           <TabsContent value="connections" className="mt-6">
@@ -74,6 +65,5 @@ export function WorkspaceConfigModal({ open, onOpenChange, workspaceId, workspac
           </TabsContent>
         </Tabs>
       </DialogContent>
-    </Dialog>
-  );
+    </Dialog>;
 }
