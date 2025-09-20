@@ -15,6 +15,7 @@ export function EvolutionApiConfig() {
   const [evolutionApiKey, setEvolutionApiKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
   const { selectedWorkspace } = useWorkspace();
   const { getHeaders } = useWorkspaceHeaders();
@@ -109,6 +110,47 @@ export function EvolutionApiConfig() {
       });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const clearConfiguration = async () => {
+    if (!selectedWorkspace?.workspace_id) return;
+
+    setClearing(true);
+    try {
+      console.log('🧹 Clearing Evolution config for workspace:', selectedWorkspace.workspace_id);
+      
+      const headers = getHeaders();
+      const { data, error } = await supabase.functions.invoke('clear-workspace-evolution-config', {
+        body: { workspaceId: selectedWorkspace.workspace_id },
+        headers
+      });
+
+      if (error) {
+        console.error('❌ Error from clear-workspace-evolution-config:', error);
+        throw error;
+      }
+
+      console.log('✅ Configuration cleared successfully:', data);
+
+      // Clear form fields
+      setEvolutionUrl('');
+      setEvolutionApiKey('');
+      setConnectionStatus('unknown');
+
+      toast({
+        title: 'Configuração removida',
+        description: 'Configuração da Evolution API foi removida. Configure novamente.'
+      });
+    } catch (error: any) {
+      console.error('❌ Error clearing evolution config:', error);
+      toast({
+        title: 'Erro ao remover',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -254,6 +296,15 @@ export function EvolutionApiConfig() {
             >
               {testing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Testar Conexão
+            </Button>
+
+            <Button 
+              variant="destructive" 
+              onClick={clearConfiguration}
+              disabled={clearing}
+            >
+              {clearing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Limpar
             </Button>
           </div>
 
