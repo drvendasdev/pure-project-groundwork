@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, ChevronLeft, MoreVertical } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
+
+
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -13,9 +16,39 @@ import { useWhatsAppConversations } from "@/hooks/useWhatsAppConversations";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+
 import { useWorkspaceConfig } from "@/hooks/useWorkspaceConfig";
 import { ImpersonateWorkspaceModal } from "@/components/modals/ImpersonateWorkspaceModal";
 import { LayoutDashboard, MessageCircle, Phone, Users, FolderOpen, Settings, Zap, Link, Shield, DollarSign, Target, Calendar, CheckSquare, MessageSquare, Bot, BrainCircuit, GitBranch, Bell, User, LogOut, Handshake, FileText, Building2, BarChart3 } from "lucide-react";
+
+import { ImpersonateWorkspaceModal } from "@/components/modals/ImpersonateWorkspaceModal";
+import { 
+  LayoutDashboard, 
+  MessageCircle, 
+  Phone, 
+  Users, 
+  FolderOpen, 
+  Settings, 
+  Zap, 
+  Link,
+  Shield,
+  DollarSign,
+  Target,
+  Calendar,
+  CheckSquare,
+  MessageSquare,
+  Bot,
+  BrainCircuit,
+  GitBranch,
+  Bell,
+  User,
+  LogOut,
+  Handshake,
+  FileText,
+  Building2,
+  BarChart3
+} from "lucide-react";
+
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 interface SidebarProps {
@@ -54,6 +87,7 @@ export function Sidebar({
     getAvatarColor,
     formatTimestamp
   } = useNotifications();
+
   const {
     markAsRead
   } = useWhatsAppConversations();
@@ -76,6 +110,12 @@ export function Sidebar({
     loading
   } = useWorkspaceConfig();
 
+  
+  const { markAsRead } = useWhatsAppConversations();
+  const { user, userRole, hasRole, logout } = useAuth();
+  const { workspaces, isLoading } = useWorkspaces();
+  const { selectedWorkspace, setSelectedWorkspace } = useWorkspace();
+
   // Auto-select first workspace for master users
   useEffect(() => {
     if (userRole === 'master' && !selectedWorkspace && workspaces.length > 0 && !isLoading) {
@@ -83,10 +123,168 @@ export function Sidebar({
     }
   }, [userRole, selectedWorkspace, workspaces, isLoading, setSelectedWorkspace]);
 
+
+  // Auto-select first workspace for master users
+  useEffect(() => {
+
+    if (userRole === 'master' && !selectedWorkspace && workspaces.length > 0 && !isLoading) {
+      setSelectedWorkspace(workspaces[0]);
+
+    if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes" || activeModule === "administracao-dashboard") {
+      setExpandedGroups(prev => 
+        prev.includes("administracao") ? prev : [...prev, "administracao"]
+      );
+
+    }
+  }, [userRole, selectedWorkspace, workspaces, isLoading, setSelectedWorkspace]);
+
+
   // Garantir que o grupo "administracao" fique expandido quando o item financeiro estiver ativo
   useEffect(() => {
     if (activeModule === "administracao-financeiro" || activeModule === "administracao-usuarios" || activeModule === "administracao-configuracoes" || activeModule === "administracao-dashboard") {
       setExpandedGroups(prev => prev.includes("administracao") ? prev : [...prev, "administracao"]);
+
+  const menuItems: (MenuItem & { group?: string })[] = [
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      icon: <LayoutDashboard className="w-5 h-5" />
+    },
+    {
+      id: "conversas",
+      label: "Conversas",
+      icon: <MessageCircle className="w-5 h-5" />
+    },
+    {
+      id: "ds-voice",
+      label: "DS Voice",
+      icon: <Phone className="w-5 h-5" />
+    },
+    {
+      id: "workspace-empresas",
+      label: "Empresas",
+      icon: <Building2 className="w-5 h-5" />,
+      group: "workspace"
+    },
+    {
+      id: "workspace-relatorios",
+      label: "Relatórios",
+      icon: <BarChart3 className="w-5 h-5" />,
+      group: "workspace"
+    },
+    {
+      id: "crm-negocios",
+      label: "Negócios",
+      icon: <DollarSign className="w-5 h-5" />,
+      group: "crm"
+    },
+    {
+      id: "crm-ligacoes",
+      label: "Ligações",
+      icon: <Phone className="w-5 h-5" />,
+      group: "crm"
+    },
+    {
+      id: "crm-contatos",
+      label: "Contatos",
+      icon: <Users className="w-5 h-5" />,
+      group: "crm"
+    },
+    {
+      id: "crm-tags",
+      label: "Tags",
+      icon: <Target className="w-5 h-5" />,
+      group: "crm"
+    },
+    {
+      id: "crm-produtos",
+      label: "Produtos Comerciais",
+      icon: <FolderOpen className="w-5 h-5" />,
+      group: "crm"
+    },
+    {
+      id: "recursos-chats",
+      label: "Chats",
+      icon: <MessageSquare className="w-5 h-5" />,
+      group: "recursos"
+    },
+    {
+      id: "recursos-agendamentos",
+      label: "Agendamentos",
+      icon: <Calendar className="w-5 h-5" />,
+      group: "recursos"
+    },
+    {
+      id: "recursos-tarefas",
+      label: "Tarefas",
+      icon: <CheckSquare className="w-5 h-5" />,
+      group: "recursos"
+    },
+    {
+      id: "recursos-modelos",
+      label: "Modelos de Mensagens",
+      icon: <MessageSquare className="w-5 h-5" />,
+      group: "recursos"
+    },
+    {
+      id: "automacoes-agente",
+      label: "DS Agente",
+      icon: <BrainCircuit className="w-5 h-5" />,
+      group: "automacoes"
+    },
+    {
+      id: "automacoes-bot",
+      label: "DS Bot",
+      icon: <Bot className="w-5 h-5" />,
+      group: "automacoes"
+    },
+    {
+      id: "automacoes-integracoes",
+      label: "Integrações",
+      icon: <GitBranch className="w-5 h-5" />,
+      group: "automacoes"
+    },
+    {
+      id: "automacoes-filas",
+      label: "Filas",
+      icon: <Users className="w-5 h-5" />,
+      group: "automacoes"
+    },
+    {
+      id: "automacoes-api",
+      label: "API",
+      icon: <Zap className="w-5 h-5" />,
+      group: "automacoes"
+    },
+    {
+      id: "parceiros-clientes",
+      label: "Clientes",
+      icon: <Users className="w-5 h-5" />,
+      group: "parceiros"
+    },
+    {
+      id: "administracao-usuarios",
+      label: "Usuários",
+      icon: <Users className="w-5 h-5" />,
+      group: "administracao"
+    },
+    // {
+    //  id: "administracao-financeiro",
+     // label: "Financeiro",
+     // icon: <DollarSign className="w-5 h-5" />,
+//group: "administracao"
+  //  },
+    {
+      id: "administracao-dashboard",
+      label: "Dashboard",
+      icon: <Settings className="w-5 h-5" />,
+      group: "administracao"
+    },
+    {
+      id: "administracao-configuracoes",
+      label: "Configurações",
+      icon: <Settings className="w-5 h-5" />,
+      group: "administracao"
     }
   }, [activeModule]);
   const getIconClasses = () => isCollapsed ? "w-5 h-5 text-gray-700" : "w-4 h-4 text-gray-700";
@@ -430,6 +628,7 @@ export function Sidebar({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="p-1 hover:bg-accent rounded-md">
+
                     <MoreVertical className={isCollapsed ? "w-5 h-5 text-gray-700" : "w-4 h-4 text-gray-700"} strokeWidth={1.2} />
                   </button>
                 </DropdownMenuTrigger>
@@ -440,10 +639,25 @@ export function Sidebar({
                     </DropdownMenuItem>}
                   <DropdownMenuItem onClick={logout} className="text-destructive">
                     <LogOut className="w-4 h-4 mr-2 text-gray-700" strokeWidth={1.2} />
+
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="z-50 bg-background" align="end">
+                  {hasRole(['master']) && (
+                    <DropdownMenuItem onClick={() => setImpersonateOpen(true)}>
+                      <Building2 className="w-4 h-4 mr-2" />
+                      Personificar empresa
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={logout} className="text-destructive">
+                    <LogOut className="w-4 h-4 mr-2" />
+
                     Sair
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
             </>}
         </div>
       </div>
@@ -451,3 +665,17 @@ export function Sidebar({
       <ImpersonateWorkspaceModal open={impersonateOpen} onOpenChange={setImpersonateOpen} />
     </div>;
 }
+
+            </>
+          )}
+        </div>
+      </div>
+      
+      <ImpersonateWorkspaceModal 
+        open={impersonateOpen} 
+        onOpenChange={setImpersonateOpen} 
+      />
+    </div>
+  );
+}
+

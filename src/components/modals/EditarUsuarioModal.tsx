@@ -319,7 +319,9 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
                 disabled
+
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-not-allowed"
+
                 style={{ backgroundColor: '#f9fafb', color: '#6b7280', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>

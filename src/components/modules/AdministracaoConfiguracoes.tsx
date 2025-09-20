@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,10 +12,12 @@ import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
 import { EvolutionApiConfig } from "./EvolutionApiConfig";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+
 import { useWorkspaceConfig } from "@/hooks/useWorkspaceConfig";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useUnifiedTheme } from "@/hooks/useUnifiedTheme";
+
 
 export function AdministracaoConfiguracoes() {
   const [connectionLimit, setConnectionLimit] = useState("1");
@@ -99,9 +102,12 @@ export function AdministracaoConfiguracoes() {
         
         if (!currentUserData?.id) return;
 
+
+
         const headers = {
           'x-system-user-id': currentUserData.id,
           'x-system-user-email': currentUserData.email || '',
+
           'x-workspace-id': GLOBAL_CONFIG_ID
         };
 
@@ -115,19 +121,23 @@ export function AdministracaoConfiguracoes() {
         }
       } catch (error) {
         console.error('❌ Error loading GLOBAL settings:', error);
+
       }
     };
     
     loadData();
+
   }, []);
 
   const handleConnectionLimitChange = async (value: string) => {
     const GLOBAL_CONFIG_ID = '00000000-0000-0000-0000-000000000000';
 
+
     setLoading(true);
     try {
       const numericValue = value === "unlimited" ? 999 : parseInt(value);
       
+
       const userData = localStorage.getItem('currentUser');
       const currentUserData = userData ? JSON.parse(userData) : null;
       
@@ -138,23 +148,29 @@ export function AdministracaoConfiguracoes() {
       const headers = {
         'x-system-user-id': currentUserData.id,
         'x-system-user-email': currentUserData.email || '',
+
         'x-workspace-id': GLOBAL_CONFIG_ID
       };
 
       const { error } = await supabase.functions.invoke('update-workspace-limits', {
         body: { 
           workspaceId: GLOBAL_CONFIG_ID,
+
           connectionLimit: numericValue 
         },
         headers
       });
 
+
       if (error) throw error;
+
 
       setConnectionLimit(value);
       toast({
         title: 'Configuração atualizada',
+
         description: 'Limite de conexões atualizado globalmente para todos os usuários'
+
       });
     } catch (error: any) {
       console.error('❌ Error updating connection limit:', error);
@@ -167,6 +183,7 @@ export function AdministracaoConfiguracoes() {
       setLoading(false);
     }
   };
+
 
   // Save GLOBAL workspace configuration via Edge Function
   const saveWorkspaceConfig = async (field: string, value: string | boolean) => {
@@ -271,10 +288,12 @@ export function AdministracaoConfiguracoes() {
         <div className="text-sm text-muted-foreground bg-amber-100 dark:bg-amber-900/20 px-3 py-1 rounded-md">
           ⚠️ Configurações aplicadas para todos os usuários
         </div>
+
       </div>
       
       <div className="bg-card rounded-lg shadow-sm border border-border">
         <Tabs defaultValue="opcoes" className="w-full">
+
           <TabsList className="grid w-full grid-cols-3 bg-primary/10 rounded-t-lg rounded-b-none h-auto p-0">
             <TabsTrigger value="opcoes" className="rounded-t-lg rounded-b-none py-4 px-6 text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Opções
@@ -499,11 +518,36 @@ export function AdministracaoConfiguracoes() {
                   }}
                 />
               </div>
+
+              {/* Limite de Conexões */}
+              <div className="space-y-2">
+                <Label htmlFor="connection-limit" className="text-xs font-medium text-foreground">
+                  Limite de Conexões WhatsApp
+                </Label>
+                <Select 
+                  value={connectionLimit} 
+                  onValueChange={handleConnectionLimitChange}
+                  disabled={loading}
+                >
+                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
+                    <SelectValue placeholder="Selecione o limite" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 conexão</SelectItem>
+                    <SelectItem value="2">2 conexões</SelectItem>
+                    <SelectItem value="3">3 conexões</SelectItem>
+                    <SelectItem value="5">5 conexões</SelectItem>
+                    <SelectItem value="10">10 conexões</SelectItem>
+                    <SelectItem value="unlimited">Ilimitado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </TabsContent>
 
           <TabsContent value="webhooks" className="p-0 mt-0">
             <WebhooksEvolutionConfig />
+
           </TabsContent>
 
           <TabsContent value="evolution-api" className="p-0 mt-0">

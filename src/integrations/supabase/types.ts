@@ -671,6 +671,16 @@ export type Database = {
           {
             foreignKeyName: "conversations_workspace_fk"
             columns: ["workspace_id"]
+
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "fk_conversations_contact_id"
+            columns: ["contact_id"]
+            isOneToOne: false
+
             isOneToOne: false
             referencedRelation: "workspaces_view"
             referencedColumns: ["workspace_id"]
@@ -1060,29 +1070,92 @@ export type Database = {
         }
         Relationships: []
       }
+
       quick_audios: {
+
+      system_user_cargos: {
+        Row: {
+          cargo_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          cargo_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          cargo_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_user_cargos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_user_cargos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_users: {
+
         Row: {
           created_at: string
+
           duration_seconds: number | null
           file_name: string
           file_url: string
           id: string
           title: string
+
+          default_channel: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          profile: string
+          senha: string | null
+          status: string
+
           updated_at: string
           workspace_id: string
         }
         Insert: {
           created_at?: string
+
           duration_seconds?: number | null
           file_name: string
           file_url: string
           id?: string
           title: string
+
+          default_channel?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          profile: string
+          senha?: string | null
+          status?: string
+
           updated_at?: string
           workspace_id: string
         }
         Update: {
           created_at?: string
+
           duration_seconds?: number | null
           file_name?: string
           file_url?: string
@@ -1124,6 +1197,16 @@ export type Database = {
           file_url?: string
           id?: string
           title?: string
+
+          default_channel?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          profile?: string
+          senha?: string | null
+          status?: string
+
           updated_at?: string
           workspace_id?: string
         }
@@ -1208,6 +1291,7 @@ export type Database = {
           id?: string
           user_id?: string
         }
+
         Relationships: [
           {
             foreignKeyName: "system_user_cargos_user_id_fkey"
@@ -1224,6 +1308,7 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+        Relationships: []
       }
       system_users: {
         Row: {
@@ -1294,6 +1379,22 @@ export type Database = {
         }
         Relationships: [
           {
+
+            foreignKeyName: "fk_tags_org"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_tags_org"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+
             foreignKeyName: "tags_workspace_fk"
             columns: ["workspace_id"]
             isOneToOne: false
@@ -1331,6 +1432,83 @@ export type Database = {
         Relationships: []
       }
       webhook_logs: {
+
+        Row: {
+          created_at: string | null
+          event_type: string | null
+          id: string
+          instance_id: string | null
+          payload_json: Json | null
+          response_body: string | null
+          response_status: number | null
+          status: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_json?: Json | null
+          response_body?: string | null
+          response_status?: number | null
+          status?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          instance_id?: string | null
+          payload_json?: Json | null
+          response_body?: string | null
+          response_status?: number | null
+          status?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
+      workspace_limits: {
+        Row: {
+          connection_limit: number
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          connection_limit?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          connection_limit?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      workspace_members: {
+
         Row: {
           created_at: string | null
           event_type: string | null
@@ -1387,6 +1565,7 @@ export type Database = {
           background_solid_enabled: boolean | null
           contrast_color: string | null
           created_at: string
+
           favicon_url: string | null
           id: string
           login_banner_url: string | null
@@ -1396,6 +1575,12 @@ export type Database = {
           logo_secundario_escuro: string | null
           primary_color: string | null
           updated_at: string
+
+          id: string
+          is_hidden: boolean
+          role: Database["public"]["Enums"]["system_profile"]
+          user_id: string
+
           workspace_id: string
         }
         Insert: {
@@ -1403,6 +1588,7 @@ export type Database = {
           background_solid_enabled?: boolean | null
           contrast_color?: string | null
           created_at?: string
+
           favicon_url?: string | null
           id?: string
           login_banner_url?: string | null
@@ -1412,6 +1598,12 @@ export type Database = {
           logo_secundario_escuro?: string | null
           primary_color?: string | null
           updated_at?: string
+
+          id?: string
+          is_hidden?: boolean
+          role?: Database["public"]["Enums"]["system_profile"]
+          user_id: string
+
           workspace_id: string
         }
         Update: {
@@ -1419,6 +1611,7 @@ export type Database = {
           background_solid_enabled?: boolean | null
           contrast_color?: string | null
           created_at?: string
+
           favicon_url?: string | null
           id?: string
           login_banner_url?: string | null
@@ -1467,10 +1660,46 @@ export type Database = {
           created_at?: string | null
           id?: string
           updated_at?: string | null
+
+          id?: string
+          is_hidden?: boolean
+          role?: Database["public"]["Enums"]["system_profile"]
+          user_id?: string
+
           workspace_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
       }
+
       workspace_members: {
         Row: {
           created_at: string
@@ -1527,6 +1756,7 @@ export type Database = {
           },
         ]
       }
+
       workspace_webhook_secrets: {
         Row: {
           created_at: string | null
@@ -1762,10 +1992,12 @@ export type Database = {
           workspace_id: string
         }[]
       }
+
       set_current_user_context: {
         Args: { user_email?: string; user_id: string }
         Returns: undefined
       }
+
       slugify: {
         Args: { txt: string }
         Returns: string

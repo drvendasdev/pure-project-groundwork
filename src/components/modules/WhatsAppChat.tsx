@@ -1005,6 +1005,7 @@ const stopRecording = () => {
                       await fetchConversations();
                     }}
                     className="h-8 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-md"
+
                   />
                 </div>
               </div>

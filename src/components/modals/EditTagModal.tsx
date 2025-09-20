@@ -92,13 +92,17 @@ export function EditTagModal({ isOpen, onClose, tag, onTagUpdated, isCreateMode 
                 onChange={(e) => setName(e.target.value)}
                 onFocus={() => updateFocus('name', true)}
                 onBlur={() => updateFocus('name', false)}
+
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(209, 213, 219)' }}
               />
               <label
                 className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                   focusedFields.name || name
+
                     ? 'text-xs text-primary -top-2 bg-background px-1'
+
                     : 'text-sm text-gray-500 top-3'
                 }`}
               >
@@ -115,7 +119,9 @@ export function EditTagModal({ isOpen, onClose, tag, onTagUpdated, isCreateMode 
                 onFocus={() => updateFocus('color', true)}
                 onBlur={() => updateFocus('color', false)}
                 onClick={() => setIsColorPickerOpen(true)}
+
                 className="w-full h-12 pt-2 pb-2 pl-12 pr-12 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-pointer"
+
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(209, 213, 219)' }}
               />
               
@@ -139,7 +145,9 @@ export function EditTagModal({ isOpen, onClose, tag, onTagUpdated, isCreateMode 
               <label
                 className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                   focusedFields.color || color
+
                     ? 'text-xs text-primary -top-2 bg-background px-1'
+
                     : 'text-sm text-gray-500 top-3 left-12'
                 }`}
               >

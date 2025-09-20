@@ -59,6 +59,7 @@ export const WebhookConfigFix = () => {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+
             <div>
               <h4 className="font-medium text-yellow-800">Problema Identificado</h4>
               <p className="text-sm text-yellow-700 mt-1">
@@ -105,6 +106,7 @@ export const WebhookConfigFix = () => {
               </div>
               <div>
                 <span className="text-amber-600">Ignorados:</span>
+
                 <span className="font-medium ml-1">{summary.skipped}</span>
               </div>
             </div>

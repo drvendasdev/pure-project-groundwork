@@ -114,6 +114,7 @@ export function WebhooksEvolutionConfig() {
         return <Badge variant="destructive">Desconectado</Badge>;
       case 'connecting':
         return <Badge variant="outline" className="border-primary text-primary">Conectando</Badge>;
+
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
