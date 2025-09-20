@@ -248,7 +248,14 @@ serve(async (req) => {
 
     console.log('🚀 Calling Evolution API to create instance');
     console.log('📋 Payload:', JSON.stringify(evolutionPayload, null, 2));
-    console.log('🔗 URL:', `${evolutionConfig.url}/instance/create`);
+    
+    // Normalize URL to avoid double slashes
+    const baseUrl = evolutionConfig.url.endsWith('/') 
+      ? evolutionConfig.url.slice(0, -1) 
+      : evolutionConfig.url;
+    const fullUrl = `${baseUrl}/instance/create`;
+    
+    console.log('🔗 URL:', fullUrl);
     console.log('🔑 Using apikey authentication (consistent with webhook)');
 
     // Call Evolution API with error handling
@@ -256,11 +263,12 @@ serve(async (req) => {
     try {
       console.log('🔑 Using API key for Evolution request:', evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 8)}...` : 'MISSING');
       
-      evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
+      evolutionResponse = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': evolutionConfig.apiKey
+          'apikey': evolutionConfig.apiKey,
+          'Authorization': `Bearer ${evolutionConfig.apiKey}`
         },
         body: JSON.stringify(evolutionPayload)
       })
