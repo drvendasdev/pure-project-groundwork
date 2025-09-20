@@ -218,7 +218,7 @@ serve(async (req) => {
     // Prepare Evolution API request
     const webhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook-v2`
     
-    // Validate API key before proceeding by testing with a simple request
+    // Validate API key exists
     if (!evolutionConfig.apiKey) {
       console.error('❌ Missing Evolution API key');
       await supabase.from('connections').delete().eq('id', connectionData.id)
@@ -228,45 +228,7 @@ serve(async (req) => {
       )
     }
     
-    // Test API key with a simple fetchInstances call first
-    console.log('🧪 Testing API key with fetchInstances...');
-    const testUrl = `${evolutionConfig.url.endsWith('/') ? evolutionConfig.url.slice(0, -1) : evolutionConfig.url}/instance/fetchInstances`;
-    
-    try {
-      const testResponse = await fetch(testUrl, {
-        method: 'GET',
-        headers: {
-          'apikey': evolutionConfig.apiKey
-        }
-      });
-      
-      console.log('🧪 API key test response status:', testResponse.status);
-      
-      if (!testResponse.ok) {
-        const errorText = await testResponse.text();
-        console.error('❌ API key test failed:', testResponse.status, errorText);
-        await supabase.from('connections').delete().eq('id', connectionData.id)
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: `Evolution API key validation failed: ${testResponse.status} - ${errorText}` 
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-      
-      console.log('✅ API key test passed');
-    } catch (testError) {
-      console.error('❌ API key test error:', testError);
-      await supabase.from('connections').delete().eq('id', connectionData.id)
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Evolution API connection test failed: ${testError.message}` 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    console.log('✅ API key found, proceeding with instance creation');
     
     const evolutionPayload = {
       instanceName: instanceName,
@@ -300,31 +262,39 @@ serve(async (req) => {
     console.log('🔗 URL:', fullUrl);
     console.log('🔑 Using apikey authentication (consistent with webhook)');
 
-    // Call Evolution API with error handling
+    // Call Evolution API with error handling and timeout
     let evolutionResponse;
     try {
-      console.log('🔑 Using API key for Evolution request:', evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 12)}...` : 'MISSING');
-      console.log('🔗 Final URL being called:', fullUrl);
-      console.log('📝 Request headers:', {
-        'Content-Type': 'application/json',
-        'apikey': evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 12)}...` : 'MISSING'
-      });
+      console.log('🔑 Making Evolution API request');
+      console.log('🔗 URL:', fullUrl);
+      
+      // Create fetch with timeout to prevent 502 errors
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
       evolutionResponse = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': evolutionConfig.apiKey
+          'apikey': evolutionConfig.apiKey,
         },
-        body: JSON.stringify(evolutionPayload)
-      })
+        body: JSON.stringify(evolutionPayload),
+        signal: controller.signal
+      });
       
+      clearTimeout(timeoutId);
       console.log('✅ Evolution API response status:', evolutionResponse.status);
+      
     } catch (fetchError) {
-      console.error('❌ Fetch error calling Evolution API:', fetchError);
-      await supabase.from('connections').delete().eq('id', connectionData.id)
+      console.error('❌ Evolution API request failed:', fetchError);
+      await supabase.from('connections').delete().eq('id', connectionData.id);
+      
+      const errorMessage = fetchError.name === 'AbortError' 
+        ? 'Request timeout - Evolution API não respondeu em 30 segundos'
+        : `Falha na conexão com Evolution API: ${fetchError.message}`;
+      
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to connect to Evolution API' }),
+        JSON.stringify({ success: false, error: errorMessage }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -414,14 +384,13 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Unexpected error in evolution-create-instance:', error)
-    console.error('Error stack:', error.stack)
-    console.error('Error details:', JSON.stringify(error, null, 2))
+    console.error('❌ Unexpected error in evolution-create-instance:', error)
+    console.error('❌ Error stack:', error.stack)
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: `Unexpected error: ${error.message}`,
-        details: error.stack
+        error: `Erro interno no servidor: ${error.message || 'Erro desconhecido'}`
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
