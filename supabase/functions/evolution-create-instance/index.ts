@@ -29,7 +29,9 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
       found: !!configData,
       hasUrl: !!configData?.evolution_url,
       hasToken: !!configData?.token,
-      tokenType: configData?.token === 'config_only' ? 'config_only' : 'actual_token'
+      tokenType: configData?.token === 'config_only' ? 'config_only' : 'actual_token',
+      tokenLength: configData?.token ? configData.token.length : 0,
+      urlFromDb: configData?.evolution_url
     });
 
     let url = null; // No default fallback - must come from workspace config
@@ -216,12 +218,52 @@ serve(async (req) => {
     // Prepare Evolution API request
     const webhookUrl = `${supabaseUrl}/functions/v1/evolution-webhook-v2`
     
-    // Validate API key before proceeding
+    // Validate API key before proceeding by testing with a simple request
     if (!evolutionConfig.apiKey) {
       console.error('❌ Missing Evolution API key');
       await supabase.from('connections').delete().eq('id', connectionData.id)
       return new Response(
         JSON.stringify({ success: false, error: 'Missing Evolution API key configuration' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    // Test API key with a simple fetchInstances call first
+    console.log('🧪 Testing API key with fetchInstances...');
+    const testUrl = `${evolutionConfig.url.endsWith('/') ? evolutionConfig.url.slice(0, -1) : evolutionConfig.url}/instance/fetchInstances`;
+    
+    try {
+      const testResponse = await fetch(testUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': evolutionConfig.apiKey
+        }
+      });
+      
+      console.log('🧪 API key test response status:', testResponse.status);
+      
+      if (!testResponse.ok) {
+        const errorText = await testResponse.text();
+        console.error('❌ API key test failed:', testResponse.status, errorText);
+        await supabase.from('connections').delete().eq('id', connectionData.id)
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Evolution API key validation failed: ${testResponse.status} - ${errorText}` 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      console.log('✅ API key test passed');
+    } catch (testError) {
+      console.error('❌ API key test error:', testError);
+      await supabase.from('connections').delete().eq('id', connectionData.id)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Evolution API connection test failed: ${testError.message}` 
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -261,7 +303,12 @@ serve(async (req) => {
     // Call Evolution API with error handling
     let evolutionResponse;
     try {
-      console.log('🔑 Using API key for Evolution request:', evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 8)}...` : 'MISSING');
+      console.log('🔑 Using API key for Evolution request:', evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 12)}...` : 'MISSING');
+      console.log('🔗 Final URL being called:', fullUrl);
+      console.log('📝 Request headers:', {
+        'Content-Type': 'application/json',
+        'apikey': evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 12)}...` : 'MISSING'
+      });
       
       evolutionResponse = await fetch(fullUrl, {
         method: 'POST',
