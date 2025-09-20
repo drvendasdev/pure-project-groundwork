@@ -214,4 +214,21 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.evolution-webhook-v2]
+
+verify_jwt = false
+
+[functions.get-workspace-config]
+verify_jwt = false
+
+[functions.save-workspace-config]
+verify_jwt = false
+
+[functions.upload-workspace-media]
+verify_jwt = false
+
+[functions.get-workspace-config]
+verify_jwt = false
+
+[functions.save-workspace-media]
+
 verify_jwt = false

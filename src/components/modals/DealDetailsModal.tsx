@@ -290,7 +290,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
               </div>
               
               <div className="flex items-center gap-2">
-                <Badge className="bg-yellow-400 text-black hover:bg-yellow-500 px-3 py-1 text-xs">
+                <Badge className="bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1 text-xs">
                   Ver Conversas
                 </Badge>
                 
@@ -346,14 +346,14 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
               className={cn(
                 "px-6 py-3 text-sm font-medium border-b-2 transition-colors",
                 activeTab === tab.id
-                  ? "border-yellow-400 text-yellow-600"
+                  ? "border-primary text-primary"
                   : "border-transparent",
                 isDarkMode
                   ? activeTab === tab.id
-                    ? "text-yellow-400"
+                    ? "text-primary"
                     : "text-gray-400 hover:text-white"
                   : activeTab === tab.id
-                    ? "text-yellow-600"
+                    ? "text-primary"
                     : "text-gray-600 hover:text-gray-900"
               )}
             >
@@ -411,7 +411,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                           <div className={cn(
                             "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2",
                             step.isActive
-                              ? "bg-yellow-400 text-black border-yellow-400"
+                              ? "bg-primary text-primary-foreground border-primary"
                               : "bg-gray-300 text-gray-600 border-gray-300",
                             isDarkMode && !step.isActive
                               ? "bg-gray-600 text-gray-300 border-gray-500"
@@ -424,7 +424,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                           <div className={cn(
                             "flex-1 h-1 mx-2",
                             step.isActive
-                              ? "bg-yellow-400"
+                              ? "bg-primary"
                               : "bg-gray-300",
                             isDarkMode && !step.isActive ? "bg-gray-600" : ""
                           )} />
@@ -441,7 +441,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                         className={cn(
                           "text-xs text-center flex-1 px-1",
                           step.isActive
-                            ? "text-yellow-600 font-medium"
+                            ? "text-primary font-medium"
                             : isDarkMode
                               ? "text-gray-400"
                               : "text-gray-600"
@@ -465,7 +465,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                   </h3>
                   <Button
                     size="sm"
-                    className="bg-yellow-400 text-black hover:bg-yellow-500"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Adicionar

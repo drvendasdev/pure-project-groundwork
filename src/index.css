@@ -13,8 +13,6 @@
     /* Brand colors */
     --brand-blue: 220 100% 25%;
     --brand-blue-light: 220 100% 45%;
-    --brand-yellow: 45 100% 65%;
-    --brand-yellow-hover: 45 100% 55%;
 
     /* Status colors */
     --success: 120 50% 45%;
@@ -31,30 +29,39 @@
 
     --sidebar: 220 13% 98%;
     --sidebar-foreground: 220 13% 18%;
-    --sidebar-active: 45 100% 65%;
-    --sidebar-active-foreground: 0 0% 0%;
+    --sidebar-active: 220 13% 91%;
+    --sidebar-active-foreground: 220 13% 18%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 18%;
 
+
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 100%;
+
     --primary: 45 100% 65%;
     --primary-foreground: 0 0% 0%;
 
-    --secondary: 220 13% 96%;
-    --secondary-foreground: 220 13% 18%;
+
+    --secondary: 142 76% 36%;
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 220 13% 96%;
     --muted-foreground: 220 9% 46%;
 
-    --accent: 45 100% 65%;
-    --accent-foreground: 220 13% 18%;
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 65% 55%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 220 13% 91%;
     --input: 220 13% 91%;
+
+    --ring: 220 13% 85%;
+
     --ring: 45 100% 55%;
+
 
     --radius: 0.5rem;
 
@@ -93,24 +100,28 @@
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 45 100% 65%;
-    --primary-foreground: 0 0% 0%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 100%;
+
+
+    --secondary: 142 76% 36%;
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 45 100% 65%;
-    --accent-foreground: 0 0% 0%;
+
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
+
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 45 100% 55%;
+    --ring: 220 13% 85%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -129,6 +140,8 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    font-weight: 400;
   }
 }
 
@@ -137,10 +150,30 @@
   min-width: 9rem;
 }
 
-/* Custom scrollbar styling */
+/* Color preview buttons - force background color */
+.color-preview-btn {
+  background-color: var(--color-preview) !important;
+}
+
+/* Sidebar text overrides */
+[data-sidebar] span,
+[data-sidebar] p,
+[data-sidebar] div:not([class*="icon"]) {
+  color: #000000 !important;
+}
+
+[data-sidebar] .text-foreground {
+  color: #000000 !important;
+}
+
+[data-sidebar] .text-primary {
+  color: #000000 !important;
+}
+
+/* Custom scrollbar styling with dynamic colors */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(234 179 8) transparent;
+  scrollbar-color: hsl(var(--primary)) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -153,17 +186,17 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgb(234 179 8);
+  background-color: hsl(var(--primary));
   border-radius: 4px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(202 138 4);
+  background-color: hsl(var(--primary) / 0.8);
 }
 
 /* Custom select styling */
 select option:checked,
 select option:hover {
-  background-color: rgb(234 179 8) !important;
-  color: black !important;
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
 }

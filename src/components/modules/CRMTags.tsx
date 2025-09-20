@@ -28,7 +28,7 @@ export function CRMTags() {
                 placeholder="Buscar usuário"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-sm"
+                className="max-w-sm bg-white text-gray-900 border-gray-300 focus:bg-white"
               />
             </div>
             

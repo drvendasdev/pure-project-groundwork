@@ -254,7 +254,9 @@ export function AdministracaoDashboard() {
                 placeholder="Buscar por título ou descrição..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+
+                className="pl-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
+
               />
             </div>
             
@@ -289,10 +291,12 @@ export function AdministracaoDashboard() {
 
       {/* Tabelas com Abas */}
       <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="all">Todos os Cards ({allCards.length})</TabsTrigger>
-          <TabsTrigger value="updates">Atualizações ({updateCards.length})</TabsTrigger>
-          <TabsTrigger value="events">Eventos ({eventCards.length})</TabsTrigger>
+
+        <TabsList className="grid w-full grid-cols-3 bg-primary/10">
+          <TabsTrigger value="all" className="bg-primary/20 text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Todos os Cards ({allCards.length})</TabsTrigger>
+          <TabsTrigger value="updates" className="bg-primary/20 text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Atualizações ({updateCards.length})</TabsTrigger>
+          <TabsTrigger value="events" className="bg-primary/20 text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Eventos ({eventCards.length})</TabsTrigger>
+
         </TabsList>
 
         <TabsContent value="all" className="space-y-4">

@@ -209,7 +209,7 @@ export function AddTagModal({
             <Button
               onClick={() => tagInput.trim() && handleAddTag(tagInput.trim())}
               disabled={!tagInput.trim() || isLoading}
-              className="bg-yellow-400 text-black hover:bg-yellow-500"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {isLoading ? "Adicionando..." : "Adicionar"}
             </Button>

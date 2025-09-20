@@ -486,7 +486,7 @@ export function CRMContatos() {
               placeholder="Pesquisar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 text-xs h-8"
+              className="pl-8 text-xs h-8 bg-transparent"
             />
           </div>
           
@@ -527,13 +527,13 @@ export function CRMContatos() {
           
           <Button 
             size="sm" 
-            className="bg-yellow-500 hover:bg-yellow-600 text-black whitespace-nowrap text-xs h-8 px-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap text-xs h-8 px-2"
             onClick={handleAddContact}
           >
             Adicionar
           </Button>
           
-          <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-black whitespace-nowrap text-xs h-8 px-2">
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap text-xs h-8 px-2">
             Importar
           </Button>
           
@@ -704,12 +704,12 @@ export function CRMContatos() {
           
           <div className="space-y-4">
             <div>
-              <Label htmlFor="name" className="text-yellow-600">Nome</Label>
+              <Label htmlFor="name" className="text-primary">Nome</Label>
               <Input
                 id="name"
                 value={editingContact?.name || ""}
                 onChange={(e) => setEditingContact(prev => prev ? {...prev, name: e.target.value} : null)}
-                className="border-yellow-400"
+                className="border-primary focus-visible:ring-primary"
               />
             </div>
             
@@ -771,7 +771,7 @@ export function CRMContatos() {
                   variant="ghost"
                   size="sm"
                   onClick={addCustomField}
-                  className="text-yellow-600 hover:text-yellow-700"
+                  className="text-primary hover:text-primary/80"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Adicionar Informação
@@ -793,7 +793,7 @@ export function CRMContatos() {
             </Button>
             <Button 
               onClick={handleSaveContact}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
               disabled={isSaving || !editingContact?.name?.trim()}
             >
               {isSaving ? "Salvando..." : "Salvar"}

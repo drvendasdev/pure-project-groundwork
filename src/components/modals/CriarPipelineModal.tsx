@@ -58,7 +58,7 @@ export function CriarPipelineModal({ isOpen, onClose, onSave }: CriarPipelineMod
               Tipo do pipeline
             </Label>
             <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger className="w-full bg-yellow-400 hover:bg-yellow-500 text-black border-yellow-500">
+              <SelectTrigger className="w-full bg-primary hover:bg-primary/90 text-primary-foreground border-primary">
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -81,7 +81,7 @@ export function CriarPipelineModal({ isOpen, onClose, onSave }: CriarPipelineMod
           <Button 
             onClick={handleSave}
             disabled={!nome.trim() || !tipo}
-            className="bg-yellow-400 hover:bg-yellow-500 text-black font-medium"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
           >
             Criar
           </Button>

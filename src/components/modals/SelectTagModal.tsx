@@ -151,7 +151,9 @@ export function SelectTagModal({ isOpen, onClose, onTagAdded, contactId }: Selec
           <Button
             onClick={handleAddTag}
             disabled={!selectedTagId || isLoading || availableTags.length === 0}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black"
+
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+
           >
             {isLoading ? "Adicionando..." : "Adicionar Tag"}
           </Button>

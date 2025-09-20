@@ -61,7 +61,7 @@ export function TopBar({ onNavigateToConversation }: TopBarProps) {
                 R$ 0
               </div>
               <Button 
-                className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={() => setShowWalletModal(true)}
               >
                 Adicionar Saldo

@@ -203,13 +203,21 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                 onChange={(e) => setNome(e.target.value)}
                 onFocus={() => setNomeIsFocused(true)}
                 onBlur={() => setNomeIsFocused(false)}
+
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               />
               <label 
                 className={`absolute left-3 transition-all duration-200 pointer-events-none px-2 ${
                   nomeIsFocused || nome ? 
+
+                  '-top-2 text-xs text-primary font-medium' :
+
                   '-top-2 text-xs text-yellow-500 font-medium' : 
+
                   'top-1/2 -translate-y-1/2 text-gray-500'
                 }`}
                 style={{ backgroundColor: 'white' }}
@@ -225,7 +233,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                 onChange={(e) => setTipo(e.target.value)}
                 onFocus={() => setTipoIsFocused(true)}
                 onBlur={() => setTipoIsFocused(false)}
+
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -239,7 +251,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
               <label 
                 className={`absolute left-3 transition-all duration-200 pointer-events-none px-2 ${
                   tipoIsFocused || tipo ? 
+
+                  '-top-2 text-xs text-primary font-medium' : 
+
                   '-top-2 text-xs text-yellow-500 font-medium' : 
+
                   'top-1/2 -translate-y-1/2 text-gray-500'
                 }`}
                 style={{ backgroundColor: 'white' }}
@@ -275,7 +291,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                       variant="outline"
                       size="sm"
                       onClick={handleSelectAll}
+
+                      className="bg-background text-primary border-primary hover:bg-muted text-xs px-3 py-1 h-8"
+
                       className="bg-white text-yellow-500 border-yellow-500 hover:bg-yellow-50 text-xs px-3 py-1 h-8"
+
                     >
                       Selecionar Tudo
                     </Button>
@@ -284,7 +304,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                       variant="outline"
                       size="sm"
                       onClick={handleDeselectAll}
+
+                      className="bg-background text-primary border-primary hover:bg-muted text-xs px-3 py-1 h-8"
+
                       className="bg-white text-yellow-500 border-yellow-500 hover:bg-yellow-50 text-xs px-3 py-1 h-8"
+
                     >
                       Desmarcar Tudo
                     </Button>
@@ -318,7 +342,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleSelectAllForSubPermission(sub.id)}
+
+                                    className="bg-background text-primary border-primary hover:bg-muted text-xs px-2 py-1 h-7"
+
                                     className="bg-white text-yellow-500 border-yellow-500 hover:bg-yellow-50 text-xs px-2 py-1 h-7"
+
                                   >
                                     Selecionar Tudo
                                   </Button>
@@ -327,7 +355,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleDeselectAllForSubPermission(sub.id)}
+
+                                    className="bg-background text-primary border-primary hover:bg-muted text-xs px-2 py-1 h-7"
+
                                     className="bg-white text-yellow-500 border-yellow-500 hover:bg-yellow-50 text-xs px-2 py-1 h-7"
+
                                   >
                                     Desmarcar Tudo
                                   </Button>
@@ -358,7 +390,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
                                             onCheckedChange={(checked) => 
                                               handleSubPermissionChange(sub.id, action, checked as boolean)
                                             }
+
+                                            className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+
                                             className="border-gray-300 data-[state=checked]:bg-yellow-500 data-[state=checked]:border-yellow-500"
+
                                           />
                                         </td>
                                       ))}
@@ -391,7 +427,11 @@ export function AdicionarCargoModal({ isOpen, onClose, onAddCargo, loading }: Ad
             <Button
               type="submit"
               disabled={!isFormValid || loading}
+
+              className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-2 rounded-md text-sm font-normal disabled:opacity-50 disabled:cursor-not-allowed"
+
               className="bg-yellow-400 text-black hover:bg-yellow-500 px-6 py-2 rounded-md text-sm font-normal disabled:opacity-50 disabled:cursor-not-allowed"
+
               style={{ backgroundColor: '#f1c40f' }}
             >
               {loading ? "Salvando..." : "Salvar"}

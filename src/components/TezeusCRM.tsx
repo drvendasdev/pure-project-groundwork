@@ -3,6 +3,11 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { useSessionManager } from "@/hooks/useSessionManager";
 
+import { useUnifiedTheme } from "@/hooks/useUnifiedTheme";
+import { useGlobalThemeSync } from "@/hooks/useGlobalThemeSync";
+import { useFavicon } from "@/hooks/useFavicon";
+
+
 import { Dashboard } from "./Dashboard";
 import { Conversas } from "./modules/Conversas";
 import { DSVoice } from "./modules/DSVoice";
@@ -65,6 +70,15 @@ export function TezeusCRM() {
   // Monitor de sessão global
   useSessionManager();
   
+
+  // Update favicon and apply unified theme colors
+  useFavicon();
+  const { backgroundSolidEnabled, backgroundSolidColor } = useUnifiedTheme();
+  
+  // Enable global theme synchronization across all tabs/devices
+  useGlobalThemeSync();
+  
+
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -177,7 +191,16 @@ export function TezeusCRM() {
   };
 
   return (
-    <div className="min-h-screen flex w-full gap-2 bg-gradient-to-br from-background via-background to-muted">
+    <div 
+      className={`min-h-screen flex w-full gap-2 ${
+        backgroundSolidEnabled && backgroundSolidColor 
+          ? '' 
+          : 'bg-gradient-to-br from-background via-background to-muted'
+      }`}
+      style={backgroundSolidEnabled && backgroundSolidColor ? { 
+        backgroundColor: backgroundSolidColor 
+      } : undefined}
+    >
       <Sidebar 
         activeModule={activeModule}
         onModuleChange={(module) => {

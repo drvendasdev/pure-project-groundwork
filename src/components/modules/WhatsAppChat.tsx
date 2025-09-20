@@ -628,7 +628,7 @@ const stopRecording = () => {
               placeholder="Buscar"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-10"
+              className="pl-10 pr-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
             />
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger asChild>
@@ -721,7 +721,7 @@ const stopRecording = () => {
                   </div>
                   
                   <Button 
-                    className="w-full bg-yellow-400 hover:bg-yellow-500 text-black"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                     onClick={() => {
                       setSelectedAgent("");
                       setSelectedTag("");
@@ -1004,7 +1004,8 @@ const stopRecording = () => {
                       // Refresh conversations after accepting
                       await fetchConversations();
                     }}
-                    className="h-8 px-4 bg-yellow-400 hover:bg-yellow-500 text-black font-medium rounded-md"
+                    className="h-8 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-md"
+
                   />
                 </div>
               </div>

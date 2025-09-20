@@ -465,7 +465,7 @@ export function CreateActivityModal({
             <Button
               onClick={handleCreateActivity}
               disabled={isLoading}
-              className="bg-yellow-400 text-black hover:bg-yellow-500"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {isLoading ? "Criando..." : "Criar Atividade"}
             </Button>
