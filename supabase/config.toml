@@ -218,3 +218,6 @@ verify_jwt = false
 
 [functions.evolution-create-instance-debug]
 verify_jwt = false
+
+[functions.test-evolution-api-key]
+verify_jwt = false
