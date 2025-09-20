@@ -234,7 +234,7 @@ serve(async (req) => {
         url: webhookUrl,
         base64: true,
         headers: {
-          "apikey": evolutionConfig.apiKey,
+          "apikey": token,
           "Content-Type": "application/json"
         },
         events: [
