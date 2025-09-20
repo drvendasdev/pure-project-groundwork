@@ -18,6 +18,7 @@ interface WhatsAppMessage {
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   external_id?: string;
   metadata?: any;
+  workspace_id?: string;
 }
 
 interface UseConversationMessagesReturn {
@@ -251,6 +252,60 @@ export function useConversationMessages(): UseConversationMessagesReturn {
 
     return () => clearInterval(cleanupInterval);
   }, []);
+
+  // Real-time subscriptions para mensagens
+  useEffect(() => {
+    if (!selectedWorkspace?.workspace_id || !currentConversationId) {
+      return;
+    }
+
+    console.log('🔔 Configurando real-time subscription para conversa:', currentConversationId);
+
+    const channel = supabase
+      .channel(`conversation-messages-${currentConversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${currentConversationId}`
+        },
+        (payload) => {
+          console.log('📩 Nova mensagem recebida via real-time:', payload.new);
+          const newMessage = payload.new as WhatsAppMessage;
+          
+          // Verificar se é do workspace atual
+          if (newMessage.workspace_id === selectedWorkspace.workspace_id) {
+            addMessage(newMessage);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${currentConversationId}`
+        },
+        (payload) => {
+          console.log('🔄 Mensagem atualizada via real-time:', payload.new);
+          const updatedMessage = payload.new as WhatsAppMessage;
+          
+          // Verificar se é do workspace atual
+          if (updatedMessage.workspace_id === selectedWorkspace.workspace_id) {
+            updateMessage(updatedMessage.id, updatedMessage);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('🔕 Limpando subscription da conversa:', currentConversationId);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedWorkspace?.workspace_id, currentConversationId, addMessage, updateMessage]);
 
   return {
     messages,
