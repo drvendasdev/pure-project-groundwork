@@ -221,3 +221,6 @@ verify_jwt = false
 
 [functions.test-evolution-api-key]
 verify_jwt = false
+
+[functions.send-media-to-evolution]
+verify_jwt = false

@@ -460,6 +460,25 @@ serve(async (req) => {
         console.log(`✅ [${requestId}] N8N webhook called successfully`);
         n8nSuccess = true;
         
+        // Se for mensagem de mídia, chamar send-media-to-evolution para processar e gerar URL
+        if (message_type !== 'text' && file_url) {
+          console.log(`📁 [${requestId}] Calling send-media-to-evolution for URL generation`);
+          
+          try {
+            const { data: mediaResult, error: mediaError } = await supabase.functions.invoke('send-media-to-evolution', {
+              body: n8nPayload
+            });
+
+            if (mediaError) {
+              console.error(`❌ [${requestId}] Send-media-to-evolution error:`, mediaError);
+            } else {
+              console.log(`✅ [${requestId}] Media processed and sent to Evolution:`, mediaResult);
+            }
+          } catch (mediaInvokeError) {
+            console.error(`❌ [${requestId}] Failed to invoke send-media-to-evolution:`, mediaInvokeError);
+          }
+        }
+        
         // Atualizar status da mensagem para 'sent' após sucesso do N8N
         try {
           await supabase
