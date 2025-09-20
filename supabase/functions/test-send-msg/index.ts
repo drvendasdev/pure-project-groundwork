@@ -370,18 +370,25 @@ serve(async (req) => {
         
         // Formato específico para N8N com base64 (incluindo phone_number)
         n8nPayload = {
-          messageId: external_id,
-          external_id: external_id, // Incluir external_id explicitamente
-          base64: mediaBase64,
-          fileName: fileName,
-          mimeType: mimeType,
           direction: 'outbound',
+          external_id: external_id,
+          message_id: external_id,
           phone_number: contact.phone,
+          message_type: message_type,
+          sender_type: sender_type || 'agent',
+          sender_id: sender_id,
+          base64: mediaBase64,
+          file_name: fileName,
+          mime_type: mimeType,
           workspace_id: conversation.workspace_id,
           conversation_id: conversation_id,
           connection_id: actualConnectionId,
           contact_id: conversation.contact_id,
-          instance: instance_name
+          instance: instance_name,
+          source: 'test-send-msg',
+          timestamp: new Date().toISOString(),
+          request_id: requestId,
+          content: effectiveContent || ''
         };
         
         
