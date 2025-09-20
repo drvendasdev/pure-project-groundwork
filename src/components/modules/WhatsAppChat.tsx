@@ -1199,7 +1199,7 @@ export function WhatsAppChat({
             {/* Campo de entrada de mensagem */}
             <div className="p-4 border-t border-border">
               <div className="flex items-end gap-2">
-            <MediaUpload onFileSelect={(file, mediaType, fileUrl) => {
+            <MediaUpload onFileSelect={async (file, mediaType, fileUrl) => {
               if (!selectedConversation) return;
               const caption = messageText.trim();
 
@@ -1219,6 +1219,58 @@ export function WhatsAppChat({
               };
               addMessage(optimisticMessage);
               if (caption) setMessageText('');
+
+              // 🚀 CRÍTICO: Enviar mídia para N8N via test-send-msg
+              try {
+                const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+                  body: {
+                    conversation_id: selectedConversation.id,
+                    content: caption || `[${mediaType.toUpperCase()}]`,
+                    message_type: mediaType,
+                    sender_id: user?.id,
+                    sender_type: 'agent',
+                    file_url: fileUrl,
+                    file_name: file.name
+                  },
+                  headers: {
+                    'x-system-user-id': user?.id || '',
+                    'x-workspace-id': selectedWorkspace?.workspace_id || '',
+                    'x-system-user-email': user?.email || ''
+                  }
+                });
+
+                if (error) {
+                  console.error('Erro ao enviar mídia:', error);
+                  toast({
+                    title: "Erro ao enviar mídia",
+                    description: error.message || "Erro desconhecido",
+                    variant: "destructive"
+                  });
+                  // Atualizar mensagem para erro
+                  updateMessage(optimisticMessage.id, {
+                    status: 'failed',
+                    content: `❌ ${optimisticMessage.content}`
+                  });
+                } else {
+                  console.log('✅ Mídia enviada com sucesso:', sendResult);
+                  // Atualizar mensagem para enviada
+                  updateMessage(optimisticMessage.id, {
+                    status: 'sent',
+                    external_id: sendResult.external_id
+                  });
+                }
+              } catch (err) {
+                console.error('Erro ao enviar mídia:', err);
+                toast({
+                  title: "Erro ao enviar mídia", 
+                  description: "Erro de conexão",
+                  variant: "destructive"
+                });
+                updateMessage(optimisticMessage.id, {
+                  status: 'failed',
+                  content: `❌ ${optimisticMessage.content}`
+                });
+              }
             }} />
             
             {/* Botão com ícone personalizado */}
