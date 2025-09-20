@@ -10,57 +10,39 @@ import { useQuickMessages } from "@/hooks/useQuickMessages";
 import { useQuickAudios } from "@/hooks/useQuickAudios";
 import { useQuickMedia } from "@/hooks/useQuickMedia";
 import { useQuickDocuments } from "@/hooks/useQuickDocuments";
-const categories = [{
-  id: "mensagens",
-  label: "Mensagens",
-  icon: MessageSquare
-}, {
-  id: "audios",
-  label: "Áudios",
-  icon: Mic
-}, {
-  id: "midias",
-  label: "Mídias",
-  icon: Image
-}, {
-  id: "documentos",
-  label: "Documentos",
-  icon: FileText
-}, {
-  id: "funis",
-  label: "Funis",
-  icon: Filter
-}, {
-  id: "gatilhos",
-  label: "Gatilhos",
-  icon: Play
-}, {
-  id: "configuracoes",
-  label: "Configurações",
-  icon: Settings
-}];
+
+const categories = [
+  { id: "mensagens", label: "Mensagens", icon: MessageSquare },
+  { id: "audios", label: "Áudios", icon: Mic },
+  { id: "midias", label: "Mídias", icon: Image },
+  { id: "documentos", label: "Documentos", icon: FileText },
+  { id: "funis", label: "Funis", icon: Filter },
+  { id: "gatilhos", label: "Gatilhos", icon: Play },
+  { id: "configuracoes", label: "Configurações", icon: Settings },
+];
+
 export function DSVoice() {
   const [activeCategory, setActiveCategory] = useState("mensagens");
   const [searchTerm, setSearchTerm] = useState("");
-
+  
   // Estados para modais de mensagens
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [messageTitle, setMessageTitle] = useState("");
   const [messageContent, setMessageContent] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-
+  
   // Estados para modais de áudios
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
   const [audioTitle, setAudioTitle] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
-
+  
   // Estados para modais de mídias
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [mediaTitle, setMediaTitle] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
-
+  
   // Estados para modais de documentos
   const [isDocumentModalOpen, setIsDocumentModalOpen] = useState(false);
   const [documentTitle, setDocumentTitle] = useState("");
@@ -68,34 +50,10 @@ export function DSVoice() {
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
 
   // Hooks para dados reais
-  const {
-    messages,
-    loading: messagesLoading,
-    createMessage,
-    updateMessage,
-    deleteMessage
-  } = useQuickMessages();
-  const {
-    audios,
-    loading: audiosLoading,
-    createAudio,
-    updateAudio,
-    deleteAudio
-  } = useQuickAudios();
-  const {
-    media,
-    loading: mediaLoading,
-    createMedia,
-    updateMedia,
-    deleteMedia
-  } = useQuickMedia();
-  const {
-    documents,
-    loading: documentsLoading,
-    createDocument,
-    updateDocument,
-    deleteDocument
-  } = useQuickDocuments();
+  const { messages, loading: messagesLoading, createMessage, updateMessage, deleteMessage } = useQuickMessages();
+  const { audios, loading: audiosLoading, createAudio, updateAudio, deleteAudio } = useQuickAudios();
+  const { media, loading: mediaLoading, createMedia, updateMedia, deleteMedia } = useQuickMedia();
+  const { documents, loading: documentsLoading, createDocument, updateDocument, deleteDocument } = useQuickDocuments();
 
   // Handlers para mensagens
   const handleCreateMessage = async () => {
@@ -108,17 +66,20 @@ export function DSVoice() {
       handleCloseMessageModal();
     }
   };
+
   const handleEditMessage = (message: any) => {
     setMessageTitle(message.title);
     setMessageContent(message.content);
     setEditingMessageId(message.id);
     setIsMessageModalOpen(true);
   };
+
   const handleDeleteMessage = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir esta mensagem?')) {
       await deleteMessage(id);
     }
   };
+
   const handleCloseMessageModal = () => {
     setIsMessageModalOpen(false);
     setMessageTitle("");
@@ -137,16 +98,19 @@ export function DSVoice() {
       handleCloseAudioModal();
     }
   };
+
   const handleEditAudio = (audio: any) => {
     setAudioTitle(audio.title);
     setEditingAudioId(audio.id);
     setIsAudioModalOpen(true);
   };
+
   const handleDeleteAudio = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este áudio?')) {
       await deleteAudio(id);
     }
   };
+
   const handleCloseAudioModal = () => {
     setIsAudioModalOpen(false);
     setAudioTitle("");
@@ -165,16 +129,19 @@ export function DSVoice() {
       handleCloseMediaModal();
     }
   };
+
   const handleEditMedia = (mediaItem: any) => {
     setMediaTitle(mediaItem.title);
     setEditingMediaId(mediaItem.id);
     setIsMediaModalOpen(true);
   };
+
   const handleDeleteMedia = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir esta mídia?')) {
       await deleteMedia(id);
     }
   };
+
   const handleCloseMediaModal = () => {
     setIsMediaModalOpen(false);
     setMediaTitle("");
@@ -193,16 +160,19 @@ export function DSVoice() {
       handleCloseDocumentModal();
     }
   };
+
   const handleEditDocument = (document: any) => {
     setDocumentTitle(document.title);
     setEditingDocumentId(document.id);
     setIsDocumentModalOpen(true);
   };
+
   const handleDeleteDocument = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este documento?')) {
       await deleteDocument(id);
     }
   };
+
   const handleCloseDocumentModal = () => {
     setIsDocumentModalOpen(false);
     setDocumentTitle("");
@@ -211,31 +181,63 @@ export function DSVoice() {
   };
 
   // Filtrar dados baseado no termo de busca
-  const filteredMessages = messages.filter(msg => msg.title.toLowerCase().includes(searchTerm.toLowerCase()) || msg.content.toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredAudios = audios.filter(audio => audio.title.toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredMedia = media.filter(mediaItem => mediaItem.title.toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredDocuments = documents.filter(doc => doc.title.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredMessages = messages.filter(msg => 
+    msg.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    msg.content.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredAudios = audios.filter(audio => 
+    audio.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredMedia = media.filter(mediaItem => 
+    mediaItem.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredDocuments = documents.filter(doc => 
+    doc.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const renderContent = () => {
     const loading = messagesLoading || audiosLoading || mediaLoading || documentsLoading;
+
     if (loading) {
-      return <div className="flex items-center justify-center h-64">
+      return (
+        <div className="flex items-center justify-center h-64">
           <div className="text-muted-foreground">Carregando...</div>
-        </div>;
+        </div>
+      );
     }
+
     switch (activeCategory) {
       case "mensagens":
-        return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredMessages.length === 0 ? <div className="col-span-full text-center py-8 text-muted-foreground">
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredMessages.length === 0 ? (
+              <div className="col-span-full text-center py-8 text-muted-foreground">
                 Nenhuma mensagem rápida encontrada.
-              </div> : filteredMessages.map(message => <Card key={message.id} className="bg-purple-100 border-purple-200 hover:bg-purple-50 transition-colors">
+              </div>
+            ) : (
+              filteredMessages.map((message) => (
+                <Card key={message.id} className="bg-purple-100 border-purple-200 hover:bg-purple-50 transition-colors">
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
                       <h3 className="font-medium text-purple-900 text-sm leading-tight">{message.title}</h3>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-purple-600 hover:text-purple-800" onClick={() => handleEditMessage(message)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-purple-600 hover:text-purple-800"
+                          onClick={() => handleEditMessage(message)}
+                        >
                           <Edit className="h-3 w-3" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-purple-600 hover:text-purple-800" onClick={() => handleDeleteMessage(message.id)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-purple-600 hover:text-purple-800"
+                          onClick={() => handleDeleteMessage(message.id)}
+                        >
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
@@ -244,10 +246,15 @@ export function DSVoice() {
                   <CardContent className="pt-0">
                     <p className="text-xs text-purple-700 leading-relaxed">{message.content}</p>
                   </CardContent>
-                </Card>)}
-          </div>;
+                </Card>
+              ))
+            )}
+          </div>
+        );
+
       case "audios":
-        return <div className="space-y-4">
+        return (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Áudios Rápidos</h3>
               <Button onClick={() => setIsAudioModalOpen(true)} className="flex items-center gap-2">
@@ -256,32 +263,51 @@ export function DSVoice() {
               </Button>
             </div>
             
-            {filteredAudios.length === 0 ? <div className="text-center py-8 text-muted-foreground">
+            {filteredAudios.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
                 Nenhum áudio rápido encontrado.
-              </div> : <div className="grid gap-4">
-                {filteredAudios.map(audio => <Card key={audio.id} className="p-4">
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {filteredAudios.map((audio) => (
+                  <Card key={audio.id} className="p-4">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h4 className="font-medium">{audio.title}</h4>
                         <p className="text-sm text-muted-foreground mt-1">{audio.file_name}</p>
-                        {audio.duration_seconds && <p className="text-xs text-muted-foreground">
+                        {audio.duration_seconds && (
+                          <p className="text-xs text-muted-foreground">
                             Duração: {Math.floor(audio.duration_seconds / 60)}:{(audio.duration_seconds % 60).toString().padStart(2, '0')}
-                          </p>}
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2 ml-4">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditAudio(audio)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditAudio(audio)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteAudio(audio.id)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteAudio(audio.id)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                  </Card>)}
-              </div>}
-          </div>;
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
       case "midias":
-        return <div className="space-y-4">
+        return (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Mídias Rápidas</h3>
               <Button onClick={() => setIsMediaModalOpen(true)} className="flex items-center gap-2">
@@ -290,10 +316,14 @@ export function DSVoice() {
               </Button>
             </div>
             
-            {filteredMedia.length === 0 ? <div className="text-center py-8 text-muted-foreground">
+            {filteredMedia.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
                 Nenhuma mídia rápida encontrada.
-              </div> : <div className="grid gap-4">
-                {filteredMedia.map(mediaItem => <Card key={mediaItem.id} className="p-4">
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {filteredMedia.map((mediaItem) => (
+                  <Card key={mediaItem.id} className="p-4">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h4 className="font-medium">{mediaItem.title}</h4>
@@ -301,19 +331,32 @@ export function DSVoice() {
                         <p className="text-xs text-muted-foreground">Tipo: {mediaItem.file_type}</p>
                       </div>
                       <div className="flex gap-2 ml-4">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditMedia(mediaItem)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditMedia(mediaItem)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteMedia(mediaItem.id)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteMedia(mediaItem.id)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                  </Card>)}
-              </div>}
-          </div>;
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
       case "documentos":
-        return <div className="space-y-4">
+        return (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Documentos Rápidos</h3>
               <Button onClick={() => setIsDocumentModalOpen(true)} className="flex items-center gap-2">
@@ -322,10 +365,14 @@ export function DSVoice() {
               </Button>
             </div>
             
-            {filteredDocuments.length === 0 ? <div className="text-center py-8 text-muted-foreground">
+            {filteredDocuments.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
                 Nenhum documento rápido encontrado.
-              </div> : <div className="grid gap-4">
-                {filteredDocuments.map(document => <Card key={document.id} className="p-4">
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {filteredDocuments.map((document) => (
+                  <Card key={document.id} className="p-4">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h4 className="font-medium">{document.title}</h4>
@@ -336,57 +383,95 @@ export function DSVoice() {
                         </p>
                       </div>
                       <div className="flex gap-2 ml-4">
-                        <Button variant="ghost" size="sm" onClick={() => handleEditDocument(document)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditDocument(document)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteDocument(document.id)}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteDocument(document.id)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
-                  </Card>)}
-              </div>}
-          </div>;
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
       case "funis":
-        return <div className="space-y-4">
+        return (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Funis</h3>
             </div>
             <div className="text-center py-8 text-muted-foreground">
               Funcionalidade em desenvolvimento.
             </div>
-          </div>;
+          </div>
+        );
+
       case "gatilhos":
-        return <div className="space-y-4">
+        return (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Gatilhos</h3>
             </div>
             <div className="text-center py-8 text-muted-foreground">
               Funcionalidade em desenvolvimento.
             </div>
-          </div>;
+          </div>
+        );
+
       case "configuracoes":
-        return <div className="space-y-4">
+        return (
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Configurações</h3>
             </div>
             <div className="text-center py-8 text-muted-foreground">
               Funcionalidade em desenvolvimento.
             </div>
-          </div>;
+          </div>
+        );
+
       default:
         return null;
     }
   };
-  return <div className="h-full flex flex-col bg-background">
+
+  return (
+    <div className="h-full flex flex-col bg-background">
       {/* Categories Tabs */}
       <div className="border-b">
         <div className="p-4 pb-0">
           <div className="flex space-x-1">
-            {categories.map(category => {
-            const Icon = category.icon;
-            return;
-          })}
+            {categories.map((category) => {
+              const Icon = category.icon;
+              return (
+                <Button
+                  key={category.id}
+                  variant={activeCategory === category.id ? "default" : "ghost"}
+                  className={cn(
+                    "flex items-center gap-2 rounded-b-none",
+                    activeCategory === category.id
+                      ? "bg-yellow-500 text-black hover:bg-yellow-400"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setActiveCategory(category.id)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {category.label}
+                </Button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -396,11 +481,22 @@ export function DSVoice() {
         <div className="flex items-center justify-between">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar item" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" />
+            <Input
+              placeholder="Buscar item"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
-          <Button className="bg-yellow-500 text-black hover:bg-yellow-400 ml-4" onClick={() => {
-          if (activeCategory === "mensagens") setIsMessageModalOpen(true);else if (activeCategory === "audios") setIsAudioModalOpen(true);else if (activeCategory === "midias") setIsMediaModalOpen(true);else if (activeCategory === "documentos") setIsDocumentModalOpen(true);
-        }}>
+          <Button 
+            className="bg-yellow-500 text-black hover:bg-yellow-400 ml-4"
+            onClick={() => {
+              if (activeCategory === "mensagens") setIsMessageModalOpen(true);
+              else if (activeCategory === "audios") setIsAudioModalOpen(true);
+              else if (activeCategory === "midias") setIsMediaModalOpen(true);
+              else if (activeCategory === "documentos") setIsDocumentModalOpen(true);
+            }}
+          >
             Novo Item
           </Button>
         </div>
@@ -423,11 +519,20 @@ export function DSVoice() {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Título</label>
-              <Input value={messageTitle} onChange={e => setMessageTitle(e.target.value)} placeholder="Digite o título da mensagem" />
+              <Input
+                value={messageTitle}
+                onChange={(e) => setMessageTitle(e.target.value)}
+                placeholder="Digite o título da mensagem"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Conteúdo</label>
-              <Textarea value={messageContent} onChange={e => setMessageContent(e.target.value)} placeholder="Digite o conteúdo da mensagem" rows={4} />
+              <Textarea
+                value={messageContent}
+                onChange={(e) => setMessageContent(e.target.value)}
+                placeholder="Digite o conteúdo da mensagem"
+                rows={4}
+              />
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={handleCloseMessageModal}>
@@ -453,17 +558,25 @@ export function DSVoice() {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Título</label>
-              <Input value={audioTitle} onChange={e => setAudioTitle(e.target.value)} placeholder="Digite o título do áudio" />
+              <Input
+                value={audioTitle}
+                onChange={(e) => setAudioTitle(e.target.value)}
+                placeholder="Digite o título do áudio"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Arquivo de Áudio</label>
-              <Input type="file" accept="audio/*" onChange={e => setAudioFile(e.target.files?.[0] || null)} />
+              <Input
+                type="file"
+                accept="audio/*"
+                onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
+              />
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={handleCloseAudioModal}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreateAudio} disabled={!audioTitle.trim() || !audioFile && !editingAudioId}>
+              <Button onClick={handleCreateAudio} disabled={!audioTitle.trim() || (!audioFile && !editingAudioId)}>
                 {editingAudioId ? 'Salvar' : 'Criar'}
               </Button>
             </div>
@@ -483,17 +596,25 @@ export function DSVoice() {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Título</label>
-              <Input value={mediaTitle} onChange={e => setMediaTitle(e.target.value)} placeholder="Digite o título da mídia" />
+              <Input
+                value={mediaTitle}
+                onChange={(e) => setMediaTitle(e.target.value)}
+                placeholder="Digite o título da mídia"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Arquivo de Mídia</label>
-              <Input type="file" accept="image/*,video/*" onChange={e => setMediaFile(e.target.files?.[0] || null)} />
+              <Input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+              />
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={handleCloseMediaModal}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreateMedia} disabled={!mediaTitle.trim() || !mediaFile && !editingMediaId}>
+              <Button onClick={handleCreateMedia} disabled={!mediaTitle.trim() || (!mediaFile && !editingMediaId)}>
                 {editingMediaId ? 'Salvar' : 'Criar'}
               </Button>
             </div>
@@ -513,22 +634,31 @@ export function DSVoice() {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Título</label>
-              <Input value={documentTitle} onChange={e => setDocumentTitle(e.target.value)} placeholder="Digite o título do documento" />
+              <Input
+                value={documentTitle}
+                onChange={(e) => setDocumentTitle(e.target.value)}
+                placeholder="Digite o título do documento"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Arquivo do Documento</label>
-              <Input type="file" accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx" onChange={e => setDocumentFile(e.target.files?.[0] || null)} />
+              <Input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
+                onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
+              />
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={handleCloseDocumentModal}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreateDocument} disabled={!documentTitle.trim() || !documentFile && !editingDocumentId}>
+              <Button onClick={handleCreateDocument} disabled={!documentTitle.trim() || (!documentFile && !editingDocumentId)}>
                 {editingDocumentId ? 'Salvar' : 'Criar'}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-    </div>;
+    </div>
+  );
 }
