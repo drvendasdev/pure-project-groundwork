@@ -12,26 +12,327 @@ serve(async (req) => {
   }
 
   try {
-    const { messageId, mediaUrl, base64, fileName, mimeType, conversationId, phoneNumber, direction = 'inbound' } = await req.json();
-    console.log('N8N Media Processor - Processando mídia:', { messageId, hasMediaUrl: !!mediaUrl, hasBase64: !!base64, fileName, mimeType, direction });
+    const payload = await req.json();
+    console.log('N8N Media Processor - Payload recebido:', payload);
+    
+    // Mapear campos do N8N para os campos esperados pela função
+    const {
+      // Campos diretos (se vier da API)
+      messageId: directMessageId,
+      mediaUrl: directMediaUrl,
+      base64: directBase64,
+      fileName: directFileName,
+      mimeType: directMimeType,
+      conversationId: directConversationId,
+      phoneNumber: directPhoneNumber,
+      workspaceId: directWorkspaceId,
+      
+      // Campos do N8N (mapeamento)
+      external_id,
+      content,
+      file_name,
+      mime_type,
+      workspace_id,
+      connection_id,
+      contact_name,
+      sender_type,
+      message_type,
+      phone_number,
+      direction
+    } = payload;
+    
+    // Priorizar campos diretos, depois mapear do N8N
+    const messageId = directMessageId || external_id;
+    const mediaUrl = directMediaUrl; // N8N não envia URL, só base64
+    const base64 = directBase64 || content;
+    const fileName = directFileName || file_name;
+    const mimeType = directMimeType || mime_type;
+    const conversationId = directConversationId;
+    const phoneNumber = directPhoneNumber || phone_number;
+    const workspaceId = directWorkspaceId || workspace_id;
+    const messageDirection = direction;
+    
+    console.log('N8N Media Processor - Dados mapeados:', { 
+      messageId, 
+      hasMediaUrl: !!mediaUrl, 
+      hasBase64: !!base64, 
+      fileName, 
+      mimeType, 
+      workspaceId,
+      conversationId,
+      direction: messageDirection,
+      sender_type
+    });
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Preparar bytes a partir de base64 ou URL
-    let uint8Array: Uint8Array;
-    let responseContentType: string | null = null;
-    let mimeFromDataUrl: string | null = null;
+    // REGRA CRÍTICA: n8n-media-processor APENAS atualiza mensagens existentes para OUTBOUND
+    // Para INBOUND, pode criar novas mensagens se necessário
+    if (!messageId) {
+      console.log('❌ Sem messageId - não é possível processar');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'messageId/external_id obrigatório para processamento'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // VALIDAÇÃO CRÍTICA: Se não há dados de mídia (base64 ou mediaUrl), 
+    // não devemos processar mensagens de texto simples
+    if (!base64 && !mediaUrl && !fileName && !mimeType) {
+      console.log('⚠️ Nenhum dado de mídia encontrado - pulando processamento');
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Nenhum dado de mídia para processar - mensagem de texto simples',
+        external_id: messageId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
+    const isOutbound = messageDirection === 'outbound' || sender_type === 'agent';
+    console.log(`🔄 Processando mensagem ${isOutbound ? 'OUTBOUND' : 'INBOUND'} - external_id: ${messageId}`);
+    console.log(`📋 Direction: ${messageDirection}, Sender Type: ${sender_type}, Is Outbound: ${isOutbound}`);
+
+    console.log('🔍 Buscando mensagem existente por external_id:', messageId);
+    
+    // Implementar retry para aguardar a mensagem aparecer no banco (condição de corrida)
+    let existingMessage = null;
+    let searchError = null;
+    let attempts = 0;
+    const maxAttempts = 5;
+    const retryDelay = 500; // 500ms entre tentativas
+    
+    while (attempts < maxAttempts && !existingMessage) {
+      attempts++;
+      console.log(`⏳ Tentativa ${attempts}/${maxAttempts} - Buscando mensagem...`);
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, external_id, workspace_id, content')
+        .eq('external_id', messageId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Erro ao buscar mensagem:', error);
+        searchError = error;
+        break;
+      }
+
+      if (data) {
+        existingMessage = data;
+        console.log(`✅ Mensagem encontrada na tentativa ${attempts}:`, existingMessage.id);
+        break;
+      }
+
+      if (attempts < maxAttempts) {
+        console.log(`⏳ Mensagem não encontrada, aguardando ${retryDelay}ms antes da próxima tentativa...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+
+    if (searchError) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Erro ao buscar mensagem existente'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!existingMessage) {
+      console.log(`⚠️ Mensagem não encontrada após ${maxAttempts} tentativas - external_id:`, messageId);
+      
+      // Usar a variável isOutbound já definida anteriormente
+      
+      if (isOutbound) {
+        console.log(`❌ [OUTBOUND] Mensagem deveria existir no banco mas não foi encontrada - external_id: ${messageId}`);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Mensagem outbound não encontrada no banco de dados',
+          external_id: messageId,
+          details: 'Mensagens enviadas do sistema devem ser salvas antes de chamar o media processor'
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // APENAS para mensagens INBOUND (recebidas) - criar nova mensagem
+      console.log(`📥 [INBOUND] Criando nova mensagem para external_id: ${messageId}`);
+      
+      if (!workspaceId || !phoneNumber) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'workspace_id e phone_number são obrigatórios para criar nova mensagem inbound',
+          external_id: messageId
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Buscar ou criar contato
+      let contact = null;
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('phone', phoneNumber)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+
+      if (existingContact) {
+        contact = existingContact;
+      } else {
+        const { data: newContact, error: contactError } = await supabase
+          .from('contacts')
+          .insert({
+            phone: phoneNumber,
+            workspace_id: workspaceId,
+            name: contact_name || phoneNumber
+          })
+          .select('id')
+          .single();
+
+        if (contactError) {
+          console.error('❌ Erro ao criar contato:', contactError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Falha ao criar contato'
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        contact = newContact;
+      }
+
+      // Buscar ou criar conversa
+      let conversation = null;
+      const { data: existingConversation } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('contact_id', contact.id)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+
+      if (existingConversation) {
+        conversation = existingConversation;
+      } else {
+        const { data: newConversation, error: conversationError } = await supabase
+          .from('conversations')
+          .insert({
+            contact_id: contact.id,
+            workspace_id: workspaceId,
+            status: 'open'
+          })
+          .select('id')
+          .single();
+
+        if (conversationError) {
+          console.error('❌ Erro ao criar conversa:', conversationError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Falha ao criar conversa'
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        conversation = newConversation;
+      }
+
+      // Criar a mensagem INBOUND - detectar tipo correto baseado no MIME type
+      let messageType = 'text';
+      if (mimeType) {
+        if (mimeType.startsWith('image/')) messageType = 'image';
+        else if (mimeType.startsWith('video/')) messageType = 'video';
+        else if (mimeType.startsWith('audio/')) messageType = 'audio';
+        else if (mimeType === 'application/pdf' || mimeType.includes('document')) messageType = 'document';
+      }
+      
+      const { data: newMessage, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          external_id: messageId,
+          conversation_id: conversation.id,
+          workspace_id: workspaceId,
+          content: fileName || 'Documento',
+          message_type: messageType,
+          sender_type: 'contact', // SEMPRE contact para mensagens INBOUND
+          created_at: new Date().toISOString()
+        })
+        .select('id, external_id, workspace_id, content')
+        .single();
+
+      if (messageError) {
+        console.error('❌ Erro ao criar mensagem inbound:', messageError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Falha ao criar mensagem inbound'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      existingMessage = newMessage;
+      console.log('✅ Nova mensagem INBOUND criada:', existingMessage.id);
+    }
+
+    // Verificar se é mensagem de texto (sem mídia)
+    if (!base64 && !mediaUrl) {
+      console.log('📝 Processando mensagem de texto - external_id:', messageId);
+      
+      // Para mensagens de texto, apenas confirmar que foi processada pelo N8N
+      const { error: updateError } = await supabase
+        .from('messages')
+        .update({
+          metadata: {
+            processed_by_n8n: true,
+            processed_at: new Date().toISOString()
+          }
+        })
+        .eq('external_id', messageId);
+
+      if (updateError) {
+        console.error('❌ Erro ao atualizar mensagem de texto:', updateError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Falha ao processar mensagem de texto'
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log('✅ Mensagem de texto processada:', existingMessage.id);
+      return new Response(JSON.stringify({
+        success: true,
+        messageId: existingMessage.id,
+        action: 'text_message_processed',
+        content: existingMessage.content
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Preparar bytes a partir de base64 ou URL para mensagens de mídia
+    let uint8Array: Uint8Array;
+    
     if (base64) {
       try {
         // Suporta formatos: "<puro base64>" ou "data:<mime>;base64,<dados>"
         let base64Data = base64 as string;
         const dataUrlMatch = /^data:([^;]+);base64,(.*)$/i.exec(base64Data);
         if (dataUrlMatch) {
-          mimeFromDataUrl = dataUrlMatch[1];
           base64Data = dataUrlMatch[2];
         }
         const decoded = atob(base64Data);
@@ -40,11 +341,11 @@ serve(async (req) => {
           bytes[i] = decoded.charCodeAt(i);
         }
         uint8Array = bytes;
-        console.log('Decodificado base64 - Tamanho:', uint8Array.length, 'bytes', 'MIME (data URL):', mimeFromDataUrl);
+        console.log('Decodificado base64 - Tamanho:', uint8Array.length, 'bytes');
       } catch (e) {
         throw new Error(`Base64 inválido: ${e.message}`);
       }
-    } else {
+    } else if (mediaUrl) {
       // Baixar mídia com headers adequados
       console.log('Baixando mídia de:', mediaUrl);
       const response = await fetch(mediaUrl, {
@@ -58,12 +359,11 @@ serve(async (req) => {
         throw new Error(`Falha ao baixar mídia: ${response.status} ${response.statusText}`);
       }
 
-      responseContentType = response.headers.get('content-type');
-      console.log('Download realizado - Status:', response.status, 'Content-Type:', responseContentType, 'Content-Length:', response.headers.get('content-length'));
-
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
       uint8Array = new Uint8Array(arrayBuffer);
+    } else {
+      throw new Error('Nenhuma fonte de mídia fornecida (base64 ou mediaUrl)');
     }
     
     // Validar se o arquivo foi obtido corretamente
@@ -73,135 +373,192 @@ serve(async (req) => {
     
     console.log('Arquivo obtido com sucesso - Tamanho:', uint8Array.length, 'bytes');
 
+    // Função para detectar MIME type baseado no conteúdo (magic numbers)
+    function detectMimeTypeFromBuffer(buffer: Uint8Array): string | null {
+      const header = Array.from(buffer.slice(0, 12)).map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Imagens
+      if (header.startsWith('ffd8ff')) return 'image/jpeg';
+      if (header.startsWith('89504e47')) return 'image/png';
+      if (header.startsWith('47494638')) return 'image/gif';
+      if (header.startsWith('52494646') && header.includes('57454250')) return 'image/webp';
+      
+      // Vídeos
+      if (header.includes('667479706d703432') || header.includes('667479706d703431')) return 'video/mp4';
+      if (header.includes('6674797069736f6d')) return 'video/mp4';
+      if (header.includes('667479703367703')) return 'video/3gpp';
+      if (header.startsWith('1a45dfa3')) return 'video/webm';
+      if (header.includes('667479707174')) return 'video/quicktime';
+      
+      // Áudios  
+      if (header.startsWith('494433') || header.startsWith('fff3') || header.startsWith('fff2')) return 'audio/mpeg';
+      if (header.startsWith('4f676753')) return 'audio/ogg';
+      if (header.startsWith('52494646') && header.includes('57415645')) return 'audio/wav';
+      if (header.includes('667479704d344120')) return 'audio/mp4';
+      
+      // Documentos
+      if (header.startsWith('25504446')) return 'application/pdf';
+      
+      // Office Documents
+      if (header.startsWith('504b0304')) {
+        // ZIP-based formats (DOCX, XLSX, PPTX)
+        return 'application/octet-stream'; // Will be refined by extension
+      }
+      
+      // Verificar se é texto (UTF-8/ASCII) pela ausência de bytes de controle
+      const isTextContent = buffer.slice(0, 100).every(byte => 
+        (byte >= 32 && byte <= 126) || // ASCII printable
+        byte === 9 || byte === 10 || byte === 13 || // Tab, LF, CR
+        (byte >= 128 && byte <= 255) // UTF-8 extended
+      );
+      
+      if (isTextContent) {
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer.slice(0, 100));
+        // Detectar XML por estrutura
+        if (text.includes('<?xml') || text.includes('<') && text.includes('>')) {
+          return 'application/xml';
+        }
+        // Texto puro
+        return 'text/plain';
+      }
+      
+      return null;
+    }
+
     // Função para detectar MIME type correto baseado na extensão
     function getMimeTypeByExtension(filename: string): string {
       const ext = filename.toLowerCase().split('.').pop() || '';
       const mimeMap: { [key: string]: string } = {
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'png': 'image/png',
-        'gif': 'image/gif',
-        'webp': 'image/webp',
-        'mp4': 'video/mp4',
-        'mov': 'video/quicktime',
-        'avi': 'video/x-msvideo',
-        'mp3': 'audio/mpeg',
-        'ogg': 'audio/ogg',
-        'wav': 'audio/wav',
-        'pdf': 'application/pdf',
-        'doc': 'application/msword',
-        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'txt': 'text/plain'
+        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
+        'mp4': 'video/mp4', 'mov': 'video/quicktime', 'avi': 'video/x-msvideo', 'webm': 'video/webm', '3gp': 'video/3gpp',
+        'mp3': 'audio/mpeg', 'ogg': 'audio/ogg', 'wav': 'audio/wav', 'm4a': 'audio/mp4', 'aac': 'audio/aac',
+        'pdf': 'application/pdf', 
+        'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel', 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint', 'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'txt': 'text/plain', 'xml': 'application/xml', 'json': 'application/json'
       };
       return mimeMap[ext] || 'application/octet-stream';
     }
 
-    // Determinar MIME type correto e extensão
-    let finalMimeType = mimeType;
+    // Detectar MIME type final
+    let detectedMimeType = detectMimeTypeFromBuffer(uint8Array);
+    let finalMimeType = detectedMimeType || mimeType || 'application/octet-stream';
+    
+    // Converter tipos MIME não suportados pelo Supabase Storage
+    if (finalMimeType === 'audio/ogg') {
+      finalMimeType = 'audio/webm'; // Supabase não suporta audio/ogg, usar webm
+    }
+    
+    // Determinar extensão
     let fileExtension = 'unknown';
-
-    if (mimeType && mimeType !== 'application/octet-stream') {
-      // Usar MIME type fornecido se não for o genérico
-      fileExtension = mimeType.split('/')[1] || 'unknown';
-      finalMimeType = mimeType;
-    } else if (fileName && fileName.includes('.')) {
-      // Detectar por extensão do arquivo
-      fileExtension = fileName.split('.').pop() || 'unknown';
-      finalMimeType = getMimeTypeByExtension(fileName);
-    } else {
-      // Fallback baseado no URL se possível
-      const urlParts = mediaUrl.split('.');
-      if (urlParts.length > 1) {
-        fileExtension = urlParts[urlParts.length - 1].split('?')[0]; // Remove query params
-        finalMimeType = getMimeTypeByExtension(`file.${fileExtension}`);
-      }
+    if (finalMimeType === 'image/jpeg') fileExtension = 'jpg';
+    else if (finalMimeType === 'image/png') fileExtension = 'png';
+    else if (finalMimeType === 'video/mp4') fileExtension = 'mp4';
+    else if (finalMimeType === 'audio/mpeg') fileExtension = 'mp3';
+    else if (finalMimeType === 'audio/webm') fileExtension = 'webm';
+    else if (finalMimeType === 'audio/ogg') fileExtension = 'webm'; // Fallback para OGG
+    else if (finalMimeType === 'application/pdf') fileExtension = 'pdf';
+    else if (finalMimeType === 'text/plain') fileExtension = 'txt';
+    else if (finalMimeType === 'application/xml') fileExtension = 'xml';
+    else if (finalMimeType === 'application/json') fileExtension = 'json';
+    else if (finalMimeType.includes('wordprocessingml')) fileExtension = 'docx';
+    else if (finalMimeType.includes('spreadsheetml')) fileExtension = 'xlsx';
+    else if (finalMimeType.includes('presentationml')) fileExtension = 'pptx';
+    else if (fileName) {
+      fileExtension = fileName.split('.').pop()?.toLowerCase() || 'unknown';
     }
 
-    const finalFileName = fileName || `${Date.now()}.${fileExtension}`;
+    // Gerar nome único para evitar conflitos
+    const timestamp = Date.now();
+    const randomId = crypto.randomUUID().split('-')[0];
+    const finalFileName = fileName ? 
+      `${timestamp}_${randomId}_${fileName}` : 
+      `${timestamp}_${randomId}_media.${fileExtension}`;
+    
     const storagePath = `messages/${finalFileName}`;
 
     console.log('Upload details:', {
-      originalMimeType: mimeType,
-      detectedMimeType: finalMimeType,
+      finalMimeType,
       fileExtension,
       finalFileName,
       storagePath
     });
 
-    // Upload para Supabase Storage com MIME type correto
+    // Upload para Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('whatsapp-media')
       .upload(storagePath, uint8Array, {
         contentType: finalMimeType,
-        duplex: 'half'
+        upsert: false
       });
 
     if (uploadError) {
-      throw new Error(`Erro no upload: ${uploadError.message}`);
+      console.error('❌ Erro no upload:', uploadError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Erro no upload: ${uploadError.message}`
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
+
+    console.log('✅ Upload realizado com sucesso:', uploadData);
 
     // Obter URL pública
     const { data: { publicUrl } } = supabase.storage
       .from('whatsapp-media')
       .getPublicUrl(storagePath);
 
-    console.log('Mídia salva com sucesso:', publicUrl);
+    console.log('📨 Mensagem existente encontrada - atualizando mídia:', existingMessage.id);
+    
+    // APENAS UPDATE - nunca INSERT
+    const { error: updateError } = await supabase
+      .from('messages')
+      .update({
+        file_url: publicUrl,
+        mime_type: finalMimeType,
+        metadata: {
+          original_file_name: finalFileName,
+          file_size: uint8Array.length,
+          processed_at: new Date().toISOString()
+        }
+      })
+      .eq('external_id', messageId);
 
-    // Determinar message_type com base no MIME
-    const computedMessageType = finalMimeType.startsWith('image/')
-      ? 'image'
-      : finalMimeType.startsWith('video/')
-      ? 'video'
-      : finalMimeType.startsWith('audio/')
-      ? 'audio'
-      : 'document';
-
-
-    // Se for mensagem de entrada, atualizar no banco
-    if (direction === 'inbound' && messageId) {
-      const { error: updateError } = await supabase
-        .from('messages')
-        .update({ 
-          file_url: publicUrl,
-          file_name: finalFileName,
-          mime_type: finalMimeType,
-          message_type: computedMessageType,
-          metadata: { 
-            original_url: mediaUrl,
-            storage_path: storagePath,
-            processed_by: 'n8n'
-          }
-        })
-        .eq('id', messageId);
-
-      if (updateError) {
-        console.error('Erro ao atualizar mensagem:', updateError);
-      }
+    if (updateError) {
+      console.error('❌ Erro ao atualizar mensagem:', updateError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Falha ao atualizar mensagem com mídia'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
+    console.log('✅ Mensagem atualizada com mídia via UPDATE:', existingMessage.id);
     return new Response(JSON.stringify({
       success: true,
-      data: {
-        publicUrl,
-        fileName: finalFileName,
-        storagePath,
-        size: uint8Array.length,
-        mimeType: finalMimeType,
-        processed_by: 'n8n'
-      }
+      messageId: existingMessage.id,
+      fileUrl: publicUrl,
+      action: 'updated_existing',
+      fileName: finalFileName,
+      mimeType: finalMimeType,
+      fileSize: uint8Array.length
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Erro no N8N Media Processor:', error);
-    
+    console.error('❌ Erro no processamento:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error.message || 'Erro interno do servidor'
     }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });

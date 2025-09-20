@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Search, Phone, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface Contact {
   id: string;
@@ -21,6 +22,7 @@ interface IniciarConversaModalProps {
 }
 
 export function IniciarConversaModal({ open, onOpenChange, onConversationCreated }: IniciarConversaModalProps) {
+  const { selectedWorkspace } = useWorkspace();
   const [searchContact, setSearchContact] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+55");
@@ -78,7 +80,8 @@ export function IniciarConversaModal({ open, onOpenChange, onConversationCreated
           .from('contacts')
           .insert({
             name: contactName,
-            phone: fullPhone
+            phone: fullPhone,
+            workspace_id: selectedWorkspace!.workspace_id
           })
           .select()
           .single();
@@ -117,7 +120,8 @@ export function IniciarConversaModal({ open, onOpenChange, onConversationCreated
             canal: 'whatsapp',
             status: 'open',
             agente_ativo: false,
-            last_activity_at: new Date().toISOString()
+            last_activity_at: new Date().toISOString(),
+            workspace_id: selectedWorkspace!.workspace_id
           })
           .select()
           .single();

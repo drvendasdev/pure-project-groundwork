@@ -1,184 +1,176 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Função para sanitizar dados removendo campos grandes
-function sanitizeWebhookData(data: any) {
-  const sanitized = JSON.parse(JSON.stringify(data));
-  
-  // Remover campos base64 que causam memory overflow
-  if (sanitized.data?.message) {
-    const msg = sanitized.data.message;
-    
-    ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].forEach(type => {
-      if (msg[type]?.base64) {
-        delete msg[type].base64;
-      }
-      if (msg[type]?.jpegThumbnail && typeof msg[type].jpegThumbnail === 'string' && msg[type].jpegThumbnail.length > 1000) {
-        msg[type].jpegThumbnail = '[REMOVED_LARGE_THUMBNAIL]';
-      }
-    });
-  }
-  
-  return sanitized;
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('Missing required environment variables');
 }
 
-// Função para extrair metadados essenciais
-function extractMetadata(data: any) {
-  const metadata = {
-    event: data.event,
-    instance: data.instance,
-    timestamp: new Date().toISOString(),
-    messageType: 'unknown',
-    hasMedia: false,
-    contactPhone: null,
-    messageId: null,
-    fromMe: false
-  };
+const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  if (data.data) {
-    if (data.data.key) {
-      metadata.messageId = data.data.key.id;
-      metadata.fromMe = data.data.key.fromMe || false;
-      
-      if (data.data.key.remoteJid) {
-        metadata.contactPhone = data.data.key.remoteJid.replace('@s.whatsapp.net', '').substring(0, 8) + '***';
-      }
-    }
+function generateRequestId(): string {
+  return `whatsapp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
 
-    if (data.data.message) {
-      const msg = data.data.message;
-      
-      if (msg.conversation) {
-        metadata.messageType = 'text';
-      } else if (msg.imageMessage) {
-        metadata.messageType = 'image';
-        metadata.hasMedia = true;
-      } else if (msg.videoMessage) {
-        metadata.messageType = 'video';
-        metadata.hasMedia = true;
-      } else if (msg.audioMessage) {
-        metadata.messageType = 'audio';
-        metadata.hasMedia = true;
-      } else if (msg.documentMessage) {
-        metadata.messageType = 'document';
-        metadata.hasMedia = true;
-      } else if (msg.stickerMessage) {
-        metadata.messageType = 'sticker';
-        metadata.hasMedia = true;
-      } else if (msg.locationMessage) {
-        metadata.messageType = 'location';
-      } else if (msg.contactMessage) {
-        metadata.messageType = 'contact';
-      }
-    }
-  }
-
-  return metadata;
+function sanitizePhoneNumber(phone: string): string {
+  return phone.replace(/\D/g, '');
 }
 
 serve(async (req) => {
+  const requestId = generateRequestId();
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    console.log(`❌ [${requestId}] Method not allowed: ${req.method}`);
+    return new Response('Method not allowed', { 
+      status: 405, 
+      headers: corsHeaders 
+    });
   }
 
   try {
-    if (req.method === 'GET') {
-      // Webhook verification for WhatsApp
-      const url = new URL(req.url);
-      const mode = url.searchParams.get('hub.mode');
-      const token = url.searchParams.get('hub.verify_token');
-      const challenge = url.searchParams.get('hub.challenge');
+    console.log(`📨 [${requestId}] WhatsApp webhook received`);
+    
+    const data = await req.json();
+    console.log(`📋 [${requestId}] Payload keys:`, Object.keys(data));
 
-      const VERIFY_TOKEN = Deno.env.get('WHATSAPP_VERIFY_TOKEN') || 'your-verify-token';
+    // Extract phone number from various possible fields
+    const phoneNumber = sanitizePhoneNumber(
+      data.from || 
+      data.phoneNumber || 
+      data.phone_number || 
+      data.sender ||
+      data.remoteJid?.replace('@s.whatsapp.net', '') ||
+      ''
+    );
 
-      if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-        console.log('✅ Webhook verified');
-        return new Response(challenge, { status: 200 });
-      } else {
-        console.log('❌ Webhook verification failed');
-        return new Response('Forbidden', { status: 403 });
-      }
+    if (!phoneNumber) {
+      console.error(`❌ [${requestId}] Could not extract phone number from payload`);
+      return new Response('Invalid phone number', { 
+        status: 400, 
+        headers: corsHeaders 
+      });
     }
 
-    if (req.method === 'POST') {
-      const body = await req.json();
+    console.log(`📱 [${requestId}] Processing WhatsApp message for phone: ${phoneNumber}`);
+
+    // For WhatsApp webhook, we need to determine workspace from the instance or use default
+    // Since this is a generic WhatsApp webhook, we'll try to find the most appropriate workspace
+    // or use the global webhook URL as fallback
+    
+    let n8nWebhookUrl = null;
+    let webhookSecret = null;
+    let workspaceId = null;
+
+    // Try to find a workspace configuration (get the first active one as default)
+    const { data: webhookConfigs, error: webhookError } = await supabase
+      .from('workspace_webhook_settings')
+      .select('webhook_url, webhook_secret, workspace_id')
+      .limit(1);
+
+    if (webhookConfigs && webhookConfigs.length > 0 && !webhookError) {
+      n8nWebhookUrl = webhookConfigs[0].webhook_url;
+      webhookSecret = webhookConfigs[0].webhook_secret;
+      workspaceId = webhookConfigs[0].workspace_id;
+      console.log(`🎯 [${requestId}] Using workspace-specific webhook for workspace ${workspaceId}`);
+    } else {
+      // Fallback to global N8N webhook
+      n8nWebhookUrl = Deno.env.get('N8N_INBOUND_WEBHOOK_URL');
+      console.log(`🔄 [${requestId}] Using global N8N webhook as fallback`);
+    }
+    
+    if (!n8nWebhookUrl) {
+      console.error(`❌ [${requestId}] No webhook URL configured (workspace or global)`);
+      return new Response('No webhook configured', { 
+        status: 500, 
+        headers: corsHeaders 
+      });
+    }
+
+    // Extract message content
+    const content = data.message || 
+                   data.text || 
+                   data.body || 
+                   data.content ||
+                   '📱 Mensagem WhatsApp recebida';
+
+    // Extract contact name
+    const contactName = data.pushName || 
+                       data.push_name || 
+                       data.contactName || 
+                       data.from_name ||
+                       phoneNumber;
+
+    // Prepare N8N payload
+    const n8nPayload = {
+      direction: 'inbound',
+      phone_number: phoneNumber,
+      content: content,
+      contact_name: contactName,
+      sender_type: 'contact', // WhatsApp webhooks are always from contacts
+      message_type: data.type || 'text',
+      workspace_id: workspaceId,
+      source: 'whatsapp-webhook',
+      raw_data: data, // Include original data for N8N processing
+      timestamp: new Date().toISOString(),
+      request_id: requestId
+    };
+
+    console.log(`📤 [${requestId}] Forwarding to webhook: ${n8nWebhookUrl.substring(0, 50)}...`);
+    
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
       
-      // Extrair metadados apenas para logs
-      const metadata = extractMetadata(body);
-      console.log('📥 WhatsApp webhook recebido:', {
-        event: metadata.event,
-        instance: metadata.instance,
-        messageType: metadata.messageType,
-        hasMedia: metadata.hasMedia,
-        contactPhone: metadata.contactPhone,
-        messageId: metadata.messageId,
-        fromMe: metadata.fromMe
+      // Add webhook secret if available
+      if (webhookSecret) {
+        headers['X-Webhook-Secret'] = webhookSecret;
+      }
+      
+      const response = await fetch(n8nWebhookUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(n8nPayload)
       });
 
-      // Forward to n8n only - no local processing
-      const n8nUrl = Deno.env.get('N8N_WEBHOOK_URL');
-      if (n8nUrl) {
-        try {
-          // Sanitizar dados antes de enviar
-          const sanitizedData = sanitizeWebhookData(body);
-          
-          const forwardPayload = { 
-            source: 'whatsapp-webhook',
-            metadata: metadata,
-            data: sanitizedData,
-            timestamp: metadata.timestamp
-          };
-          
-          const fRes = await fetch(n8nUrl, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(forwardPayload),
-          });
-          
-          const fText = await fRes.text();
-          console.log('➡️ Forwarded to n8n:', fRes.status, fRes.ok ? 'SUCCESS' : fText);
-          
-          return new Response(JSON.stringify({ 
-            ok: true, 
-            forwarded: fRes.ok,
-            metadata: metadata
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } catch (forwardErr) {
-          console.error('❌ Error forwarding to n8n:', forwardErr.message);
-          return new Response(JSON.stringify({ 
-            ok: true, 
-            forwarded: false, 
-            error: forwardErr.message,
-            metadata: metadata
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-      } else {
-        console.log('⚠️ N8N_WEBHOOK_URL not configured, discarding message');
-        return new Response(JSON.stringify({ 
-          ok: true, 
-          forwarded: false, 
-          note: 'n8n not configured',
-          metadata: metadata
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      if (!response.ok) {
+        console.error(`❌ [${requestId}] N8N webhook failed: ${response.status}`);
+        return new Response('N8N webhook failed', { 
+          status: 500, 
+          headers: corsHeaders 
         });
+      } else {
+        console.log(`✅ [${requestId}] Successfully forwarded to N8N`);
       }
+    } catch (error) {
+      console.error(`❌ [${requestId}] Error calling N8N webhook:`, error);
+      return new Response('Error calling N8N webhook', { 
+        status: 500, 
+        headers: corsHeaders 
+      });
     }
 
-    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+    return new Response('OK', { 
+      status: 200, 
+      headers: corsHeaders 
+    });
+
   } catch (error) {
-    console.error('❌ Error processing webhook:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    console.error(`❌ [${requestId}] Error processing webhook:`, error);
+    return new Response('Internal server error', { 
+      status: 500, 
+      headers: corsHeaders 
     });
   }
 });

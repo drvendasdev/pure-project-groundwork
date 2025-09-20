@@ -4,31 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Eye, X, Camera, EyeOff, ChevronDown } from "lucide-react";
+
 import { useInstances } from "@/hooks/useInstances";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
-
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  profile: "admin" | "user";
-  status: "active" | "inactive";
-  avatar?: string;
-}
+import { useChannels } from "@/hooks/useChannels";
+import { useCargos } from "@/hooks/useCargos";
+import { useSystemUsers, type SystemUser } from "@/hooks/useSystemUsers";
 
 interface EditarUsuarioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEditUser: (user: {
-    id: string;
-    name: string;
-    email: string;
-    profile: "admin" | "user";
-    status: "active" | "inactive";
-  }) => void;
-  user?: User;
+  onEditUser: (user: SystemUser) => void;
+  user?: SystemUser;
 }
 
 // Mock options para os selects
@@ -36,18 +23,6 @@ const mockQueues = [
   { value: "queue1", label: "Suporte Técnico" },
   { value: "queue2", label: "Vendas" },
   { value: "queue3", label: "Atendimento Geral" },
-];
-
-const mockRoles = [
-  { value: "role1", label: "Operador" },
-  { value: "role2", label: "Supervisor" },
-  { value: "role3", label: "Gerente" },
-];
-
-const mockChannels = [
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "chat", label: "Chat Web" },
-  { value: "email", label: "Email" },
 ];
 
 const mockPhones = [
@@ -58,12 +33,12 @@ const mockPhones = [
 
 export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: EditarUsuarioModalProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
-  const [defaultInstance, setDefaultInstance] = useState<string>("");
-  const { instances, isLoading: instancesLoading } = useInstances();
-  const { assignments, saveAssignments } = useInstanceAssignments(user?.id);
+  const [selectedCargos, setSelectedCargos] = useState<string[]>([]);
+  const [showCargoDropdown, setShowCargoDropdown] = useState(false);
+  const { channels } = useChannels();
+  const { listCargos, loading: cargosLoading } = useCargos();
   const { updateUser, loading } = useSystemUsers();
+  const [cargos, setCargos] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -71,7 +46,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     password: "",
     temporaryPassword: false,
     queues: "",
-    roles: "",
     defaultChannel: "",
     defaultPhone: "",
   });
@@ -86,6 +60,20 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     defaultPhone: false,
   });
 
+  // Load cargos on modal open
+  useEffect(() => {
+    if (isOpen) {
+      loadCargos();
+    }
+  }, [isOpen]);
+
+  const loadCargos = async () => {
+    const result = await listCargos();
+    if (result.data) {
+      setCargos(result.data);
+    }
+  };
+
   // Populate form when user changes
   useEffect(() => {
     if (user) {
@@ -96,38 +84,15 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
         password: "",
         temporaryPassword: false,
         queues: "",
-        roles: "",
-        defaultChannel: "",
+        defaultChannel: user.default_channel || "",
         defaultPhone: "",
       });
-      // Set roles based on user (mock data)
-      if (user.profile === "admin") {
-        setSelectedRoles(["Gerente"]);
-      } else {
-        setSelectedRoles([]);
-      }
+      setSelectedCargos(user.cargo_ids || []);
     }
   }, [user]);
 
-  // Populate instance assignments when they load
-  useEffect(() => {
-    if (assignments.length > 0) {
-      const instanceIds = assignments.map(a => a.instance);
-      const defaultInstanceId = assignments.find(a => a.is_default)?.instance || "";
-      
-      setSelectedInstances(instanceIds);
-      setDefaultInstance(defaultInstanceId);
-    } else {
-      setSelectedInstances([]);
-      setDefaultInstance("");
-    }
-  }, [assignments]);
-
   const handleSubmit = async () => {
     if (!user) return;
-    
-    // Save instance assignments
-    await saveAssignments(selectedInstances, defaultInstance);
     
     // Update user data
     const updateData: any = {
@@ -136,6 +101,8 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
       email: formData.email,
       profile: formData.profile,
       status: user.status,
+      default_channel: formData.defaultChannel || null,
+      cargo_ids: selectedCargos,
     };
 
     // Only include password if provided
@@ -147,11 +114,12 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
 
     if (result.data) {
       onEditUser({
-        id: user.id,
+        ...user,
         name: formData.name,
         email: formData.email,
-        profile: formData.profile as "admin" | "user",
+        profile: formData.profile,
         status: user.status,
+        cargo_ids: selectedCargos, // Include the updated cargo_ids
       });
       
       handleCancel();
@@ -166,14 +134,12 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
       password: "",
       temporaryPassword: false,
       queues: "",
-      roles: "",
       defaultChannel: "",
       defaultPhone: "",
     });
     setShowPassword(false);
-    setSelectedRoles([]);
-    setSelectedInstances([]);
-    setDefaultInstance("");
+    setShowCargoDropdown(false);
+    setSelectedCargos([]);
     onClose();
   };
 
@@ -185,40 +151,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
     setFocusedFields(prev => ({ ...prev, [field]: focused }));
   };
 
-  const handleGoogleLink = () => {
-    console.log("Vincular com Google");
-    // TODO: Implementar vinculação com Google
-  };
-
-  const addRole = (roleValue: string) => {
-    const role = mockRoles.find(r => r.value === roleValue);
-    if (role && !selectedRoles.some(r => r === role.label)) {
-      setSelectedRoles([...selectedRoles, role.label]);
-    }
-  };
-
-  const removeRole = (roleName: string) => {
-    setSelectedRoles(selectedRoles.filter(r => r !== roleName));
-  };
-
-  const handleInstanceToggle = (instanceId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedInstances([...selectedInstances, instanceId]);
-    } else {
-      setSelectedInstances(selectedInstances.filter(id => id !== instanceId));
-      // Remove as default if unchecked
-      if (defaultInstance === instanceId) {
-        setDefaultInstance("");
-      }
-    }
-  };
-
-  const handleDefaultInstanceChange = (instanceId: string) => {
-    // Only allow setting as default if it's selected
-    if (selectedInstances.includes(instanceId)) {
-      setDefaultInstance(instanceId);
-    }
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
@@ -272,13 +204,13 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('name', e.target.value)}
                 onFocus={() => updateFocus('name', true)}
                 onBlur={() => updateFocus('name', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               />
               <label
                 className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                   focusedFields.name || formData.name
-                    ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
+                    ? 'text-xs text-primary -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
               >
@@ -295,13 +227,13 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                   onChange={(e) => updateFormData('email', e.target.value)}
                   onFocus={() => updateFocus('email', true)}
                   onBlur={() => updateFocus('email', false)}
-                  className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                  className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                   style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
                 />
                 <label
                   className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                     focusedFields.email || formData.email
-                      ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
+                      ? 'text-xs text-primary -top-2 bg-white px-1'
                       : 'text-sm text-gray-500 top-3'
                   }`}
                 >
@@ -315,7 +247,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                   onChange={(e) => updateFormData('profile', e.target.value)}
                   onFocus={() => updateFocus('profile', true)}
                   onBlur={() => updateFocus('profile', false)}
-                  className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                  className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                   style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
                 >
                   <option value="" disabled hidden></option>
@@ -326,7 +258,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 <label
                   className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                     focusedFields.profile || formData.profile
-                      ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
+                      ? 'text-xs text-primary -top-2 bg-white px-1'
                       : 'text-sm text-gray-500 top-3'
                   }`}
                 >
@@ -343,7 +275,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('password', e.target.value)}
                 onFocus={() => updateFocus('password', true)}
                 onBlur={() => updateFocus('password', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 pr-12"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary pr-12"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               />
               <Button
@@ -362,7 +294,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               <label
                 className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                   focusedFields.password || formData.password
-                    ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
+                    ? 'text-xs text-primary -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
               >
@@ -379,15 +311,16 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               />
             </div>
 
-            {/* Filas */}
-            <div className="relative">
+            {/* Filas - Desabilitado temporariamente */}
+            <div className="relative opacity-50">
               <select
                 value={formData.queues}
                 onChange={(e) => updateFormData('queues', e.target.value)}
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
+                disabled
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-not-allowed"
+                style={{ backgroundColor: '#f9fafb', color: '#6b7280', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
                 {mockQueues.map((queue) => (
@@ -400,53 +333,61 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               <label
                 className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                   focusedFields.queues || formData.queues
-                    ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
-                    : 'text-sm text-gray-500 top-3'
+                    ? 'text-xs text-gray-400 -top-2 bg-white px-1'
+                    : 'text-sm text-gray-400 top-3'
                 }`}
               >
-                Filas
+                Filas (em breve)
               </label>
             </div>
 
-            {/* Cargos with Adicionar button */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-700">Cargos</span>
-                <Button
+            {/* Cargos */}
+            <div className="space-y-2 relative">
+              <label className="text-sm font-medium text-gray-700">Cargos</label>
+              <div className="min-h-12 border border-input rounded-md p-2 flex flex-wrap items-center gap-2 bg-white">
+                <button 
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // Add first available role for demonstration
-                    const availableRole = mockRoles.find(role => 
-                      !selectedRoles.includes(role.label)
-                    );
-                    if (availableRole) {
-                      addRole(availableRole.value);
-                    }
-                  }}
-                  className="flex items-center gap-1 text-gray-700 hover:bg-gray-100 p-1 h-auto"
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 border border-dashed border-gray-300 rounded-md hover:bg-gray-50"
+                  onClick={() => setShowCargoDropdown(!showCargoDropdown)}
                 >
-                  <Plus className="h-4 w-4" />
-                  <span className="text-xs">Adicionar</span>
-                </Button>
+                  <Plus className="h-3 w-3" />
+                  <span>Adicionar</span>
+                </button>
+                {selectedCargos.map(cargoId => {
+                  const cargo = cargos.find(c => c.id === cargoId);
+                  return cargo ? (
+                    <div key={cargoId} className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
+                      <span>{cargo.nome}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCargos(prev => prev.filter(id => id !== cargoId))}
+                        className="ml-1 text-blue-600 hover:text-blue-800"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : null;
+                })}
               </div>
               
-              {/* Selected roles as pill tags */}
-              {selectedRoles.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedRoles.map((role, index) => (
-                    <div 
-                      key={index} 
-                      className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm border border-gray-300"
-                    >
-                      {role}
-                      <X 
-                        className="h-3 w-3 cursor-pointer hover:text-red-600" 
-                        onClick={() => removeRole(role)}
-                      />
-                    </div>
-                  ))}
+              {/* Dropdown de cargos */}
+              {showCargoDropdown && cargos.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+                  {cargos
+                    .filter(cargo => !selectedCargos.includes(cargo.id))
+                    .map((cargo) => (
+                      <button
+                        key={cargo.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                        onClick={() => {
+                          setSelectedCargos(prev => [...prev, cargo.id]);
+                          setShowCargoDropdown(false);
+                        }}
+                      >
+                        {cargo.nome}
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
@@ -458,13 +399,13 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultChannel', e.target.value)}
                 onFocus={() => updateFocus('defaultChannel', true)}
                 onBlur={() => updateFocus('defaultChannel', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
-                {mockChannels.map((channel) => (
-                  <option key={channel.value} value={channel.value}>
-                    {channel.label}
+                {channels.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.name}
                   </option>
                 ))}
               </select>
@@ -487,7 +428,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
                 onChange={(e) => updateFormData('defaultPhone', e.target.value)}
                 onFocus={() => updateFocus('defaultPhone', true)}
                 onBlur={() => updateFocus('defaultPhone', false)}
-                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                 style={{ backgroundColor: 'white', color: 'black', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -501,7 +442,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               <label
                 className={`absolute left-3 transition-all duration-200 pointer-events-none ${
                   focusedFields.defaultPhone || formData.defaultPhone
-                    ? 'text-xs text-yellow-500 -top-2 bg-white px-1'
+                    ? 'text-xs text-primary -top-2 bg-white px-1'
                     : 'text-sm text-gray-500 top-3'
                 }`}
               >
@@ -509,82 +450,6 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               </label>
             </div>
 
-            {/* Instâncias/Canais de Atendimento */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-gray-700 font-medium">Instâncias (Canais)</span>
-                <span className="text-xs text-gray-500">
-                  {selectedInstances.length} selecionada(s)
-                </span>
-              </div>
-              
-              {instancesLoading ? (
-                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
-                  Carregando instâncias...
-                </div>
-              ) : instances.length === 0 ? (
-                <div className="text-sm text-gray-500 p-3 border border-gray-200 rounded-md">
-                  Nenhuma instância encontrada
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  {instances.map((instance) => (
-                    <div key={instance.instance} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`instance-edit-${instance.instance}`}
-                          checked={selectedInstances.includes(instance.instance)}
-                          onCheckedChange={(checked) => 
-                            handleInstanceToggle(instance.instance, checked as boolean)
-                          }
-                        />
-                        <label 
-                          htmlFor={`instance-edit-${instance.instance}`}
-                          className="text-sm text-gray-700 cursor-pointer flex-1"
-                        >
-                          {instance.displayName || instance.instance}
-                        </label>
-                      </div>
-                      
-                      {selectedInstances.includes(instance.instance) && (
-                        <div className="flex items-center space-x-1">
-                          <input
-                            type="radio"
-                            id={`default-edit-${instance.instance}`}
-                            name="defaultInstanceEdit"
-                            checked={defaultInstance === instance.instance}
-                            onChange={() => handleDefaultInstanceChange(instance.instance)}
-                            className="h-3 w-3"
-                          />
-                          <label 
-                            htmlFor={`default-edit-${instance.instance}`}
-                            className="text-xs text-gray-500 cursor-pointer"
-                          >
-                            Padrão
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Google Button */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleGoogleLink}
-              className="w-full bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 48 48">
-                <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
-                <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
-                <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/>
-                <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/>
-              </svg>
-              Vincular com o Google
-            </Button>
           </div>
         </div>
 
@@ -603,7 +468,7 @@ export function EditarUsuarioModal({ isOpen, onClose, onEditUser, user }: Editar
               type="submit"
               onClick={handleSubmit}
               disabled={loading}
-              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black border-0 rounded-lg disabled:opacity-50"
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground border-0 rounded-lg disabled:opacity-50"
             >
               {loading ? "Salvando..." : "Salvar"}
             </Button>

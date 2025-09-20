@@ -85,7 +85,7 @@ export function AddColumnModal({ open, onOpenChange, onAddColumn, isDarkMode = f
               </Button>
               <Button 
                 onClick={handleSubmit}
-                className="bg-warning hover:bg-yellow-500 text-black"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 disabled={!name.trim()}
               >
                 Adicionar

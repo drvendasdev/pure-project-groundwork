@@ -67,7 +67,7 @@ export function CreateActivityModal({
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('system_users')
         .select('id, name')
         .order('name');
 
@@ -116,8 +116,20 @@ export function CreateActivityModal({
       const scheduledDateTime = new Date(selectedDate);
       scheduledDateTime.setHours(hour, minute, 0, 0);
 
+      // Get workspace_id from the contact
+      const { data: contactData } = await supabase
+        .from('contacts')
+        .select('workspace_id')
+        .eq('id', contactId)
+        .single();
+
+      if (!contactData?.workspace_id) {
+        throw new Error('Workspace não encontrado para este contato');
+      }
+
       const activityData = {
         contact_id: contactId,
+        workspace_id: contactData.workspace_id,
         type: formData.type,
         responsible_id: formData.responsibleId,
         subject: formData.subject,
@@ -130,7 +142,7 @@ export function CreateActivityModal({
 
       const { data: activity, error } = await supabase
         .from('activities')
-        .insert([activityData])
+        .insert(activityData)
         .select(`
           id,
           type,
@@ -453,7 +465,7 @@ export function CreateActivityModal({
             <Button
               onClick={handleCreateActivity}
               disabled={isLoading}
-              className="bg-yellow-400 text-black hover:bg-yellow-500"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {isLoading ? "Criando..." : "Criar Atividade"}
             </Button>

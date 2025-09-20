@@ -18,6 +18,12 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				sans: ['Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+			},
+			fontWeight: {
+				normal: '400',
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
@@ -28,9 +34,7 @@ export default {
 				// Brand colors
 				brand: {
 					blue: 'hsl(var(--brand-blue))',
-					'blue-light': 'hsl(var(--brand-blue-light))',
-					yellow: 'hsl(var(--brand-yellow))',
-					'yellow-hover': 'hsl(var(--brand-yellow-hover))'
+					'blue-light': 'hsl(var(--brand-blue-light))'
 				},
 				
 				// Status colors

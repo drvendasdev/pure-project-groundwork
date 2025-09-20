@@ -31,21 +31,52 @@ serve(async (req) => {
     const normalizedPhone = phoneNumber.replace(/\D/g, '')
 
     console.log(`Creating quick conversation for phone: ${normalizedPhone}`)
+    
+    // PROTEÇÃO: Bloquear uso de números da instância como contato
+    if (instance) {
+      const instanceDigits = instance.replace(/\D/g, '');
+      if (normalizedPhone.includes(instanceDigits) || instanceDigits.includes(normalizedPhone)) {
+        console.error(`❌ BLOQUEADO: Tentativa de criar conversa com número da instância: ${normalizedPhone} (instance: ${instance})`);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Número da instância não pode ser usado como contato',
+            instance_phone: normalizedPhone,
+            instance: instance
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Discover orgId if not provided
     let finalOrgId = orgId
     
     if (!finalOrgId && instance) {
-      // Try to find orgId from channels table using instance
-      const { data: channelData } = await supabase
-        .from('channels')
-        .select('org_id')
-        .eq('instance', instance)
+      // Try to find workspace from connections table using instance AND get phone number for protection
+      const { data: connectionData } = await supabase
+        .from('connections')
+        .select('workspace_id, phone_number')
+        .eq('instance_name', instance)
         .maybeSingle()
       
-      if (channelData) {
-        finalOrgId = channelData.org_id
-        console.log(`Found orgId from channels: ${finalOrgId}`)
+      if (connectionData) {
+        finalOrgId = connectionData.workspace_id
+        console.log(`Found workspace from connections: ${finalOrgId}`)
+        
+        // PROTEÇÃO CRÍTICA: Verificar se não é número da instância
+        const instancePhoneClean = connectionData.phone_number?.replace(/\D/g, '')
+        if (instancePhoneClean && normalizedPhone === instancePhoneClean) {
+          console.error(`❌ BLOQUEADO: Tentativa de criar conversa com número da instância: ${normalizedPhone} (instance: ${instance})`)
+          return new Response(
+            JSON.stringify({ 
+              error: 'Instance phone number cannot be used as contact',
+              instance_phone: instancePhoneClean,
+              received_phone: normalizedPhone,
+              instance: instance
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
       }
     }
 
@@ -74,19 +105,26 @@ serve(async (req) => {
       .from('contacts')
       .select('id')
       .eq('phone', normalizedPhone)
-      .eq('org_id', finalOrgId)
+      .eq('workspace_id', finalOrgId)
       .maybeSingle()
 
     let contactId = existingContact?.id
 
     // Create temporary contact if doesn't exist
     if (!contactId) {
+      console.log(`🏗️ CRIANDO NOVO CONTATO (create-quick-conversation):`, {
+        phone: normalizedPhone,
+        name: `+${normalizedPhone}`,
+        workspace_id: finalOrgId,
+        source: 'create-quick-conversation'
+      })
+      
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
-          name: `+${normalizedPhone}`,
+          name: normalizedPhone, // SEM PREFIXO - apenas o número
           phone: normalizedPhone,
-          org_id: finalOrgId,
+          workspace_id: finalOrgId,
           extra_info: { temporary: true }
         })
         .select('id')
@@ -112,7 +150,7 @@ serve(async (req) => {
       .select('id')
       .eq('contact_id', contactId)
       .eq('status', 'open')
-      .eq('org_id', finalOrgId)
+      .eq('workspace_id', finalOrgId)
       .maybeSingle()
 
     let conversationId = existingConversation?.id
@@ -121,31 +159,31 @@ serve(async (req) => {
     if (!conversationId) {
       // Resolve evolution instance for new conversation
       let evolutionInstance = instance;
+      let instanceSource = 'body';
       
       if (!evolutionInstance) {
-        // Try to get organization default
-        const { data: orgSettings } = await supabase
-          .from('org_messaging_settings')
-          .select('default_instance')
-          .eq('org_id', finalOrgId)
-          .maybeSingle();
-        
-        if (orgSettings?.default_instance) {
-          evolutionInstance = orgSettings.default_instance;
-          console.log(`Using org default instance: ${evolutionInstance}`);
-        } else {
-          // Fallback to global secret
-          evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
-          if (evolutionInstance) {
-            console.log('Using global default instance from secret');
-          }
-        }
+        // Try to get workspace default (commented out - table doesn't exist)
+        // const { data: orgSettings } = await supabase
+        //   .from('org_messaging_settings')
+        //   .select('default_instance')
+        //   .eq('workspace_id', finalOrgId)
+        //   .maybeSingle();
+        // 
+        // if (orgSettings?.default_instance) {
+        //   evolutionInstance = orgSettings.default_instance;
+        //   instanceSource = 'orgDefault';
+        //   console.log(`Using org default instance: ${evolutionInstance}`);
+        // } else {
+        //   console.log('No default instance found for organization');
+        // }
       }
+      
+      console.log('📡 Instance resolved for new conversation:', { instance: evolutionInstance, source: instanceSource });
 
       const conversationData: any = {
         contact_id: contactId,
         status: 'open',
-        org_id: finalOrgId,
+        workspace_id: finalOrgId,
         canal: 'whatsapp',
         agente_ativo: false
       }

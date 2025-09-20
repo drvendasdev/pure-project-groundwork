@@ -6,14 +6,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageStatusIndicator } from "@/components/ui/message-status-indicator";
 import { useWhatsAppConversations, WhatsAppConversation } from "@/hooks/useWhatsAppConversations";
+import { useConversationMessages } from "@/hooks/useConversationMessages";
+import { useAuth } from "@/hooks/useAuth";
 import { useTags } from "@/hooks/useTags";
 import { useProfileImages } from "@/hooks/useProfileImages";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parsePhoneNumber } from 'libphonenumber-js';
 import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
+import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
+import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
+import { AddTagButton } from "@/components/chat/AddTagButton";
 import { 
   Search, 
   Send, 
@@ -36,6 +42,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface WhatsAppChatProps {
@@ -44,15 +51,32 @@ interface WhatsAppChatProps {
 }
 
 export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: WhatsAppChatProps) {
+  // ✅ Separação total: conversas vs mensagens
   const { 
     conversations, 
     loading, 
-    sendMessage, 
     markAsRead, 
     assumirAtendimento, 
     reativarIA, 
-    clearAllConversations 
+    clearAllConversations,
+    acceptConversation,
+    fetchConversations
   } = useWhatsAppConversations();
+  
+  // ✅ Hook específico para mensagens (lazy loading)
+  const {
+    messages,
+    loading: messagesLoading,
+    loadingMore,
+    hasMore,
+    loadInitial: loadMessages,
+    loadMore: loadMoreMessages,
+    addMessage,
+    updateMessage,
+    clearMessages
+  } = useConversationMessages();
+  const { selectedWorkspace } = useWorkspace();
+  const { user } = useAuth();
   const { tags } = useTags();
   const { fetchProfileImage, isLoading: isLoadingProfileImage } = useProfileImages();
   const { assignments } = useInstanceAssignments();
@@ -69,6 +93,63 @@ export function WhatsAppChat({ isDarkMode = false, selectedConversationId }: Wha
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("");
   const [isUpdatingProfileImages, setIsUpdatingProfileImages] = useState(false);
+  
+  // Estados para as abas baseadas no papel
+  const [activeTab, setActiveTab] = useState<string>('all');
+  
+  // Definir abas baseado no papel do usuário
+  const getUserTabs = () => {
+    const userProfile = user?.profile;
+    
+    if (userProfile === 'master') {
+      // MentorMaster: mesmas vistas do Admin
+      return [
+        { id: 'all', label: 'Todas', count: conversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
+        { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
+      ];
+    } else if (userProfile === 'admin') {
+      // Admin: todas as abas do workspace
+      return [
+        { id: 'all', label: 'Todas', count: conversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: conversations.filter(c => !c.assigned_user_id).length },
+        { id: 'in_progress', label: 'Em atendimento', count: conversations.filter(c => c.status === 'em_atendimento').length },
+        { id: 'closed', label: 'Finalizadas', count: conversations.filter(c => c.status === 'closed').length }
+      ];
+    } else {
+      // User: apenas suas conversas e não designadas
+      const myConversations = conversations.filter(c => c.assigned_user_id === user?.id);
+      const unassignedConversations = conversations.filter(c => !c.assigned_user_id);
+      
+      return [
+        { id: 'mine', label: 'Minhas', count: myConversations.length },
+        { id: 'unassigned', label: 'Não designadas', count: unassignedConversations.length }
+      ];
+    }
+  };
+  
+  const tabs = getUserTabs();
+
+  // Filtrar conversas baseado na aba ativa
+  const getFilteredConversations = () => {
+    switch (activeTab) {
+      case 'all':
+        return conversations;
+      case 'mine':
+        return conversations.filter(c => c.assigned_user_id === user?.id);
+      case 'unassigned':
+        return conversations.filter(c => !c.assigned_user_id);
+      case 'in_progress':
+        return conversations.filter(c => c.status === 'em_atendimento');
+      case 'closed':
+        return conversations.filter(c => c.status === 'closed');
+      default:
+        return conversations;
+    }
+  };
+  const [peekModalOpen, setPeekModalOpen] = useState(false);
+  const [peekConversation, setPeekConversation] = useState<WhatsAppConversation | null>(null);
 const messagesEndRef = useRef<HTMLDivElement>(null);
 const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 const audioChunksRef = useRef<Blob[]>([]);
@@ -80,26 +161,70 @@ const [isRecording, setIsRecording] = useState(false);
     (conv.contact.phone && conv.contact.phone.includes(searchTerm))
   );
 
-  // Função para enviar mensagem
+  // ✅ Enviar mensagem usando o hook de mensagens
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation) return;
 
     try {
-      await sendMessage(
-        selectedConversation.id,
-        messageText,
-        selectedConversation.contact.phone || '',
-        'text'
-      );
+      // Criar mensagem local otimista
+      const optimisticMessage = {
+        id: `temp-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: messageText,
+        message_type: 'text' as const,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: messageText,
+          message_type: 'text',
+          sender_id: user?.id,
+          sender_type: 'agent'
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
+      }
+
+      // Atualizar mensagem temporária com ID real
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+      
       setMessageText("");
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      // Remover mensagem temporária em caso de erro
+      // TODO: implementar removeMessage no hook
     }
   };
 
-  // Selecionar conversa e marcar como lida
-  const handleSelectConversation = (conversation: WhatsAppConversation) => {
+  // ✅ Selecionar conversa e carregar mensagens lazy
+  const handleSelectConversation = async (conversation: WhatsAppConversation) => {
     setSelectedConversation(conversation);
+    
+    // ✅ CRÍTICO: Carregar mensagens APENAS quando conversa é selecionada
+    clearMessages(); // Limpar mensagens da conversa anterior
+    await loadMessages(conversation.id);
+    
     if (conversation.unread_count > 0) {
       markAsRead(conversation.id);
     }
@@ -111,9 +236,10 @@ const [isRecording, setIsRecording] = useState(false);
     return time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Obter última mensagem
+  // ✅ Última mensagem não existe mais no array (lazy loading)
   const getLastMessage = (conv: WhatsAppConversation) => {
-    return conv.messages[conv.messages.length - 1];
+    // Retorna null - sem preview de mensagem na lista
+    return null;
   };
 
   // Obter iniciais do nome
@@ -181,14 +307,22 @@ const startRecording = async () => {
           .getPublicUrl(filePath);
 
         if (selectedConversation) {
-          await sendMessage(
-            selectedConversation.id,
-            messageText.trim() || '[AUDIO]',
-            selectedConversation.contact.phone || '',
-            'audio',
-            publicUrl,
-            fileName
-          );
+          // ✅ Enviar áudio usando nova estrutura
+          const optimisticMessage = {
+            id: `temp-audio-${Date.now()}`,
+            conversation_id: selectedConversation.id,
+            content: messageText.trim() || '[AUDIO]',
+            message_type: 'audio' as const,
+            sender_type: 'agent' as const,
+            sender_id: user?.id,
+            file_url: publicUrl,
+            file_name: fileName,
+            created_at: new Date().toISOString(),
+            status: 'sending' as const,
+            workspace_id: selectedWorkspace?.workspace_id || ''
+          };
+          
+          addMessage(optimisticMessage);
           setMessageText('');
           toast({ title: 'Áudio enviado', description: 'Seu áudio foi enviado com sucesso.' });
         }
@@ -285,7 +419,37 @@ const stopRecording = () => {
         return;
       }
 
+      // PROTEÇÃO: Verificar se não é número de alguma conexão/instância
+      const formattedPhone = phoneNumber.format('E.164').replace('+', '');
+      const phoneDigits = formattedPhone.replace(/\D/g, '');
+      
+      // Verificar contra todas as conexões do workspace atual
+      const { data: connections } = await supabase
+        .from('connections')
+        .select('phone_number, instance_name')
+        .eq('workspace_id', selectedWorkspace?.workspace_id);
+        
+      const isInstanceNumber = connections?.some(conn => {
+        const connPhone = conn.phone_number?.replace(/\D/g, '');
+        return connPhone && phoneDigits === connPhone;
+      });
+      
+      if (isInstanceNumber) {
+        toast({
+          title: "Número inválido",
+          description: "Este número pertence a uma instância WhatsApp e não pode ser usado como contato.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Call Edge Function to create quick conversation
+      console.log('📞 Criando conversa rápida:', { 
+        original: quickPhoneNumber, 
+        formatted: phoneNumber.format('E.164'),
+        national: phoneNumber.format('NATIONAL') 
+      });
+      
       const { data, error } = await supabase.functions.invoke('create-quick-conversation', {
         body: { phoneNumber: phoneNumber.format('E.164') }
       });
@@ -358,12 +522,32 @@ const stopRecording = () => {
     }
   }, [selectedConversationId, conversations, markAsRead]);
 
-  // Auto-scroll quando conversa é selecionada ou nova mensagem chega
+  // Auto-scroll quando conversa é selecionada ou mensagens carregam
   useEffect(() => {
-    if (selectedConversation) {
-      setTimeout(scrollToBottom, 100);
+    if (selectedConversation && messages.length > 0) {
+      // Scroll direto para o final sem animação no primeiro carregamento
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
-  }, [selectedConversation, selectedConversation?.messages]);
+  }, [selectedConversation, messages.length]);
+
+  // Auto-scroll suave quando novas mensagens chegam (não no carregamento inicial)
+  useEffect(() => {
+    if (selectedConversation && messages.length > 0 && !loading) {
+      const isAtBottom = () => {
+        const container = messagesEndRef.current?.parentElement;
+        if (!container) return true;
+        const threshold = 100;
+        return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      };
+
+      // Se já está próximo do final, faz scroll suave para nova mensagem
+      if (isAtBottom()) {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  }, [messages, loading]);
 
   if (loading) {
     return (
@@ -399,11 +583,11 @@ const stopRecording = () => {
                 variant="ghost" 
                 size="sm"
                 disabled={isUpdatingProfileImages}
-                className="text-blue-600 hover:bg-blue-50"
+                className="text-primary hover:bg-primary/10"
                 title="Atualizar todas as fotos de perfil"
               >
                 {isUpdatingProfileImages ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 ) : (
                  <RefreshCw className="h-4 w-4" />
                 )}
@@ -444,7 +628,7 @@ const stopRecording = () => {
               placeholder="Buscar"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-10"
+              className="pl-10 pr-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
             />
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger asChild>
@@ -471,7 +655,37 @@ const stopRecording = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+          
+          {/* Abas baseadas no papel do usuário */}
+          <div className="border-b border-border">
+            <div className="flex">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                    activeTab === tab.id
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={cn(
+                      "ml-2 px-2 py-1 text-xs rounded-full",
+                      activeTab === tab.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+          
                   <div>
                     <label className="text-sm font-medium mb-2 block">Filtre pela tag</label>
                     <Select value={selectedTag} onValueChange={setSelectedTag}>
@@ -507,7 +721,7 @@ const stopRecording = () => {
                   </div>
                   
                   <Button 
-                    className="w-full bg-yellow-400 hover:bg-yellow-500 text-black"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                     onClick={() => {
                       setSelectedAgent("");
                       setSelectedTag("");
@@ -523,9 +737,25 @@ const stopRecording = () => {
 
         {/* Lista de conversas */}
         <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+              </div>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center space-y-2">
+                <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
+                <p className="text-xs text-muted-foreground">Configure conexões WhatsApp para ver conversas</p>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-0">
-            {filteredConversations.map((conversation) => {
-              const lastMessage = getLastMessage(conversation);
+            {getFilteredConversations().map((conversation) => {
+              // ✅ Removido lastMessage (lazy loading)
               const lastActivity = getActivityTime(conversation);
               const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
               const avatarColor = getAvatarColor(conversation.contact?.name || conversation.contact?.phone || 'U');
@@ -582,35 +812,52 @@ const stopRecording = () => {
                     {/* Main content */}
                     <div className="flex-1 min-w-0">
                       {/* First line: Name with eye icon */}
-                      <div className="flex items-center mb-0.5">
+                       <div className="flex items-center mb-0.5">
                         <span 
                           className="text-xs font-normal text-foreground tracking-tight truncate"
                           style={{ fontWeight: 400, letterSpacing: '-0.2px', fontSize: '12px' }}
                         >
                           {conversation.contact?.name || conversation.contact?.phone}
                         </span>
-                        <svg 
-                          className="ml-2 w-3 h-3 text-primary cursor-pointer" 
-                          viewBox="0 0 24 24" 
-                          fill="currentColor"
-                          style={{ fontSize: '12px' }}
-                        >
-                          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
-                        </svg>
+        <svg 
+          className="ml-2 w-3 h-3 text-primary cursor-pointer" 
+          viewBox="0 0 24 24" 
+          fill="currentColor"
+          style={{ fontSize: '12px' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPeekConversation(conversation);
+            setPeekModalOpen(true);
+          }}
+        >
+          <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+        </svg>
                       </div>
                       
-                      {/* Second line: Message preview */}
+                        {/* ✅ Última mensagem da conversa */}
                       <div className="flex items-center">
                         <span 
                           className="text-foreground/87 truncate"
                           style={{ fontSize: '11px', fontWeight: 400, letterSpacing: '0px' }}
                         >
-                          {lastMessage && lastMessage.sender_type === 'agent' && 'Você: '}
-                          {lastMessage ? (
-                            lastMessage.message_type === 'text' 
-                              ? lastMessage.content 
-                              : `📎 ${lastMessage.message_type}`
-                          ) : 'Sem mensagens'}
+                          {conversation.last_message?.[0] ? (
+                            <>
+                              {conversation.last_message[0].sender_type === 'contact' ? '' : 'Você: '}
+                              {conversation.last_message[0].message_type === 'text' 
+                                ? conversation.last_message[0].content 
+                                : `${conversation.last_message[0].message_type === 'image' ? '📷' : 
+                                    conversation.last_message[0].message_type === 'video' ? '🎥' : 
+                                    conversation.last_message[0].message_type === 'audio' ? '🎵' : '📄'} ${
+                                    conversation.last_message[0].message_type.charAt(0).toUpperCase() + 
+                                    conversation.last_message[0].message_type.slice(1)
+                                  }`
+                              }
+                            </>
+                          ) : (
+                            conversation.unread_count > 0 
+                              ? `${conversation.unread_count} mensagem${conversation.unread_count > 1 ? 's' : ''} não lida${conversation.unread_count > 1 ? 's' : ''}`
+                              : 'Clique para ver mensagens'
+                          )}
                         </span>
                       </div>
                     </div>
@@ -619,21 +866,29 @@ const stopRecording = () => {
                     <div className="flex items-center gap-2 ml-2">
                       {/* Tag/Label system */}
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center">
-                          <div 
-                            className="px-1.5 py-0.5 rounded text-xs flex items-center gap-1"
-                            title="TESTE INTERNO"
-                          >
-                            <svg 
-                              className="w-3 h-3" 
-                              viewBox="0 0 24 24" 
-                              fill="rgb(196, 0, 0)"
-                              style={{ stroke: 'white', strokeWidth: 1 }}
-                            >
-                              <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
-                            </svg>
-                          </div>
-                        </div>
+                        {conversation.tags && conversation.tags.length > 0 && (
+                          <TooltipProvider>
+                            <div className="flex items-center gap-1">
+                              {conversation.tags.map((tag) => (
+                                <Tooltip key={tag.id}>
+                                  <TooltipTrigger asChild>
+                                    <svg 
+                                      className="w-3 h-3" 
+                                      viewBox="0 0 24 24" 
+                                      fill={tag.color}
+                                      style={{ stroke: 'white', strokeWidth: 1 }}
+                                    >
+                                      <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+                                    </svg>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <span className="text-xs">{tag.name}</span>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                          </TooltipProvider>
+                        )}
                         
                         {/* Small avatar */}
                         <Avatar className="w-4 h-4 rounded-full">
@@ -657,6 +912,7 @@ const stopRecording = () => {
               );
             })}
           </div>
+          )}
         </ScrollArea>
 
         {/* Campo para nova conversa */}
@@ -694,7 +950,7 @@ const stopRecording = () => {
         {selectedConversation ? (
           <>
             {/* Cabeçalho do chat */}
-            <div className="p-4 border-b border-border">
+            <div className="p-4 border-b border-border bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <Avatar className="w-10 h-10">
@@ -705,54 +961,80 @@ const stopRecording = () => {
                         className="object-cover"
                       />
                     )}
-                    <AvatarFallback className={cn("text-white", getAvatarColor(selectedConversation.contact.name))}>
+                    <AvatarFallback style={{ backgroundColor: getAvatarColor(selectedConversation.contact.name) }} className="text-white">
                       {getInitials(selectedConversation.contact.name)}
                     </AvatarFallback>
                   </Avatar>
                   
-                  <div>
-                    <h3 className="font-semibold text-foreground">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-gray-900 text-base">
                       {selectedConversation.contact.name}
                     </h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Circle className="w-2 h-2 fill-green-500 text-green-500" />
-                      <span>Online</span>
-                      {selectedConversation.agente_ativo && (
-                        <span className="text-yellow-600">• IA Ativa</span>
-                      )}
-                    </div>
+                    <AddTagButton
+                      conversationId={selectedConversation.id}
+                      isDarkMode={isDarkMode}
+                      onTagAdded={() => {
+                        // Refresh conversations after adding tag
+                        fetchConversations();
+                      }}
+                    />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button 
+                <div className="flex items-center gap-3">
+                  <Button
                     variant="ghost" 
-                    size="icon"
+                    size="sm"
                     onClick={handleToggleAgent}
                     className={cn(
-                      "transition-colors",
+                      "h-8 px-3 rounded-full text-sm font-medium transition-colors",
                       selectedConversation.agente_ativo 
-                        ? "text-yellow-600 hover:text-yellow-700" 
-                        : "text-gray-400 hover:text-gray-600"
+                        ? "bg-primary/10 text-primary hover:bg-primary/20" 
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
                     )}
                     title={selectedConversation.agente_ativo ? "Desativar IA" : "Ativar IA"}
                   >
-                    <Bot className="w-5 h-5" />
+                    <Bot className="w-4 h-4 mr-1" />
+                    Agente IA
                   </Button>
-                  <Button variant="ghost" size="icon">
-                    <Phone className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
+                  
+                  <AcceptConversationButton
+                    conversation={selectedConversation}
+                    onAccept={async (conversationId: string) => {
+                      // Refresh conversations after accepting
+                      await fetchConversations();
+                    }}
+                    className="h-8 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-md"
+                  />
                 </div>
               </div>
             </div>
 
             {/* Área de mensagens */}
             <ScrollArea className="flex-1 p-4">
+              {/* ✅ Loading inicial das mensagens */}
+              {messagesLoading && messages.length === 0 && (
+                <div className="flex justify-center p-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              )}
+              
+              {/* ✅ Botão Load More (scroll infinito) */}
+              {hasMore && messages.length > 0 && (
+                <div className="flex justify-center p-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={loadMoreMessages}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? 'Carregando...' : 'Carregar mensagens anteriores'}
+                  </Button>
+                </div>
+              )}
+              
               <div className="space-y-4">
-                {selectedConversation.messages.map((message) => (
+                {messages.map((message) => (
                   <div 
                     key={message.id}
                     className={cn(
@@ -777,12 +1059,14 @@ const stopRecording = () => {
                       </Avatar>
                     )}
                     
-                    <div 
+                     <div 
                       className={cn(
-                        "rounded-lg p-3 max-w-full",
+                        "rounded-lg max-w-full",
                         message.sender_type === 'contact' 
-                          ? "bg-muted" 
-                          : "bg-primary text-primary-foreground"
+                          ? "bg-muted p-3" 
+                          : message.message_type !== 'text' && message.file_url
+                            ? "bg-primary p-3" 
+                            : "bg-primary text-primary-foreground p-3"
                       )}
                     >
                       {/* Renderizar conteúdo baseado no tipo */}
@@ -826,15 +1110,26 @@ const stopRecording = () => {
               <div className="flex items-end gap-2">
 <MediaUpload 
   onFileSelect={(file, mediaType, fileUrl) => {
+    if (!selectedConversation) return;
+    
     const caption = messageText.trim();
-    sendMessage(
-      selectedConversation!.id,
-      caption,
-      selectedConversation!.contact.phone || '',
-      mediaType,
-      fileUrl,
-      file.name
-    );
+    
+    // ✅ Criar mensagem de mídia usando nova estrutura
+    const optimisticMessage = {
+      id: `temp-media-${Date.now()}`,
+      conversation_id: selectedConversation.id,
+      content: caption || `[${mediaType.toUpperCase()}]`,
+      message_type: mediaType as any,
+      sender_type: 'agent' as const,
+      sender_id: user?.id,
+      file_url: fileUrl,
+      file_name: file.name,
+      created_at: new Date().toISOString(),
+          status: 'sending' as const,
+      workspace_id: selectedWorkspace?.workspace_id || ''
+    };
+    
+    addMessage(optimisticMessage);
     if (caption) setMessageText('');
   }}
 />
@@ -883,6 +1178,12 @@ const stopRecording = () => {
             </div>
           </div>
         )}
+        
+        <PeekConversationModal
+          isOpen={peekModalOpen}
+          onClose={() => setPeekModalOpen(false)}
+          conversation={peekConversation}
+        />
       </div>
 
     </div>

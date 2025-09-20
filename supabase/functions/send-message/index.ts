@@ -3,160 +3,300 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-system-user-id, x-system-user-email, x-workspace-id',
 };
+
+// Gerar ID único para cada request
+function generateRequestId(): string {
+  return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Validar schema de entrada
+function validateRequestBody(body: any): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  if (!body.conversation_id || typeof body.conversation_id !== 'string') {
+    errors.push('conversation_id is required and must be a string');
+  }
+  
+  if (!body.content || typeof body.content !== 'string') {
+    errors.push('content is required and must be a string');
+  }
+  
+  if (!body.sender_id || typeof body.sender_id !== 'string') {
+    errors.push('sender_id is required and must be a string');
+  }
+  
+  const validMessageTypes = ['text', 'image', 'audio', 'video', 'file', 'document'];
+  if (!validMessageTypes.includes(body.message_type)) {
+    errors.push(`message_type must be one of: ${validMessageTypes.join(', ')}`);
+  }
+  
+  const validSenderTypes = ['user', 'agent', 'system'];
+  if (!validSenderTypes.includes(body.sender_type)) {
+    errors.push(`sender_type must be one of: ${validSenderTypes.join(', ')}`);
+  }
+  
+  return { isValid: errors.length === 0, errors };
+}
+
+// Extrair informações do usuário do JWT para validação no sistema customizado
+function extractUserDataFromJWT(authHeader: string | null): { email: string | null; systemUserId: string | null; systemEmail: string | null } {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { email: null, systemUserId: null, systemEmail: null };
+  }
+  
+  try {
+    const token = authHeader.split(' ')[1];
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    
+    return {
+      email: payload.email || null,
+      systemUserId: payload.system_user_id || null,
+      systemEmail: payload.system_email || null
+    };
+  } catch (error) {
+    console.error('Error extracting JWT data:', error);
+    return { email: null, systemUserId: null, systemEmail: null };
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { conversationId, content, messageType = 'text', fileUrl, mimeType } = await req.json();
-    
-    console.log('📤 Enviando mensagem:', { conversationId, messageType, contentLength: content?.length });
+  const requestId = generateRequestId();
+  console.log(`🚀 [${requestId}] Send message request started`);
 
+  try {
+    // Parse request body
+    const body = await req.json();
+    console.log(`📝 [${requestId}] Request body:`, { 
+      conversation_id: body.conversation_id,
+      message_type: body.message_type,
+      sender_type: body.sender_type,
+      hasContent: !!body.content,
+      hasFile: !!body.file_url
+    });
+
+    // Validate request body
+    const { isValid, errors } = validateRequestBody(body);
+    if (!isValid) {
+      console.error(`❌ [${requestId}] Validation errors:`, errors);
+      return new Response(JSON.stringify({
+        code: 'VALIDATION_ERROR',
+        message: 'Request validation failed',
+        errors,
+        requestId
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Extract headers
+    const authHeader = req.headers.get('authorization');
+    const systemUserIdHeader = req.headers.get('x-system-user-id');
+    const systemUserEmailHeader = req.headers.get('x-system-user-email');
+    const workspaceIdHeader = req.headers.get('x-workspace-id');
+
+    // Extract user data from JWT
+    const { email: currentUserEmail, systemUserId: jwtSystemUserId, systemEmail: jwtSystemEmail } = extractUserDataFromJWT(authHeader);
+    const systemUserId = systemUserIdHeader || jwtSystemUserId;
+
+    console.log(`👤 [${requestId}] User context:`, {
+      systemUserId: systemUserId?.substring(0, 8) + '***',
+      currentUserEmail: currentUserEmail?.substring(0, 5) + '***',
+      workspaceIdHeader: workspaceIdHeader?.substring(0, 8) + '***'
+    });
+
+    // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Buscar conversa
-    const { data: conversation, error: convError } = await supabase
+    // Get conversation details with contact and connection info
+    const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('*')
-      .eq('id', conversationId)
+      .select(`
+        id,
+        workspace_id,
+        connection_id,
+        contact:contacts(id, phone, name),
+        connection:connections(id, instance_name, status)
+      `)
+      .eq('id', body.conversation_id)
       .single();
 
-    if (convError) {
-      throw new Error(`Conversa não encontrada: ${convError.message}`);
-    }
-
-    // Salvar mensagem no banco
-    const { data: message, error: messageError } = await supabase
-      .from('messages')
-      .insert([{
-        conversation_id: conversationId,
-        sender_type: 'operator',
-        message_type: messageType,
-        content: fileUrl || content,
-        mime_type: mimeType
-      }])
-      .select()
-      .single();
-
-    if (messageError) throw messageError;
-
-    // Preparar dados para Evolution API
-    const evolutionApiUrl = Deno.env.get('EVOLUTION_API_URL');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
-    const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE');
-
-    if (!evolutionApiUrl || !evolutionApiKey || !evolutionInstance) {
-      console.log('⚠️ Credenciais da Evolution API não configuradas');
+    if (conversationError || !conversation) {
+      console.error(`❌ [${requestId}] Conversation not found:`, conversationError);
       return new Response(JSON.stringify({
-        success: true,
-        message: 'Mensagem salva no banco (Evolution API não configurada)',
-        messageId: message.id
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'Conversation not found',
+        requestId
       }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Preparar payload baseado no tipo de mensagem
-    let evolutionPayload: any;
-    let endpoint: string;
-
-    const phoneNumber = conversation.phone_number;
-
-    if (messageType === 'text') {
-      evolutionPayload = {
-        number: phoneNumber,
-        text: content
-      };
-      endpoint = `${evolutionApiUrl}/message/sendText/${evolutionInstance}`;
-    } else if (messageType === 'image') {
-      evolutionPayload = {
-        number: phoneNumber,
-        mediaMessage: {
-          mediatype: 'image',
-          media: fileUrl || content,
-          caption: content === fileUrl ? '' : content
-        }
-      };
-      endpoint = `${evolutionApiUrl}/message/sendMedia/${evolutionInstance}`;
-    } else if (messageType === 'video') {
-      evolutionPayload = {
-        number: phoneNumber,
-        mediaMessage: {
-          mediatype: 'video',
-          media: fileUrl || content,
-          caption: content === fileUrl ? '' : content
-        }
-      };
-      endpoint = `${evolutionApiUrl}/message/sendMedia/${evolutionInstance}`;
-    } else if (messageType === 'audio') {
-      evolutionPayload = {
-        number: phoneNumber,
-        audioMessage: {
-          audio: fileUrl || content
-        }
-      };
-      endpoint = `${evolutionApiUrl}/message/sendWhatsAppAudio/${evolutionInstance}`;
-    } else {
-      // Fallback para texto
-      evolutionPayload = {
-        number: phoneNumber,
-        text: content
-      };
-      endpoint = `${evolutionApiUrl}/message/sendText/${evolutionInstance}`;
+    // Validate connection
+    if (!conversation.connection || conversation.connection.status !== 'connected') {
+      console.error(`❌ [${requestId}] Connection not ready:`, {
+        hasConnection: !!conversation.connection,
+        status: conversation.connection?.status
+      });
+      return new Response(JSON.stringify({
+        code: 'CONNECTION_NOT_READY',
+        message: 'WhatsApp connection is not ready',
+        requestId
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log('🚀 Enviando para Evolution:', endpoint);
-
-    // Enviar via Evolution API
-    const evolutionResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': evolutionApiKey,
-      },
-      body: JSON.stringify(evolutionPayload),
+    console.log(`✅ [${requestId}] Conversation and connection validated:`, {
+      conversationId: conversation.id,
+      workspaceId: conversation.workspace_id,
+      connectionId: conversation.connection_id,
+      instanceName: conversation.connection.instance_name,
+      contactPhone: conversation.contact?.phone?.substring(0, 8) + '***'
     });
 
-    let evolutionData: any = {};
-    if (evolutionResponse.ok) {
-      evolutionData = await evolutionResponse.json();
-      console.log('✅ Mensagem enviada via Evolution');
-    } else {
-      const errorText = await evolutionResponse.text();
-      console.error('❌ Erro na Evolution API:', errorText);
-      throw new Error(`Evolution API erro: ${evolutionResponse.status} - ${errorText}`);
+    // Create message record in database
+    const { data: message, error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversation.id,
+        workspace_id: conversation.workspace_id,
+        content: body.content,
+        message_type: body.message_type,
+        sender_type: body.sender_type,
+        sender_id: body.sender_id,
+        file_url: body.file_url,
+        file_name: body.file_name,
+        mime_type: body.mime_type,
+        status: 'sending',
+        external_id: requestId, // Usar requestId como external_id
+        metadata: {
+          requestId,
+          created_at: new Date().toISOString()
+        }
+      })
+      .select()
+      .single();
+
+    if (messageError || !message) {
+      console.error(`❌ [${requestId}] Failed to create message:`, messageError);
+      return new Response(JSON.stringify({
+        code: 'MESSAGE_CREATION_ERROR',
+        message: 'Failed to create message record',
+        details: messageError?.message,
+        requestId
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    // Atualizar timestamp da conversa
+    console.log(`💾 [${requestId}] Message created in database:`, { messageId: message.id });
+
+    // REFATORADO: Usar centralizador inteligente com fallback automático
+    console.log(`🚀 [${requestId}] Send message request initiated - ROUTING VIA SMART SENDER`);
+    
+    // Preparar payload para o centralizador
+    const senderPayload = {
+      messageId: message.id,
+      phoneNumber: conversation.contact?.phone,
+      content: body.content,
+      messageType: body.message_type || 'text',
+      fileUrl: body.file_url,
+      fileName: body.file_name,
+      evolutionInstance: conversation.connection.instance_name,
+      conversationId: conversation.id,
+      workspaceId: conversation.workspace_id,
+      external_id: message.external_id // Incluir external_id no payload
+    };
+
+    // Chamar centralizador inteligente
+    const { data: senderResult, error: senderError } = await supabase.functions.invoke('message-sender', {
+      body: senderPayload,
+      headers: {
+        'x-system-user-id': systemUserId || body.sender_id,
+        'x-system-user-email': currentUserEmail || systemUserEmailHeader || ''
+      }
+    });
+
+    if (senderError) {
+      console.error(`❌ [${requestId}] Message sender error:`, senderError);
+      
+      // Atualizar status da mensagem para erro
+      await supabase
+        .from('messages')
+        .update({ 
+          status: 'failed',
+          metadata: { 
+            error: senderError.message,
+            sent_via: 'sender_error',
+            requestId,
+            timestamp: new Date().toISOString()
+          }
+        })
+        .eq('id', message.id);
+
+      return new Response(JSON.stringify({
+        code: 'MESSAGE_SENDER_ERROR',
+        message: 'Failed to send message',
+        details: senderError.message,
+        requestId
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Sucesso - atualizar metadata da mensagem
     await supabase
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId);
+      .from('messages')
+      .update({ 
+        status: 'sent',
+        metadata: { 
+          sent_via: senderResult.method,
+          fallback_reason: senderResult.fallback || null,
+          requestId,
+          timestamp: new Date().toISOString(),
+          external_response: senderResult.result
+        }
+      })
+      .eq('id', message.id);
+
+    console.log(`✅ [${requestId}] Message sent successfully via ${senderResult.method}`);
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Mensagem enviada com sucesso',
-      messageId: message.id,
-      evolutionResponse: evolutionData
+      message_id: message.id,
+      conversation_id: conversation.id,
+      sent_via: senderResult.method,
+      fallback_reason: senderResult.fallback || null,
+      requestId
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('❌ Erro ao enviar mensagem:', error);
+    console.error(`💥 [${requestId}] Unexpected error in send-message:`, error);
+    
     return new Response(JSON.stringify({
-      success: false,
-      error: error.message
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+      details: error.message,
+      requestId
     }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });

@@ -16,7 +16,7 @@ interface AuthContextType {
   userRole: 'master' | 'admin' | 'user' | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   hasRole: (roles: string[]) => boolean;
 }
 
@@ -64,6 +64,7 @@ export const useAuthState = () => {
 
   const login = async (email: string, password: string) => {
     try {
+      // Validar credenciais via sistema customizado
       const { data, error } = await supabase.functions.invoke('get-system-user', {
         body: { email, password }
       });
@@ -73,6 +74,56 @@ export const useAuthState = () => {
       }
 
       const user = data.user;
+      
+      // Criar uma sessão Supabase para permitir checagens no servidor
+      try {
+        // Primeiro tenta fazer signUp (cria conta se não existir)
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: `${user.id}@example.com`,
+          password: user.id,
+          options: {
+            data: {
+              system_user_id: user.id,
+              system_email: user.email,
+              system_name: user.name,
+              system_profile: user.profile
+            }
+          }
+        });
+        
+        // Se usuário já existe ou criou com sucesso, fazer signIn
+        if (!signUpError || signUpError.message.includes('already registered')) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: `${user.id}@example.com`,
+            password: user.id
+          });
+          
+          if (signInError) {
+            console.log('Info: Erro no signIn Supabase:', signInError.message);
+          } else {
+            console.log('Sessão Supabase ativa para chamadas autenticadas');
+            
+            // Ensure user metadata is updated after login
+            try {
+              await supabase.auth.updateUser({
+                data: {
+                  system_user_id: user.id,
+                  system_email: user.email,
+                  system_name: user.name,
+                  system_profile: user.profile
+                }
+              });
+              console.log('User metadata updated successfully');
+            } catch (metadataError) {
+              console.log('Info: Erro ao atualizar metadata (ignorado):', metadataError);
+            }
+          }
+        }
+      } catch (authError) {
+        console.log('Info: Erro na autenticação Supabase (ignorado):', authError);
+      }
+
+      // Definir dados do usuário no estado local
       setUser(user);
       localStorage.setItem('currentUser', JSON.stringify(user));
       
@@ -86,10 +137,17 @@ export const useAuthState = () => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     setUserRole(null);
     localStorage.removeItem('currentUser');
+    
+    // Também fazer logout do Supabase Auth
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.log('Erro ao fazer logout do Supabase:', error);
+    }
   };
 
   const hasRole = (roles: string[]) => {

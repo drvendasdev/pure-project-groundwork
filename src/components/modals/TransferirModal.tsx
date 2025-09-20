@@ -60,12 +60,7 @@ export function TransferirModal({ isOpen, onClose, isDarkMode = false }: Transfe
                 value={searchUser}
                 onChange={(e) => setSearchUser(e.target.value)}
                 placeholder="Digite para buscar usuários"
-                className={cn(
-                  "pl-10",
-                  isDarkMode 
-                    ? "bg-gray-700 border-gray-600 text-white placeholder:text-gray-400" 
-                    : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
-                )}
+                className="pl-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
               />
             </div>
           </div>

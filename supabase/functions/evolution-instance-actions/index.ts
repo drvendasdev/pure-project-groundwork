@@ -6,27 +6,96 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Configuration and validation functions
+function getConfig() {
+  const supabaseFunctionsWebhook = Deno.env.get('SUPABASE_FUNCTIONS_WEBHOOK');
+  const evolutionWebhookSecret = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET');
+  const evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
+  const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  return {
+    supabaseFunctionsWebhook,
+    evolutionWebhookSecret,
+    evolutionApiUrl,
+    evolutionApiKey,
+    supabaseUrl,
+    supabaseServiceRoleKey
+  };
+}
+
+function normalizePhoneNumber(phone: string): string | undefined {
+  if (!phone || typeof phone !== 'string') {
+    return undefined;
+  }
+  
+  // Remove all non-digit characters
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  if (cleanPhone.length === 0) {
+    return undefined;
+  }
+  
+  // If doesn't start with 55 (Brazil), add it
+  if (!cleanPhone.startsWith('55')) {
+    return '55' + cleanPhone;
+  }
+  
+  return cleanPhone;
+}
+
+function validateWebhookUrl(url: string): { valid: boolean, error?: string } {
+  if (!url) {
+    return { valid: false, error: 'URL do webhook não configurada' };
+  }
+  
+  try {
+    const urlObj = new URL(url);
+    
+    if (urlObj.protocol !== 'https:') {
+      return { valid: false, error: 'URL do webhook deve usar HTTPS' };
+    }
+    
+    if (!urlObj.hostname.endsWith('.functions.supabase.co')) {
+      return { valid: false, error: 'URL do webhook deve ser do Supabase Functions' };
+    }
+    
+    // Accept both formats: with and without /functions/v1
+    const validPaths = ['/evolution-webhook', '/functions/v1/evolution-webhook'];
+    const isValidPath = validPaths.some(path => urlObj.pathname.endsWith(path));
+    
+    if (!isValidPath) {
+      return { valid: false, error: 'URL do webhook deve terminar com /evolution-webhook ou /functions/v1/evolution-webhook' };
+    }
+    
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: `URL do webhook inválida: ${error.message}` };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Try multiple secret name variants
-    let evolutionApiUrl = (Deno.env.get('EVOLUTION_API_URL') || Deno.env.get('EVOLUTION_URL'))?.replace(/\/+$/, '');
-    const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY') || Deno.env.get('EVOLUTION_APIKEY');
-    const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.functions.supabase.co/functions/v1/evolution-webhook';
-    const webhookSecret = Deno.env.get('EVO_DEFAULT_WEBHOOK_SECRET') || Deno.env.get('EVOLUTION_VERIFY_TOKEN') || 'default-secret';
+    // Generate correlation ID for request tracking
+    const correlationId = crypto.randomUUID();
+    const config = getConfig();
 
     // For operations with instanceToken, we can skip global credentials check
-    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret, orgId } = await req.json();
+    const { action, instanceName, instanceToken, webhookSecret: customWebhookSecret, orgId, number, phoneNumber } = await req.json();
     
     // Try to get token from database if not provided
     let finalToken = instanceToken;
+    let evolutionApiUrl = config.evolutionApiUrl;
+    
     if (!finalToken && action !== 'create') {
       const supabaseClient = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        config.supabaseUrl ?? '',
+        config.supabaseServiceRoleKey ?? ''
       );
 
       const { data: tokenData } = await supabaseClient
@@ -41,17 +110,18 @@ serve(async (req) => {
         if (tokenData.evolution_url) {
           evolutionApiUrl = tokenData.evolution_url;
         }
-        console.log('Token encontrado no banco de dados');
+        console.log('Token encontrado no banco de dados', { correlationId });
       }
     }
     
     // Operations that require instance token
     const tokenOnlyActions = ['get_qr', 'status', 'disconnect', 'delete'];
     
-    if (!tokenOnlyActions.includes(action) && (!evolutionApiUrl || !evolutionApiKey)) {
+    if (!tokenOnlyActions.includes(action) && (!evolutionApiUrl || !config.evolutionApiKey)) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Credenciais da Evolution API não configuradas. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY.'
+        error: 'Credenciais da Evolution API não configuradas. Verifique EVOLUTION_API_URL e EVOLUTION_API_KEY.',
+        correlationId
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -62,7 +132,8 @@ serve(async (req) => {
     if (tokenOnlyActions.includes(action) && !finalToken) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Token da instância é obrigatório para esta operação.'
+        error: 'Token da instância é obrigatório para esta operação.',
+        correlationId
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -71,9 +142,9 @@ serve(async (req) => {
 
     // Helper function to try both authentication methods with optional token override
     async function makeAuthenticatedRequest(url: string, options: RequestInit = {}, tokenOverride?: string) {
-      console.log(`Fazendo requisição para: ${url}`);
+      console.log(`Fazendo requisição para: ${url}`, { correlationId });
       
-      const authToken = tokenOverride || finalToken || evolutionApiKey;
+      const authToken = tokenOverride || finalToken || config.evolutionApiKey;
       
       // First try with apikey header
       let response = await fetch(url, {
@@ -87,7 +158,7 @@ serve(async (req) => {
 
       // If unauthorized, try with Bearer token
       if (response.status === 401 || response.status === 403) {
-        console.log('Primeira tentativa falhou, tentando com Bearer token...');
+        console.log('Primeira tentativa falhou, tentando com Bearer token...', { correlationId });
         response = await fetch(url, {
           ...options,
           headers: {
@@ -99,12 +170,21 @@ serve(async (req) => {
       }
 
       const responseText = await response.text();
-      console.log(`Resposta da API (${response.status}):`, responseText);
+      console.log(`Resposta da API (${response.status}):`, { 
+        correlationId, 
+        status: response.status, 
+        response: responseText.substring(0, 200) 
+      });
       
       return { response, responseText };
     }
 
-    console.log('Evolution instance action:', { action, instanceName, hasInstanceToken: !!instanceToken });
+    console.log('Evolution instance action:', { 
+      correlationId,
+      action, 
+      instanceName, 
+      hasInstanceToken: !!instanceToken 
+    });
 
     switch (action) {
       case 'create':
@@ -113,12 +193,37 @@ serve(async (req) => {
           return new Response(JSON.stringify({
             success: false,
             error: 'Token da instância é obrigatório para criar uma nova conexão.',
-            statusCode: 400
+            statusCode: 400,
+            correlationId
           }), {
             status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+
+        // Validate webhook URL
+        const webhookValidation = validateWebhookUrl(config.supabaseFunctionsWebhook || '');
+        if (!webhookValidation.valid) {
+          console.error('Webhook validation failed:', { 
+            correlationId, 
+            error: webhookValidation.error 
+          });
+          return new Response(JSON.stringify({
+            success: false,
+            error: webhookValidation.error,
+            statusCode: 400,
+            correlationId
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const webhookUrl = config.supabaseFunctionsWebhook;
+
+        // Normalize phone number if provided
+        const providedNumber = number || phoneNumber;
+        const normalizedNumber = normalizePhoneNumber(providedNumber);
 
         // Criar instância usando o token da instância
         const createResult = await makeAuthenticatedRequest(`${evolutionApiUrl}/instance/create`, {
@@ -127,34 +232,15 @@ serve(async (req) => {
             instanceName: instanceName,
             token: finalToken,
             qrcode: true,
-            number: '',
+            ...(normalizedNumber && { number: normalizedNumber }),
+            integration: Deno.env.get('EVOLUTION_INTEGRATION') || 'WHATSAPP-BAILEYS',
             business: {
               description: 'WhatsApp Business',
             },
-            webhook: webhookUrl,
-            webhook_by_events: false,
-            webhook_base64: false,
+            
             events: [
-              'APPLICATION_STARTUP',
-              'QRCODE_UPDATED',
               'MESSAGES_UPSERT',
-              'MESSAGES_UPDATE',
-              'MESSAGES_DELETE',
-              'SEND_MESSAGE',
-              'CONTACTS_SET',
-              'CONTACTS_UPSERT',
-              'CONTACTS_UPDATE',
-              'PRESENCE_UPDATE',
-              'CHATS_SET',
-              'CHATS_UPSERT',
-              'CHATS_UPDATE',
-              'CHATS_DELETE',
-              'GROUPS_UPSERT',
-              'GROUP_UPDATE',
-              'GROUP_PARTICIPANTS_UPDATE',
-              'CONNECTION_UPDATE',
-              'CALL',
-              'NEW_JWT_TOKEN'
+              'QRCODE_UPDATED'
             ]
           }),
         }, finalToken);
@@ -173,7 +259,8 @@ serve(async (req) => {
             error: `Erro ao criar instância (${createResult.response.status}): ${errorMessage}`,
             response: createData,
             statusCode: createResult.response.status,
-            evolutionResponse: createResult.responseText
+            evolutionResponse: createResult.responseText,
+            correlationId
           }), {
             status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -184,26 +271,31 @@ serve(async (req) => {
         try {
           await makeAuthenticatedRequest(`${evolutionApiUrl}/webhook/set/${instanceName}`, {
             method: 'POST',
-            body: JSON.stringify({
-              url: webhookUrl,
-              webhook_by_events: false,
-              webhook_base64: false,
-              events: [
-                'APPLICATION_STARTUP',
-                'QRCODE_UPDATED',
-                'MESSAGES_UPSERT',
-                'MESSAGES_UPDATE',
-                'CONNECTION_UPDATE'
-              ]
+              body: JSON.stringify({
+                url: webhookUrl,
+                webhook_by_events: true,
+                webhook_base64: false,
+                ...(config.evolutionWebhookSecret && {
+                  headers: {
+                    authorization: `Bearer ${config.evolutionWebhookSecret}`
+                  }
+                }),
+            events: [
+              'MESSAGES_UPSERT',
+              'QRCODE_UPDATED'
+            ]
             }),
           }, finalToken);
         } catch (webhookError) {
-          console.warn('Erro ao configurar webhook:', webhookError);
+          console.warn('Erro ao configurar webhook:', { correlationId, error: webhookError.message });
         }
 
         return new Response(JSON.stringify({
           success: true,
-          data: createData
+          data: createData,
+          number: normalizedNumber || createData?.instance?.number,
+          numero: normalizedNumber || createData?.instance?.number,
+          correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -227,7 +319,8 @@ serve(async (req) => {
             error: `Erro ao obter QR Code (${qrResult.response.status}): ${errorMessage}`,
             response: qrData,
             statusCode: qrResult.response.status,
-            evolutionResponse: qrResult.responseText
+            evolutionResponse: qrResult.responseText,
+            correlationId
           }), {
             status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -237,7 +330,8 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           qrcode: qrData.base64 || qrData.qrcode,
-          data: qrData
+          data: qrData,
+          correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -261,7 +355,8 @@ serve(async (req) => {
             error: `Erro ao verificar status (${statusResult.response.status}): ${errorMessage}`,
             response: statusData,
             statusCode: statusResult.response.status,
-            evolutionResponse: statusResult.responseText
+            evolutionResponse: statusResult.responseText,
+            correlationId
           }), {
             status: 200, // Return 200 so frontend can handle the error properly
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -277,24 +372,40 @@ serve(async (req) => {
           dbStatus = 'connecting';
         }
 
-        // Update database with current status
+        // Update database with current status using org_id + instance filters
         const supabaseClient = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+          config.supabaseUrl ?? '',
+          config.supabaseServiceRoleKey ?? ''
         );
 
-        await supabaseClient
+        console.log(`🔄 Atualizando status do canal:`, { 
+          correlationId,
+          orgId: orgId || '00000000-0000-0000-0000-000000000000', 
+          instance: instanceName, 
+          status: dbStatus 
+        });
+
+        const { data: updateResult, error: updateError } = await supabaseClient
           .from('channels')
           .update({
             status: dbStatus,
             last_state_at: new Date().toISOString()
           })
-          .eq('instance', instanceName);
+          .eq('org_id', orgId || '00000000-0000-0000-0000-000000000000')
+          .eq('instance', instanceName)
+          .select();
+
+        if (updateError) {
+          console.error('❌ Erro ao atualizar status do canal:', { correlationId, error: updateError });
+        } else {
+          console.log(`✅ Status do canal atualizado:`, { correlationId, result: updateResult });
+        }
 
         return new Response(JSON.stringify({
           success: true,
           status: statusState,
-          data: statusData
+          data: statusData,
+          correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -314,7 +425,8 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: disconnectResult.response.ok,
           data: disconnectData,
-          statusCode: disconnectResult.response.status
+          statusCode: disconnectResult.response.status,
+          correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -334,7 +446,8 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: deleteResult.response.ok,
           data: deleteData,
-          statusCode: deleteResult.response.status
+          statusCode: deleteResult.response.status,
+          correlationId
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -342,7 +455,8 @@ serve(async (req) => {
       default:
         return new Response(JSON.stringify({
           success: false,
-          error: 'Ação não reconhecida'
+          error: 'Ação não reconhecida',
+          correlationId
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -350,11 +464,13 @@ serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('Erro na função evolution-instance-actions:', error);
+    const correlationId = crypto.randomUUID();
+    console.error('Erro na função evolution-instance-actions:', { correlationId, error: error.message });
     
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error.message,
+      correlationId
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -633,7 +633,7 @@ export function DSVoice() {
                 className={cn(
                   "w-full transition-all duration-200",
                   isCollapsed ? "justify-center px-0" : "justify-start text-left",
-                  activeCategory === category.id && "bg-yellow-500 hover:bg-yellow-600 text-black"
+                  activeCategory === category.id && "bg-primary hover:bg-primary/90 text-primary-foreground"
                 )}
                 onClick={() => setActiveCategory(category.id)}
                 title={isCollapsed ? category.label : undefined}
@@ -657,11 +657,11 @@ export function DSVoice() {
                 placeholder="Buscar item"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
               />
             </div>
-            <Button 
-              className="ml-4 bg-yellow-500 hover:bg-yellow-600 text-black"
+            <Button
+              className="ml-4 bg-primary hover:bg-primary/90 text-primary-foreground"
               onClick={handleNewItem}
             >
               Novo Item
@@ -977,7 +977,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveItem}
                 >
                   Salvar
@@ -1069,7 +1069,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveAudio}
                 >
                   Salvar
@@ -1161,7 +1161,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveMidia}
                 >
                   Salvar
@@ -1240,7 +1240,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveDocumento}
                 >
                   Salvar
@@ -1371,7 +1371,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveGatilho}
                 >
                   Salvar
@@ -1476,7 +1476,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveFunil}
                 >
                   Salvar
@@ -1561,7 +1561,7 @@ export function DSVoice() {
                     {selectedStepType === "mensagem" && messages.map(message => (
                       <SelectItem key={message.id} value={message.title}>{message.title}</SelectItem>
                     ))}
-                    {!selectedStepType && <SelectItem value="" disabled>Selecione um tipo primeiro</SelectItem>}
+                    {!selectedStepType && <SelectItem value="no-type" disabled>Selecione um tipo primeiro</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -1602,7 +1602,7 @@ export function DSVoice() {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleSaveStep}
                 >
                   Adicionar
@@ -1623,7 +1623,7 @@ export function DSVoice() {
             <div className="space-y-6">
               <div className="text-center">
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black w-full"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground w-full"
                   onClick={handleExportBackup}
                 >
                   Exportar Backup
@@ -1653,7 +1653,7 @@ export function DSVoice() {
                 />
 
                 <Button 
-                  className="bg-yellow-500 hover:bg-yellow-600 text-black w-full"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground w-full"
                   onClick={handleImportBackup}
                   disabled={!backupFile}
                 >

@@ -372,7 +372,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
                   size="sm" 
                   className={cn(
                     "bg-warning text-black hover:bg-warning/90 font-medium",
-                    isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500"
+                    "bg-primary text-primary-foreground hover:bg-primary/90"
                   )}
                   onClick={() => setShowFilterModal(true)}
                 >
@@ -410,10 +410,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
                 )} />
                 <Input 
                   placeholder="Buscar" 
-                  className={cn(
-                    "pl-10 h-10 border-gray-300 bg-transparent",
-                    isDarkMode ? "border-gray-600 text-white placeholder:text-gray-400" : ""
-                  )}
+                  className="pl-10 h-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
                 />
               </div>
               
@@ -442,7 +439,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
               size="sm" 
               className={cn(
                 "bg-warning text-black hover:bg-warning/90 font-medium ml-4 flex-shrink-0",
-                isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500"
+                "bg-primary text-primary-foreground hover:bg-primary/90"
               )}
               onClick={() => setShowAddColumnModal(true)}
             >

@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ProfileImageDebug } from "@/components/debug/ProfileImageDebug";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,7 @@ import { useTags } from "@/hooks/useTags";
 import { format } from "date-fns";
 import { DeletarTicketModal } from "@/components/modals/DeletarTicketModal";
 import { useToast } from "@/components/ui/use-toast";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface Contact {
   id: string;
@@ -28,6 +30,7 @@ interface Contact {
 }
 
 export function CRMContatos() {
+  const { selectedWorkspace } = useWorkspace();
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("");
@@ -40,38 +43,39 @@ export function CRMContatos() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(false);
+  const [showDebugModal, setShowDebugModal] = useState(false);
+  const [debugContact, setDebugContact] = useState<Contact | null>(null);
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
   
   const { tags } = useTags();
   const { toast } = useToast();
 
-  // Fetch contacts from conversations
+  // Fetch contacts directly from contacts table
   const fetchContacts = async () => {
     try {
       setIsLoading(true);
       
-      // First, get distinct contact_ids from conversations
-      const { data: conversationContacts, error: conversationsError } = await supabase
-        .from('conversations')
-        .select('contact_id')
-        .order('created_at', { ascending: false });
-
-      if (conversationsError) throw conversationsError;
-
-      const uniqueContactIds = [...new Set(conversationContacts?.map(c => c.contact_id) || [])];
-
-      if (uniqueContactIds.length === 0) {
+      if (!selectedWorkspace) {
+        console.warn('No workspace selected in CRM Contatos');
         setContacts([]);
         return;
       }
 
-      // Get contact details
+      // Get all contacts from the workspace
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('*')
-        .in('id', uniqueContactIds);
+        .eq('workspace_id', selectedWorkspace.workspace_id)
+        .order('created_at', { ascending: false });
 
       if (contactsError) throw contactsError;
+
+      if (!contactsData || contactsData.length === 0) {
+        setContacts([]);
+        return;
+      }
+
+      const contactIds = contactsData.map(c => c.id);
 
       // Get contact tags
       const { data: contactTagsData, error: tagsError } = await supabase
@@ -84,7 +88,7 @@ export function CRMContatos() {
             color
           )
         `)
-        .in('contact_id', uniqueContactIds);
+        .in('contact_id', contactIds);
 
       if (tagsError) throw tagsError;
 
@@ -119,47 +123,62 @@ export function CRMContatos() {
 
   useEffect(() => {
     fetchContacts();
-  }, []);
+  }, [selectedWorkspace]);
 
-  // Real-time subscription for new conversations
+  // Real-time subscription for contacts changes
   useEffect(() => {
+    if (!selectedWorkspace) return;
+
     const channel = supabase
-      .channel('conversations-contacts')
+      .channel('contacts-changes')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'conversations'
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
         },
         async (payload) => {
-          // When a new conversation is created, check if the contact is already in our list
-          const newContactId = payload.new.contact_id;
-          const existingContact = contacts.find(c => c.id === newContactId);
-          
-          if (!existingContact) {
-            // Fetch the new contact and add it to the list
-            const { data: newContactData, error } = await supabase
-              .from('contacts')
-              .select('*')
-              .eq('id', newContactId)
-              .single();
+          const newContactData = payload.new;
+          const newContact: Contact = {
+            id: newContactData.id,
+            name: newContactData.name,
+            phone: newContactData.phone || '',
+            email: newContactData.email || '',
+            createdAt: format(new Date(newContactData.created_at), 'dd/MM/yyyy HH:mm:ss'),
+            tags: [],
+            profile_image_url: newContactData.profile_image_url,
+            extra_info: newContactData.extra_info as Record<string, any> || {}
+          };
 
-            if (!error && newContactData) {
-              const newContact: Contact = {
-                id: newContactData.id,
-                name: newContactData.name,
-                phone: newContactData.phone || '',
-                email: newContactData.email || '',
-                createdAt: format(new Date(newContactData.created_at), 'dd/MM/yyyy HH:mm:ss'),
-                tags: [],
-                profile_image_url: newContactData.profile_image_url,
-                extra_info: newContactData.extra_info as Record<string, any> || {}
-              };
-
-              setContacts(prev => [newContact, ...prev]);
-            }
-          }
+          setContacts(prev => [newContact, ...prev]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        () => {
+          // Refetch all contacts when any contact is updated
+          fetchContacts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'contacts',
+          filter: `workspace_id=eq.${selectedWorkspace.workspace_id}`
+        },
+        (payload) => {
+          const deletedId = payload.old.id;
+          setContacts(prev => prev.filter(c => c.id !== deletedId));
         }
       )
       .subscribe();
@@ -167,7 +186,7 @@ export function CRMContatos() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [contacts]);
+  }, [selectedWorkspace]);
 
   // Filter contacts based on search and tag filter
   const filteredContacts = contacts.filter(contact => {
@@ -362,7 +381,8 @@ export function CRMContatos() {
             name: editingContact.name.trim(),
             phone: editingContact.phone.trim() || null,
             email: editingContact.email.trim() || null,
-            extra_info: extraInfo
+            extra_info: extraInfo,
+            workspace_id: selectedWorkspace!.workspace_id
           })
           .select()
           .single();
@@ -466,7 +486,7 @@ export function CRMContatos() {
               placeholder="Pesquisar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 text-xs h-8"
+              className="pl-8 text-xs h-8 bg-transparent"
             />
           </div>
           
@@ -507,13 +527,13 @@ export function CRMContatos() {
           
           <Button 
             size="sm" 
-            className="bg-yellow-500 hover:bg-yellow-600 text-black whitespace-nowrap text-xs h-8 px-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap text-xs h-8 px-2"
             onClick={handleAddContact}
           >
             Adicionar
           </Button>
           
-          <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-black whitespace-nowrap text-xs h-8 px-2">
+          <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap text-xs h-8 px-2">
             Importar
           </Button>
           
@@ -640,6 +660,17 @@ export function CRMContatos() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDebugContact(contact);
+                        setShowDebugModal(true);
+                      }}
+                      title="Debug imagem de perfil"
+                    >
+                      🐛
+                    </Button>
                   </div>
                 </TableCell>
                 <TableCell className="text-center">
@@ -673,12 +704,12 @@ export function CRMContatos() {
           
           <div className="space-y-4">
             <div>
-              <Label htmlFor="name" className="text-yellow-600">Nome</Label>
+              <Label htmlFor="name" className="text-primary">Nome</Label>
               <Input
                 id="name"
                 value={editingContact?.name || ""}
                 onChange={(e) => setEditingContact(prev => prev ? {...prev, name: e.target.value} : null)}
-                className="border-yellow-400"
+                className="border-primary focus-visible:ring-primary"
               />
             </div>
             
@@ -740,7 +771,7 @@ export function CRMContatos() {
                   variant="ghost"
                   size="sm"
                   onClick={addCustomField}
-                  className="text-yellow-600 hover:text-yellow-700"
+                  className="text-primary hover:text-primary/80"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Adicionar Informação
@@ -762,7 +793,7 @@ export function CRMContatos() {
             </Button>
             <Button 
               onClick={handleSaveContact}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
               disabled={isSaving || !editingContact?.name?.trim()}
             >
               {isSaving ? "Salvando..." : "Salvar"}
@@ -789,6 +820,24 @@ export function CRMContatos() {
         onClose={() => setIsBulkDeleteOpen(false)}
         onConfirm={handleBulkDelete}
       />
+
+      {/* Debug Profile Image Modal */}
+      {showDebugModal && debugContact && selectedWorkspace && (
+        <Dialog open={showDebugModal} onOpenChange={setShowDebugModal}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Debug - Imagem de Perfil</DialogTitle>
+            </DialogHeader>
+            <ProfileImageDebug
+              contactId={debugContact.id}
+              contactName={debugContact.name}
+              contactPhone={debugContact.phone || ''}
+              workspaceId={selectedWorkspace.workspace_id}
+              currentImageUrl={debugContact.profile_image_url || undefined}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

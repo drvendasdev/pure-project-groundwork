@@ -175,7 +175,7 @@ export function PeriodFilterModal({ open, onOpenChange, onPeriodSelect, isDarkMo
                 className={cn(
                   "w-full justify-start text-sm",
                   selectedPeriod === option.value 
-                    ? "bg-yellow-500 text-black hover:bg-yellow-600" 
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                     : isDarkMode 
                       ? "text-gray-300 hover:bg-gray-700" 
                       : "text-gray-700 hover:bg-gray-100"
@@ -267,7 +267,7 @@ export function PeriodFilterModal({ open, onOpenChange, onPeriodSelect, isDarkMo
                 day_range_start: "day-range-start",
                 day_range_end: "day-range-end",
                 day_selected: cn(
-                  "bg-yellow-500 text-black hover:bg-yellow-500 hover:text-black focus:bg-yellow-500 focus:text-black"
+                  "bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90 focus:text-primary-foreground"
                 ),
                 day_today: cn(
                   "bg-gray-100 text-gray-900",
@@ -279,7 +279,7 @@ export function PeriodFilterModal({ open, onOpenChange, onPeriodSelect, isDarkMo
                 ),
                 day_disabled: "text-gray-500 opacity-50",
                 day_range_middle: cn(
-                  "aria-selected:bg-yellow-100 aria-selected:text-black",
+                  "aria-selected:bg-primary/10 aria-selected:text-primary-foreground",
                   isDarkMode ? "aria-selected:bg-yellow-900/20 aria-selected:text-white" : ""
                 ),
                 day_hidden: "invisible",
@@ -290,7 +290,7 @@ export function PeriodFilterModal({ open, onOpenChange, onPeriodSelect, isDarkMo
               <div className="mt-4 pt-4 border-t">
                 <Button
                   onClick={handleApplyCustomDates}
-                  className="w-full bg-yellow-500 text-black hover:bg-yellow-600"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   Aplicar período personalizado
                 </Button>

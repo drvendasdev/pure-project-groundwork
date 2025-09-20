@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { useSessionManager } from "@/hooks/useSessionManager";
+import { useUnifiedTheme } from "@/hooks/useUnifiedTheme";
+import { useGlobalThemeSync } from "@/hooks/useGlobalThemeSync";
+import { useFavicon } from "@/hooks/useFavicon";
 
 import { Dashboard } from "./Dashboard";
 import { Conversas } from "./modules/Conversas";
@@ -24,6 +28,11 @@ import { Conexoes } from "./modules/Conexoes";
 import { AdministracaoUsuarios } from "./modules/AdministracaoUsuarios";
 import { AdministracaoFinanceiro } from "./modules/AdministracaoFinanceiro";
 import { AdministracaoConfiguracoes } from "./modules/AdministracaoConfiguracoes";
+import { AdministracaoDashboard } from "./modules/AdministracaoDashboard";
+import { ParceirosClientes } from "./modules/ParceirosClientes";
+import { WorkspaceEmpresas } from "./modules/WorkspaceEmpresas";
+import { WorkspaceUsersPage } from "./modules/WorkspaceUsersPage";
+import { WorkspaceRelatorios } from "./modules/WorkspaceRelatorios";
 
 export type ModuleType = 
   | "dashboard"
@@ -45,12 +54,27 @@ export type ModuleType =
   | "automacoes-api"
   | "automacoes-webhooks"
   | "conexoes"
+  | "workspace-empresas"
+  | "workspace-usuarios"
+  | "workspace-relatorios"
+  | "parceiros-clientes"
   | "administracao-usuarios"
   | "administracao-financeiro"
   | "administracao-configuracoes"
+  | "administracao-dashboard"
   | "editar-agente";
 
 export function TezeusCRM() {
+  // Monitor de sessão global
+  useSessionManager();
+  
+  // Update favicon and apply unified theme colors
+  useFavicon();
+  const { backgroundSolidEnabled, backgroundSolidColor } = useUnifiedTheme();
+  
+  // Enable global theme synchronization across all tabs/devices
+  useGlobalThemeSync();
+  
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -83,6 +107,7 @@ export function TezeusCRM() {
     const path = pathname.substring(1); // Remove leading slash
     if (!path || path === "dashboard") return "dashboard";
     if (path.startsWith("editar-agente/")) return "editar-agente";
+    if (path.includes("/usuarios")) return "workspace-usuarios";
     return path as ModuleType;
   };
 
@@ -138,12 +163,22 @@ export function TezeusCRM() {
         return <AutomacoesAPI />;
       case "conexoes":
         return <Conexoes />;
+      case "workspace-empresas":
+        return <WorkspaceEmpresas />;
+      case "workspace-usuarios":
+        return <WorkspaceUsersPage />;
+      case "workspace-relatorios":
+        return <WorkspaceRelatorios />;
+      case "parceiros-clientes":
+        return <ParceirosClientes />;
       case "administracao-usuarios":
         return <AdministracaoUsuarios />;
       case "administracao-financeiro":
         return <AdministracaoFinanceiro />;
       case "administracao-configuracoes":
         return <AdministracaoConfiguracoes />;
+      case "administracao-dashboard":
+        return <AdministracaoDashboard />;
       case "editar-agente":
         return editingAgentId ? <EditarAgente agentId={editingAgentId} /> : <Dashboard {...moduleProps} />;
       default:
@@ -152,7 +187,16 @@ export function TezeusCRM() {
   };
 
   return (
-    <div className="min-h-screen flex w-full gap-2 bg-gradient-to-br from-background via-background to-muted">
+    <div 
+      className={`min-h-screen flex w-full gap-2 ${
+        backgroundSolidEnabled && backgroundSolidColor 
+          ? '' 
+          : 'bg-gradient-to-br from-background via-background to-muted'
+      }`}
+      style={backgroundSolidEnabled && backgroundSolidColor ? { 
+        backgroundColor: backgroundSolidColor 
+      } : undefined}
+    >
       <Sidebar 
         activeModule={activeModule}
         onModuleChange={(module) => {

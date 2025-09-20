@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface SystemUser {
+export interface SystemUser {
   id: string;
   name: string;
   email: string;
@@ -10,8 +10,12 @@ interface SystemUser {
   status: string;
   avatar?: string;
   cargo_id?: string;
+  cargo_ids?: string[];
+  default_channel?: string;
   created_at: string;
   updated_at: string;
+  workspaces?: { id: string; name: string; role: string }[];
+  empresa?: string;
 }
 
 interface CreateUserData {
@@ -21,6 +25,8 @@ interface CreateUserData {
   status?: string;
   senha: string;
   cargo_id?: string;
+  cargo_ids?: string[];
+  default_channel?: string;
 }
 
 interface UpdateUserData {
@@ -31,6 +37,8 @@ interface UpdateUserData {
   status?: string;
   senha?: string;
   cargo_id?: string;
+  cargo_ids?: string[];
+  default_channel?: string;
 }
 
 export const useSystemUsers = () => {
@@ -40,47 +48,66 @@ export const useSystemUsers = () => {
   const createUser = async (userData: CreateUserData) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('manage-system-user', {
+      const response = await supabase.functions.invoke('manage-system-user', {
         body: {
           action: 'create',
-          userData: userData
+          userData
         }
       });
 
-      if (error) {
-        console.error('Error creating user:', error);
+      // Check if the edge function returned success
+      if (response.data?.success) {
+        // Refresh the user list immediately to show the new user
+        await listUsers();
+        
         toast({
-          title: "Erro ao criar usuário",
-          description: error.message || "Erro interno do servidor",
-          variant: "destructive"
+          title: "Usuário criado",
+          description: "Usuário criado com sucesso",
+          variant: "default"
         });
-        return { error: error.message };
+        return { data: response.data.data };
       }
 
-      if (data.error) {
-        toast({
-          title: "Erro ao criar usuário",
-          description: data.error,
-          variant: "destructive"
-        });
-        return { error: data.error };
+      // Handle errors from the edge function (including 500 errors)
+      let errorMessage = "Erro desconhecido";
+      
+      if (response.data?.error) {
+        // Error from edge function (like duplicate email)
+        if (response.data.error.includes('duplicate key') && response.data.error.includes('email')) {
+          errorMessage = "Este email já está sendo usado por outro usuário";
+        } else {
+          errorMessage = response.data.error;
+        }
+      } else if (response.error?.message) {
+        // Network or other errors
+        errorMessage = response.error.message;
       }
-
-      toast({
-        title: "Usuário criado",
-        description: "Usuário criado com sucesso",
-        variant: "default"
-      });
-
-      return { data: data.data };
-    } catch (error) {
-      console.error('Error creating user:', error);
+      
+      // Even if there's an error, try to refresh the list in case the user was created
+      // This is because sometimes the user is created but the function returns an error
+      console.log('Attempting to refresh user list after error...');
+      try {
+        await listUsers();
+      } catch (refreshError) {
+        console.error('Failed to refresh user list:', refreshError);
+      }
+      
       toast({
         title: "Erro ao criar usuário",
-        description: "Erro interno do servidor",
+        description: errorMessage,
         variant: "destructive"
       });
-      return { error: 'Erro interno do servidor' };
+      
+      return { error: errorMessage };
+
+    } catch (error) {
+      console.error('Unexpected error creating user:', error);
+      toast({
+        title: "Erro ao criar usuário",
+        description: "Erro inesperado do sistema",
+        variant: "destructive"
+      });
+      return { error: 'Erro inesperado do sistema' };
     } finally {
       setLoading(false);
     }
@@ -92,7 +119,7 @@ export const useSystemUsers = () => {
       const { data, error } = await supabase.functions.invoke('manage-system-user', {
         body: {
           action: 'update',
-          userData: userData
+          userData
         }
       });
 
@@ -106,13 +133,22 @@ export const useSystemUsers = () => {
         return { error: error.message };
       }
 
-      if (data.error) {
+      if (data?.error) {
         toast({
           title: "Erro ao atualizar usuário",
           description: data.error,
           variant: "destructive"
         });
         return { error: data.error };
+      }
+
+      if (!data?.success || !data?.data) {
+        toast({
+          title: "Erro ao atualizar usuário",
+          description: "Resposta inválida do servidor",
+          variant: "destructive"
+        });
+        return { error: 'Resposta inválida do servidor' };
       }
 
       toast({
@@ -155,13 +191,22 @@ export const useSystemUsers = () => {
         return { error: error.message };
       }
 
-      if (data.error) {
+      if (data?.error) {
         toast({
           title: "Erro ao deletar usuário",
           description: data.error,
           variant: "destructive"
         });
         return { error: data.error };
+      }
+
+      if (!data?.success) {
+        toast({
+          title: "Erro ao deletar usuário",
+          description: "Resposta inválida do servidor",
+          variant: "destructive"
+        });
+        return { error: 'Resposta inválida do servidor' };
       }
 
       toast({
@@ -199,11 +244,18 @@ export const useSystemUsers = () => {
         return { error: error.message || "Erro interno do servidor" };
       }
 
-      if (data.error) {
+      if (data?.error) {
         return { error: data.error };
       }
 
-      return { data: data.data };
+      if (!data?.success) {
+        return { error: 'Resposta inválida do servidor' };
+      }
+
+      const users = data?.data || [];
+      
+      // A view já deve conter cargo_ids, não precisamos buscar separadamente
+      return { data: users };
     } catch (error) {
       console.error('Error listing users:', error);
       return { error: 'Erro interno do servidor' };
