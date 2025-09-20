@@ -253,28 +253,29 @@ serve(async (req) => {
     
     let n8nPayload: any;
 
-    // Se for imagem com file_url, enviar no formato base64 para N8N
+    // Se for mensagem de mídia com file_url, enviar no formato base64 para N8N
     if (message_type !== 'text' && file_url) {
-      console.log(`🖼️ [${requestId}] Processing image for base64 conversion: ${file_url}`);
+      console.log(`📁 [${requestId}] Processing media for base64 conversion: ${file_url} (type: ${message_type})`);
       
       try {
-        // Baixar a imagem da URL
-        console.log(`📥 [${requestId}] Downloading image from: ${file_url}`);
-        const imageResponse = await fetch(file_url);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`);
+        // Baixar o arquivo da URL
+        console.log(`📥 [${requestId}] Downloading media from: ${file_url}`);
+        const mediaResponse = await fetch(file_url);
+        if (!mediaResponse.ok) {
+          throw new Error(`Failed to download media: ${mediaResponse.status} ${mediaResponse.statusText}`);
         }
         
-        const imageArrayBuffer = await imageResponse.arrayBuffer();
-        console.log(`📊 [${requestId}] Downloaded ${imageArrayBuffer.byteLength} bytes`);
+        const mediaArrayBuffer = await mediaResponse.arrayBuffer();
+        console.log(`📊 [${requestId}] Downloaded ${mediaArrayBuffer.byteLength} bytes`);
         
-        // Detectar mimeType da resposta ou usar padrão
-        let mimeType = imageResponse.headers.get('content-type');
+        // Detectar mimeType da resposta ou usar padrão baseado no tipo da mensagem
+        let mimeType = mediaResponse.headers.get('content-type');
         if (!mimeType) {
           // Tentar detectar pelo nome do arquivo
           if (file_name) {
             const ext = file_name.split('.').pop()?.toLowerCase();
             switch (ext) {
+              // Images
               case 'jpg':
               case 'jpeg':
                 mimeType = 'image/jpeg';
@@ -288,21 +289,62 @@ serve(async (req) => {
               case 'webp':
                 mimeType = 'image/webp';
                 break;
+              // Audio
+              case 'mp3':
+                mimeType = 'audio/mpeg';
+                break;
+              case 'wav':
+                mimeType = 'audio/wav';
+                break;
+              case 'ogg':
+                mimeType = 'audio/ogg';
+                break;
+              case 'm4a':
+                mimeType = 'audio/mp4';
+                break;
+              // Video
+              case 'mp4':
+                mimeType = 'video/mp4';
+                break;
+              case 'mov':
+                mimeType = 'video/quicktime';
+                break;
+              case 'webm':
+                mimeType = 'video/webm';
+                break;
+              // Documents
+              case 'pdf':
+                mimeType = 'application/pdf';
+                break;
+              case 'doc':
+                mimeType = 'application/msword';
+                break;
+              case 'docx':
+                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                break;
               default:
-                mimeType = 'image/jpeg';
+                // Fallback baseado no message_type
+                if (message_type === 'image') mimeType = 'image/jpeg';
+                else if (message_type === 'audio') mimeType = 'audio/mpeg';
+                else if (message_type === 'video') mimeType = 'video/mp4';
+                else mimeType = 'application/octet-stream';
             }
           } else {
-            mimeType = 'image/jpeg'; // fallback
+            // Fallback baseado no message_type
+            if (message_type === 'image') mimeType = 'image/jpeg';
+            else if (message_type === 'audio') mimeType = 'audio/mpeg';
+            else if (message_type === 'video') mimeType = 'video/mp4';
+            else mimeType = 'application/octet-stream';
           }
         }
         
         console.log(`🎯 [${requestId}] Detected MIME type: ${mimeType}`);
         
-        // Converter para base64 usando método seguro para imagens grandes
-        const uint8Array = new Uint8Array(imageArrayBuffer);
+        // Converter para base64 usando método seguro para arquivos grandes
+        const uint8Array = new Uint8Array(mediaArrayBuffer);
         
         // Converter para base64 usando método chunk-based para evitar stack overflow
-        let imageBase64;
+        let mediaBase64;
         try {
           let binaryString = '';
           const chunkSize = 8192; // Processar em chunks para evitar stack overflow
@@ -312,8 +354,8 @@ serve(async (req) => {
             binaryString += String.fromCharCode.apply(null, Array.from(chunk));
           }
           
-          imageBase64 = btoa(binaryString);
-          console.log(`✅ [${requestId}] Image converted to base64 successfully (${imageBase64.length} chars, original: ${uint8Array.length} bytes)`);
+          mediaBase64 = btoa(binaryString);
+          console.log(`✅ [${requestId}] Media converted to base64 successfully (${mediaBase64.length} chars, original: ${uint8Array.length} bytes)`);
         } catch (conversionError) {
           console.error(`❌ [${requestId}] Base64 conversion failed:`, conversionError);
           throw new Error(`Base64 conversion failed: ${conversionError.message}`);
@@ -330,7 +372,7 @@ serve(async (req) => {
         n8nPayload = {
           messageId: external_id,
           external_id: external_id, // Incluir external_id explicitamente
-          base64: imageBase64,
+          base64: mediaBase64,
           fileName: fileName,
           mimeType: mimeType,
           direction: 'outbound',
@@ -344,8 +386,8 @@ serve(async (req) => {
         
         
         
-      } catch (imageError) {
-        console.error(`❌ [${requestId}] Error processing image:`, imageError);
+      } catch (mediaError) {
+        console.error(`❌ [${requestId}] Error processing media:`, mediaError);
         // Fallback para formato normal se conversão falhar
         n8nPayload = {
           direction: 'outbound',
@@ -357,6 +399,7 @@ serve(async (req) => {
           sender_id: sender_id,
           file_url: file_url,
           file_name: file_name,
+          mime_type: mimeType || 'application/octet-stream',
           workspace_id: conversation.workspace_id,
           conversation_id: conversation_id,
           connection_id: actualConnectionId,
