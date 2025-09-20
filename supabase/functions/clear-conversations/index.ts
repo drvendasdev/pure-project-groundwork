@@ -1,8 +1,8 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-workspace-id',
 }
 
 Deno.serve(async (req) => {
@@ -17,17 +17,52 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    console.log('Iniciando limpeza de todas as conversas...')
+    // Get workspace ID from headers
+    const workspaceId = req.headers.get('x-workspace-id')
+    console.log('🧹 Iniciando limpeza de conversas...', { workspaceId })
 
-    // Executar a função SQL para limpar todas as conversas
-    const { error } = await supabaseClient.rpc('clear_all_conversations')
-
-    if (error) {
-      console.error('Erro ao limpar conversas:', error)
-      throw error
+    if (!workspaceId) {
+      console.log('⚠️ Nenhum workspace específico fornecido, limpando todas as conversas')
     }
 
-    console.log('Todas as conversas foram limpas com sucesso')
+    // Try using the SQL function first
+    try {
+      const { error: rpcError } = await supabaseClient.rpc('clear_all_conversations')
+      
+      if (rpcError) {
+        console.error('❌ Erro na função SQL, tentando método alternativo:', rpcError)
+        throw rpcError
+      }
+      
+      console.log('✅ Limpeza realizada via função SQL')
+    } catch (sqlError) {
+      console.log('🔄 Tentando limpeza direta via client...')
+      
+      // Fallback: direct cleanup using Supabase client
+      const { error: deleteMessagesError } = await supabaseClient
+        .from('messages')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all
+
+      if (deleteMessagesError) {
+        console.error('❌ Erro ao deletar mensagens:', deleteMessagesError)
+        throw deleteMessagesError
+      }
+
+      const { error: deleteConversationsError } = await supabaseClient
+        .from('conversations')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all
+
+      if (deleteConversationsError) {
+        console.error('❌ Erro ao deletar conversas:', deleteConversationsError)
+        throw deleteConversationsError
+      }
+      
+      console.log('✅ Limpeza realizada via client direto')
+    }
+
+    console.log('🎉 Todas as conversas foram limpas com sucesso')
 
     return new Response(
       JSON.stringify({ 
