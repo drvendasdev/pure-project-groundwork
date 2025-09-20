@@ -174,17 +174,41 @@ serve(async (req) => {
     }
 
     // Get N8N webhook URL from workspace configuration
-    const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${conversation.workspace_id}`;
+    // Try workspace_webhook_settings first (new table)
+    console.log(`🔍 [${requestId}] Looking for webhook URL in workspace_webhook_settings`);
     
-    const { data: webhookData, error: webhookError } = await supabase
-      .from('workspace_webhook_secrets')
+    const { data: webhookSettings, error: settingsError } = await supabase
+      .from('workspace_webhook_settings')
       .select('webhook_url')
       .eq('workspace_id', conversation.workspace_id)
-      .eq('secret_name', workspaceWebhookSecretName)
       .maybeSingle();
 
-    if (webhookError || !webhookData?.webhook_url) {
-      console.error(`❌ [${requestId}] N8N webhook not configured for workspace ${conversation.workspace_id}`);
+    let n8nWebhookUrl = null;
+
+    if (!settingsError && webhookSettings?.webhook_url) {
+      n8nWebhookUrl = webhookSettings.webhook_url;
+      console.log(`✅ [${requestId}] Found webhook in settings table: ${n8nWebhookUrl.substring(0, 50)}...`);
+    } else {
+      // Fallback to workspace_webhook_secrets (old table)
+      console.log(`🔄 [${requestId}] Webhook not found in settings, trying secrets table (fallback)`);
+      
+      const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${conversation.workspace_id}`;
+      
+      const { data: webhookData, error: webhookError } = await supabase
+        .from('workspace_webhook_secrets')
+        .select('webhook_url')
+        .eq('workspace_id', conversation.workspace_id)
+        .eq('secret_name', workspaceWebhookSecretName)
+        .maybeSingle();
+
+      if (!webhookError && webhookData?.webhook_url) {
+        n8nWebhookUrl = webhookData.webhook_url;
+        console.log(`✅ [${requestId}] Found webhook in secrets table (fallback): ${n8nWebhookUrl.substring(0, 50)}...`);
+      }
+    }
+
+    if (!n8nWebhookUrl) {
+      console.error(`❌ [${requestId}] N8N webhook not configured for workspace ${conversation.workspace_id} in either table`);
       return new Response(JSON.stringify({
         error: 'N8N webhook not configured for this workspace'
       }), {
@@ -192,8 +216,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-
-    const n8nWebhookUrl = webhookData.webhook_url;
 
     // Generate external_id for tracking
     const external_id = crypto.randomUUID();
