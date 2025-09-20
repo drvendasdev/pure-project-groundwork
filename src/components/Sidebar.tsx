@@ -107,7 +107,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
     {
       id: "ds-voice",
       label: "Mensagens Rápidas",
-      icon: <Phone className="w-5 h-5" />
+      icon: <MessageSquare className="w-5 h-5" />
     },
     {
       id: "workspace-empresas",
