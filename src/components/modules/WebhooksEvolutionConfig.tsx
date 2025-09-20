@@ -98,6 +98,17 @@ export function WebhooksEvolutionConfig() {
     await applyToAllInstances();
   };
 
+  // Check if current URL is a test URL
+  const isTestUrl = webhookUrl.includes('/test/');
+  const getProductionUrl = (url: string) => url.replace('/test/', '/webhook/');
+
+  const handleConvertToProduction = () => {
+    if (isTestUrl) {
+      const productionUrl = getProductionUrl(webhookUrl);
+      setWebhookUrl(productionUrl);
+    }
+  };
+
   const handleTestWebhook = async () => {
     await testWebhook();
   };
@@ -193,12 +204,42 @@ export function WebhooksEvolutionConfig() {
                     <strong>Valor em uso:</strong> {webhookConfig.webhook_url}
                   </p>
                 )}
-                <Input
-                  id="webhook-url"
-                  placeholder="https://seu-servidor.com/webhook"
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                />
+                <div className="space-y-2">
+                  <Input
+                    id="webhook-url"
+                    placeholder="https://seu-servidor.com/webhook"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                  />
+                  
+                  {isTestUrl && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-yellow-800 text-sm">URL de Teste Detectada</h4>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            Esta é uma URL de teste do N8N que só funciona durante execução manual. 
+                            Para funcionar em produção com o workflow ativo, use a URL de produção.
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={handleConvertToProduction}
+                              className="text-yellow-800 border-yellow-300 hover:bg-yellow-100"
+                            >
+                              Converter para Produção
+                            </Button>
+                          </div>
+                          <p className="text-xs text-yellow-600 mt-2">
+                            <strong>URL de produção será:</strong> {getProductionUrl(webhookUrl)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">

@@ -92,6 +92,17 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
     }
   };
 
+  // Convert N8N test URL to production URL automatically
+  const convertToProductionUrl = (url: string): string => {
+    // N8N test URLs have "/test/" in the path, production URLs have "/webhook/"
+    if (url.includes('/test/')) {
+      const productionUrl = url.replace('/test/', '/webhook/');
+      console.log(`🔄 Converting N8N test URL to production:`, { original: url, production: productionUrl });
+      return productionUrl;
+    }
+    return url;
+  };
+
   // Save webhook configuration to both tables for consistency
   const saveWebhookConfig = async (url: string, secret: string) => {
     if (!workspaceId) {
@@ -103,6 +114,9 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
       return false;
     }
     
+    // Convert test URL to production URL automatically
+    const productionUrl = convertToProductionUrl(url);
+    
     setIsLoading(true);
     try {
       // Save to workspace_webhook_settings (primary) - always upsert to avoid duplicates
@@ -110,7 +124,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
         .from('workspace_webhook_settings')
         .upsert({
           workspace_id: workspaceId,
-          webhook_url: url,
+          webhook_url: productionUrl, // Use production URL
           webhook_secret: secret,
           updated_at: new Date().toISOString()
         }, {
@@ -142,7 +156,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
           .from('workspace_webhook_secrets')
           .update({
             secret_name: secretName, // Update to new format
-            webhook_url: url,
+            webhook_url: productionUrl, // Use production URL
             updated_at: new Date().toISOString()
           })
           .eq('id', existingSecret.id);
@@ -159,7 +173,7 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
           .insert({
             workspace_id: workspaceId,
             secret_name: secretName,
-            webhook_url: url
+            webhook_url: productionUrl // Use production URL
           });
 
         if (insertError) {
@@ -170,10 +184,20 @@ export const useWorkspaceWebhooks = (workspaceId?: string) => {
       }
       
       setWebhookConfig(data);
-      toast({
-        title: "Sucesso",
-        description: "Configuração do webhook salva com sucesso",
-      });
+      
+      // Show warning if URL was converted from test to production
+      if (url !== productionUrl) {
+        toast({
+          title: "URL Convertida",
+          description: `URL de teste convertida automaticamente para produção. Certifique-se de que o workflow N8N está ATIVO!`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Sucesso",
+          description: "Configuração do webhook salva com sucesso",
+        });
+      }
       return true;
     } catch (error) {
       console.error('Error saving webhook config:', error);
