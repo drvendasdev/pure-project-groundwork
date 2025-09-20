@@ -254,6 +254,8 @@ serve(async (req) => {
     // Call Evolution API with error handling
     let evolutionResponse;
     try {
+      console.log('🔑 Using API key for Evolution request:', evolutionConfig.apiKey ? `${evolutionConfig.apiKey.substring(0, 8)}...` : 'MISSING');
+      
       evolutionResponse = await fetch(`${evolutionConfig.url}/instance/create`, {
         method: 'POST',
         headers: {
