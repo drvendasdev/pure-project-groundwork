@@ -249,6 +249,7 @@ serve(async (req) => {
     console.log('🚀 Calling Evolution API to create instance');
     console.log('📋 Payload:', JSON.stringify(evolutionPayload, null, 2));
     console.log('🔗 URL:', `${evolutionConfig.url}/instance/create`);
+    console.log('🔑 Using apikey authentication (consistent with webhook)');
 
     // Call Evolution API with error handling
     let evolutionResponse;
@@ -257,7 +258,7 @@ serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${evolutionConfig.apiKey}`
+          'apikey': evolutionConfig.apiKey
         },
         body: JSON.stringify(evolutionPayload)
       })
