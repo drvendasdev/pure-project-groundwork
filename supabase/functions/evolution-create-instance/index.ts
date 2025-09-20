@@ -257,7 +257,7 @@ serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': evolutionConfig.apiKey
+          'Authorization': `Bearer ${evolutionConfig.apiKey}`
         },
         body: JSON.stringify(evolutionPayload)
       })
