@@ -37,7 +37,8 @@ import {
   Handshake,
   FileText,
   Building2,
-  BarChart3
+  BarChart3,
+  AudioLines
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
@@ -107,7 +108,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
     {
       id: "ds-voice",
       label: "Mensagens Rápidas",
-      icon: <MessageSquare className="w-5 h-5" />
+      icon: <AudioLines className="w-5 h-5" />
     },
     {
       id: "workspace-empresas",
