@@ -69,6 +69,11 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
 }
 
 serve(async (req) => {
+  console.log('🔥 EVOLUTION CREATE INSTANCE STARTED');
+  console.log('🔥 Method:', req.method);
+  console.log('🔥 URL:', req.url);
+  console.log('🔥 Headers:', Object.fromEntries(req.headers.entries()));
+
   // Handle CORS preflight requests first
   if (req.method === 'OPTIONS') {
     console.log('⚡ CORS preflight request received');
@@ -78,15 +83,35 @@ serve(async (req) => {
     })
   }
 
+  // Test endpoint
+  if (req.url.includes('test')) {
+    console.log('🧪 Test endpoint called');
+    return new Response(
+      JSON.stringify({ success: true, message: 'Function is working', timestamp: new Date().toISOString() }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
   try {
     console.log('🚀 Evolution Create Instance Function Started - Method:', req.method)
-    console.log('🔗 Request headers:', Object.fromEntries(req.headers.entries()))
     
-    const { instanceName, historyRecovery = 'none', workspaceId } = await req.json()
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      console.error('❌ Failed to parse request body:', parseError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid JSON in request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
+    console.log('📋 Parsed request body:', requestBody);
+    const { instanceName, historyRecovery = 'none', workspaceId } = requestBody;
     console.log('📋 Request params:', { instanceName, historyRecovery, workspaceId })
 
     if (!instanceName || !workspaceId) {
-      console.error('Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
+      console.error('❌ Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
       return new Response(
         JSON.stringify({ success: false, error: 'Missing required fields: instanceName and workspaceId are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -94,9 +119,20 @@ serve(async (req) => {
     }
 
     // Initialize Supabase client
+    console.log('🔧 Initializing Supabase client...');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('❌ Missing Supabase environment variables');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    console.log('✅ Supabase client initialized');
     
     console.log('Supabase URL:', supabaseUrl ? 'Present' : 'Missing')
     console.log('Supabase Service Key:', supabaseServiceKey ? 'Present' : 'Missing')
@@ -384,13 +420,16 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('❌ Unexpected error in evolution-create-instance:', error)
-    console.error('❌ Error stack:', error.stack)
+    console.error('❌ CRITICAL ERROR in evolution-create-instance:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: `Erro interno no servidor: ${error.message || 'Erro desconhecido'}`
+        error: `Erro interno: ${error.message || 'Erro desconhecido'}`,
+        errorType: error.name || 'UnknownError'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
