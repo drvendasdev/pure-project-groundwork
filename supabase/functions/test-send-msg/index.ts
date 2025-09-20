@@ -381,12 +381,7 @@ serve(async (req) => {
           conversation_id: conversation_id,
           connection_id: actualConnectionId,
           contact_id: conversation.contact_id,
-          instance: instance_name,
-          sender_type: sender_type || 'agent',
-          message_type: message_type,
-          content: effectiveContent || '',
-          file_url: file_url,
-          file_name: file_name
+          instance: instance_name
         };
         
         
