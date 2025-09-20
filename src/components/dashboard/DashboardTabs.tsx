@@ -20,7 +20,6 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
 
   return (
     <Tabs defaultValue="visao-geral" className="w-full">
-
       <TabsList className="grid w-full grid-cols-4 mb-6 bg-primary/10">
         <TabsTrigger value="visao-geral" className="text-sm bg-primary/20 text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
           <Home className="w-4 h-4 mr-2" />
@@ -35,22 +34,6 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
           Eventos
         </TabsTrigger>
         <TabsTrigger value="relatorios" className="text-sm bg-primary/20 text-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-
-      <TabsList className="grid w-full grid-cols-4 mb-6">
-        <TabsTrigger value="visao-geral" className="text-sm">
-          <Home className="w-4 h-4 mr-2" />
-          Visão Geral
-        </TabsTrigger>
-        <TabsTrigger value="novidades" className="text-sm">
-          <Newspaper className="w-4 h-4 mr-2" />
-          Novidades
-        </TabsTrigger>
-        <TabsTrigger value="eventos" className="text-sm">
-          <Calendar className="w-4 h-4 mr-2" />
-          Eventos
-        </TabsTrigger>
-        <TabsTrigger value="relatorios" className="text-sm">
-
           <BarChart3 className="w-4 h-4 mr-2" />
           Relatórios
         </TabsTrigger>
@@ -120,7 +103,6 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-
               <Button variant="outline" className="w-full justify-start bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground" size="sm">
                 <ArrowRight className="w-4 h-4 mr-2" />
                 Como configurar um bot
@@ -134,21 +116,6 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
                 Integrações com N8N
               </Button>
               <Button variant="outline" className="w-full justify-start bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground" size="sm">
-
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Como configurar um bot
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Guia do Pipeline de Vendas
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Integrações com N8N
-              </Button>
-              <Button variant="outline" className="w-full justify-start" size="sm">
-
                 <ArrowRight className="w-4 h-4 mr-2" />
                 Relatórios avançados
               </Button>
@@ -217,11 +184,7 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
                       <Button 
                         variant="outline" 
                         size="sm" 
-
                         className="w-full bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground"
-
-                        className="w-full"
-
                         onClick={() => onNavigate(card.action_url!)}
                       >
                         {card.metadata?.actionText || 'Participar'}
@@ -252,11 +215,7 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">Análise detalhada das interações</p>
-
               <Button variant="outline" size="sm" className="w-full bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground" onClick={() => onNavigate('/conversas')}>
-
-              <Button variant="outline" size="sm" className="w-full" onClick={() => onNavigate('/conversas')}>
-
                 <MessageCircle className="w-4 h-4 mr-2" />
                 Ver Relatório
               </Button>
@@ -269,11 +228,7 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">Performance do pipeline</p>
-
               <Button variant="outline" size="sm" className="w-full bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground" onClick={() => onNavigate('/crm-negocios')}>
-
-              <Button variant="outline" size="sm" className="w-full" onClick={() => onNavigate('/crm-negocios')}>
-
                 <Users className="w-4 h-4 mr-2" />
                 Ver Relatório
               </Button>
@@ -286,11 +241,7 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">Visão geral do workspace</p>
-
               <Button variant="outline" size="sm" className="w-full bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground" onClick={() => onNavigate('/workspace-relatorios')}>
-
-              <Button variant="outline" size="sm" className="w-full" onClick={() => onNavigate('/workspace-relatorios')}>
-
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Ver Relatório
               </Button>

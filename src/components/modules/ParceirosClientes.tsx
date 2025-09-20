@@ -196,9 +196,7 @@ export function ParceirosClientes() {
         <h1 className="text-2xl font-bold text-black">Clientes</h1>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
-
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-
               <Plus className="w-4 h-4 mr-2" />
               Adicionar cliente
             </Button>
@@ -328,9 +326,7 @@ export function ParceirosClientes() {
                 </Button>
                 <Button 
                   type="submit"
-
                   className="bg-primary hover:bg-primary/90 text-primary-foreground"
-
                 >
                   Salvar
                 </Button>
@@ -347,9 +343,7 @@ export function ParceirosClientes() {
           placeholder="Buscar"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-
           className="pl-10 bg-white text-gray-900 border-gray-300 focus:bg-white"
-
         />
       </div>
 

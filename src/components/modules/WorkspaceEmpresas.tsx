@@ -213,9 +213,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   <Button
                     variant="outline"
                     size="sm"
-
                     className="flex-1 gap-2 bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground"
-
                     onClick={() => handleUsersClick(workspace)}
                   >
                     <Users className="w-4 h-4" />
@@ -224,9 +222,7 @@ export function WorkspaceEmpresas({ onNavigateToUsers, onNavigateToConfig }: Wor
                   <Button
                     variant="outline"
                     size="sm"
-
                     className="flex-1 gap-2 bg-primary/10 text-primary border-primary hover:bg-primary hover:text-primary-foreground"
-
                     onClick={() => handleConfigClick(workspace)}
                   >
                     <Settings className="w-4 h-4" />

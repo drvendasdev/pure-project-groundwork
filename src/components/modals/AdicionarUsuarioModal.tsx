@@ -301,9 +301,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
                 onFocus={() => updateFocus('queues', true)}
                 onBlur={() => updateFocus('queues', false)}
                 disabled
-
                 className="w-full h-12 pt-2 pb-2 px-3 border border-input text-sm ring-offset-background appearance-none rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-not-allowed"
-
                 style={{ backgroundColor: '#f9fafb', color: '#6b7280', borderColor: 'rgb(229, 231, 235)' }}
               >
                 <option value="" disabled hidden></option>
@@ -452,9 +450,7 @@ export function AdicionarUsuarioModal({ isOpen, onClose, onAddUser }: AdicionarU
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting || !formData.name || !formData.email || !formData.password}
-
               className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground border-0 rounded-lg disabled:opacity-50"
-
             >
               {isSubmitting ? "Salvando..." : "Adicionar"}
             </Button>
