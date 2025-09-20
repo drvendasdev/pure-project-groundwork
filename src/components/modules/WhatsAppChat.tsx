@@ -312,6 +312,35 @@ export function WhatsAppChat({
       };
       
       addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content || '[ÁUDIO]',
+          message_type: 'audio',
+          sender_id: user?.id,
+          sender_type: 'agent',
+          file_url: file.url,
+          file_name: file.name
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+      
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar áudio');
+      }
+      
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
     } catch (error) {
       console.error('Erro ao enviar áudio rápido:', error);
     }
@@ -336,6 +365,35 @@ export function WhatsAppChat({
       };
       
       addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content || `[${type.toUpperCase()}]`,
+          message_type: type,
+          sender_id: user?.id,
+          sender_type: 'agent',
+          file_url: file.url,
+          file_name: file.name
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+      
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mídia');
+      }
+      
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
     } catch (error) {
       console.error('Erro ao enviar mídia rápida:', error);
     }
@@ -360,6 +418,35 @@ export function WhatsAppChat({
       };
       
       addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content || '[DOCUMENTO]',
+          message_type: 'document',
+          sender_id: user?.id,
+          sender_type: 'agent',
+          file_url: file.url,
+          file_name: file.name
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+      
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar documento');
+      }
+      
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
     } catch (error) {
       console.error('Erro ao enviar documento rápido:', error);
     }
