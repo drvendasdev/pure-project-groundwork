@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { parsePhoneNumber } from 'libphonenumber-js';
 import { MediaViewer } from "@/components/chat/MediaViewer";
 import { MediaUpload } from "@/components/chat/MediaUpload";
+import { QuickItemsModal } from "@/components/modals/QuickItemsModal";
 import { PeekConversationModal } from "@/components/modals/PeekConversationModal";
 import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
 import { EndConversationButton } from "@/components/chat/EndConversationButton";
@@ -183,6 +184,7 @@ export function WhatsAppChat({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [quickItemsModalOpen, setQuickItemsModalOpen] = useState(false);
 
   // Filtrar conversas baseado no termo de busca
   const filteredConversations = conversations.filter(conv => conv.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) || conv.contact.phone && conv.contact.phone.includes(searchTerm));
@@ -238,6 +240,128 @@ export function WhatsAppChat({
       console.error('Erro ao enviar mensagem:', error);
       // Remover mensagem temporária em caso de erro
       // TODO: implementar removeMessage no hook
+    }
+  };
+
+  // Funções para enviar itens rápidos
+  const handleSendQuickMessage = async (content: string, type: 'text') => {
+    if (!selectedConversation) return;
+    
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content,
+        message_type: type as any,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+      
+      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content,
+          message_type: type,
+          sender_id: user?.id,
+          sender_type: 'agent'
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+      
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
+      }
+      
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mensagem rápida:', error);
+    }
+  };
+
+  const handleSendQuickAudio = async (file: { name: string; url: string }, content: string) => {
+    if (!selectedConversation) return;
+    
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-audio-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content || '[ÁUDIO]',
+        message_type: 'audio' as const,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        file_url: file.url,
+        file_name: file.name,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+    } catch (error) {
+      console.error('Erro ao enviar áudio rápido:', error);
+    }
+  };
+
+  const handleSendQuickMedia = async (file: { name: string; url: string }, content: string, type: 'image' | 'video') => {
+    if (!selectedConversation) return;
+    
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-media-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content || `[${type.toUpperCase()}]`,
+        message_type: type as any,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        file_url: file.url,
+        file_name: file.name,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+    } catch (error) {
+      console.error('Erro ao enviar mídia rápida:', error);
+    }
+  };
+
+  const handleSendQuickDocument = async (file: { name: string; url: string }, content: string) => {
+    if (!selectedConversation) return;
+    
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-doc-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content || '[DOCUMENTO]',
+        message_type: 'document' as any,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        file_url: file.url,
+        file_name: file.name,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      
+      addMessage(optimisticMessage);
+    } catch (error) {
+      console.error('Erro ao enviar documento rápido:', error);
     }
   };
 
@@ -1011,7 +1135,12 @@ export function WhatsAppChat({
             }} />
             
             {/* Botão com ícone personalizado */}
-            <Button variant="ghost" size="sm" title="Contatos">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              title="Mensagens Rápidas"
+              onClick={() => setQuickItemsModalOpen(true)}
+            >
               <svg className="w-4 h-4" focusable="false" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
                 <circle cx="9" cy="9" r="4"></circle>
                 <path d="M9 15c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm7.76-9.64l-1.68 1.69c.84 1.18.84 2.71 0 3.89l1.68 1.69c2.02-2.02 2.02-5.07 0-7.27zM20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z"></path>
@@ -1049,6 +1178,15 @@ export function WhatsAppChat({
         setPeekModalOpen(false);
         setPeekConversationId(null);
       }} conversationId={peekConversationId} />
+      
+      <QuickItemsModal
+        open={quickItemsModalOpen}
+        onOpenChange={setQuickItemsModalOpen}
+        onSendMessage={handleSendQuickMessage}
+        onSendAudio={handleSendQuickAudio}
+        onSendMedia={handleSendQuickMedia}
+        onSendDocument={handleSendQuickDocument}
+      />
       </div>
 
     </div>;
