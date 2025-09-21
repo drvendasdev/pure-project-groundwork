@@ -20,10 +20,9 @@ export function usePipelineColumns(pipelineId: string | null) {
       setIsLoading(true);
       const headers = getHeaders();
       
-      const { data, error } = await supabase.functions.invoke('pipeline-management/columns', {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/columns?pipeline_id=${pipelineId}`, {
         method: 'GET',
-        headers,
-        body: { pipeline_id: pipelineId }
+        headers
       });
 
       if (error) throw error;

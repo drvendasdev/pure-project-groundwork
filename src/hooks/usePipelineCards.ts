@@ -20,10 +20,9 @@ export function usePipelineCards(pipelineId: string | null) {
       setIsLoading(true);
       const headers = getHeaders();
       
-      const { data, error } = await supabase.functions.invoke('pipeline-management/cards', {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/cards?pipeline_id=${pipelineId}`, {
         method: 'GET',
-        headers,
-        body: { pipeline_id: pipelineId }
+        headers
       });
 
       if (error) throw error;
@@ -89,13 +88,10 @@ export function usePipelineCards(pipelineId: string | null) {
     try {
       const headers = getHeaders();
       
-      const { data, error } = await supabase.functions.invoke('pipeline-management/cards', {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/cards?id=${cardId}`, {
         method: 'PUT',
         headers,
-        body: { 
-          id: cardId,
-          ...updates 
-        }
+        body: updates 
       });
 
       if (error) throw error;
