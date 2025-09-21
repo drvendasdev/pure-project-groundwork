@@ -23,6 +23,7 @@ import { PeekConversationModal } from "@/components/modals/PeekConversationModal
 import { AcceptConversationButton } from "@/components/chat/AcceptConversationButton";
 import { EndConversationButton } from "@/components/chat/EndConversationButton";
 import { AddTagButton } from "@/components/chat/AddTagButton";
+import { ContactSidePanel } from "@/components/ContactSidePanel";
 import { Search, Send, Bot, Phone, MoreVertical, Circle, MessageCircle, ArrowRight, Settings, Users, Trash2, ChevronDown, Filter, Eye, RefreshCw, Mic, Square } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -180,6 +181,7 @@ export function WhatsAppChat({
   };
   const [peekModalOpen, setPeekModalOpen] = useState(false);
   const [peekConversationId, setPeekConversationId] = useState<string | null>(null);
+  const [contactPanelOpen, setContactPanelOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -1087,7 +1089,10 @@ export function WhatsAppChat({
             <div className="p-4 border-b border-border bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                   <Avatar className="w-10 h-10">
+                   <Avatar 
+                    className="w-10 h-10 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-2 transition-all"
+                    onClick={() => setContactPanelOpen(true)}
+                  >
                     {selectedConversation.contact.profile_image_url && <AvatarImage src={selectedConversation.contact.profile_image_url} alt={selectedConversation.contact.name} className="object-cover" />}
                     <AvatarFallback style={{
                   backgroundColor: getAvatarColor(selectedConversation.contact.name)
@@ -1169,7 +1174,10 @@ export function WhatsAppChat({
               
               <div className="space-y-4">
                 {messages.map(message => <div key={message.id} className={cn("flex items-start gap-3 max-w-[80%]", message.sender_type === 'contact' ? "flex-row" : "flex-row-reverse ml-auto")}>
-                    {message.sender_type === 'contact' && <Avatar className="w-8 h-8 flex-shrink-0">
+                    {message.sender_type === 'contact' && <Avatar 
+                      className="w-8 h-8 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1 transition-all"
+                      onClick={() => setContactPanelOpen(true)}
+                    >
                         {selectedConversation.contact.profile_image_url && <AvatarImage src={selectedConversation.contact.profile_image_url} alt={selectedConversation.contact.name} className="object-cover" />}
                         <AvatarFallback className={cn("text-white text-xs", getAvatarColor(selectedConversation.contact.name))}>
                           {getInitials(selectedConversation.contact.name)}
@@ -1317,6 +1325,12 @@ export function WhatsAppChat({
         setPeekModalOpen(false);
         setPeekConversationId(null);
       }} conversationId={peekConversationId} />
+      
+      <ContactSidePanel 
+        isOpen={contactPanelOpen}
+        onClose={() => setContactPanelOpen(false)}
+        contact={selectedConversation?.contact || null}
+      />
       
       <QuickItemsModal
         open={quickItemsModalOpen}
