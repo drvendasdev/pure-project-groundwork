@@ -426,6 +426,8 @@ export type Database = {
           id: string
           name: string
           phone: string | null
+          profile_fetch_attempts: number | null
+          profile_fetch_last_attempt: string | null
           profile_image_updated_at: string | null
           profile_image_url: string | null
           updated_at: string
@@ -438,6 +440,8 @@ export type Database = {
           id?: string
           name: string
           phone?: string | null
+          profile_fetch_attempts?: number | null
+          profile_fetch_last_attempt?: string | null
           profile_image_updated_at?: string | null
           profile_image_url?: string | null
           updated_at?: string
@@ -450,6 +454,8 @@ export type Database = {
           id?: string
           name?: string
           phone?: string | null
+          profile_fetch_attempts?: number | null
+          profile_fetch_last_attempt?: string | null
           profile_image_updated_at?: string | null
           profile_image_url?: string | null
           updated_at?: string

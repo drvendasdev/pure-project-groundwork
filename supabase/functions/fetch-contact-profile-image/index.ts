@@ -26,6 +26,62 @@ serve(async (req) => {
     
     console.log(`📥 Fetch profile image request:`, { phone, contactId, workspaceId });
     
+    // Verificar se o contato existe e pertence ao workspace correto
+    const { data: existingContact } = await supabase
+      .from('contacts')
+      .select('id, workspace_id, profile_fetch_attempts, profile_fetch_last_attempt')
+      .eq('id', contactId)
+      .eq('workspace_id', workspaceId)
+      .single();
+
+    if (!existingContact) {
+      console.log(`❌ Contact not found or doesn't belong to workspace: ${contactId}, ${workspaceId}`);
+      return new Response(
+        JSON.stringify({ error: 'Contact not found or access denied' }),
+        { 
+          status: 404, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Verificar se deve tentar novamente (retry logic)
+    const maxAttempts = 3;
+    const retryDelays = [60 * 60 * 1000, 6 * 60 * 60 * 1000, 24 * 60 * 60 * 1000]; // 1h, 6h, 24h
+    
+    if (existingContact.profile_fetch_attempts >= maxAttempts) {
+      console.log(`⏭️ Max attempts reached for contact ${contactId}, skipping profile fetch`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Max fetch attempts reached' 
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    if (existingContact.profile_fetch_last_attempt) {
+      const lastAttempt = new Date(existingContact.profile_fetch_last_attempt);
+      const now = new Date();
+      const timeSinceLastAttempt = now.getTime() - lastAttempt.getTime();
+      const requiredDelay = retryDelays[existingContact.profile_fetch_attempts] || retryDelays[retryDelays.length - 1];
+      
+      if (timeSinceLastAttempt < requiredDelay) {
+        console.log(`⏳ Too soon to retry profile fetch for contact ${contactId}. Last attempt: ${lastAttempt}, Required delay: ${requiredDelay}ms`);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Retry too soon, waiting for delay' 
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    }
+    
     if (!phone || !contactId || !workspaceId) {
       console.log(`❌ Missing required parameters:`, { phone: !!phone, contactId: !!contactId, workspaceId: !!workspaceId });
       return new Response(
@@ -146,6 +202,15 @@ serve(async (req) => {
 
       console.log(`✅ Profile image update completed for ${sanitizedPhone}`);
       
+      // Reset retry counter on success
+      await supabase
+        .from('contacts')
+        .update({ 
+          profile_fetch_attempts: 0,
+          profile_fetch_last_attempt: null
+        })
+        .eq('id', contactId);
+      
       return new Response(
         JSON.stringify({ 
           success: true,
@@ -160,6 +225,16 @@ serve(async (req) => {
 
     } catch (fetchError) {
       console.error(`❌ Error during Evolution API call:`, fetchError);
+      
+      // Increment retry counter on failure
+      await supabase
+        .from('contacts')
+        .update({ 
+          profile_fetch_attempts: existingContact.profile_fetch_attempts + 1,
+          profile_fetch_last_attempt: new Date().toISOString()
+        })
+        .eq('id', contactId);
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -175,6 +250,30 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Error processing request:', error);
+    
+    // Increment retry counter on general error (if we have contactId)
+    if (contactId) {
+      try {
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('profile_fetch_attempts')
+          .eq('id', contactId)
+          .single();
+          
+        if (contact) {
+          await supabase
+            .from('contacts')
+            .update({ 
+              profile_fetch_attempts: contact.profile_fetch_attempts + 1,
+              profile_fetch_last_attempt: new Date().toISOString()
+            })
+            .eq('id', contactId);
+        }
+      } catch (updateError) {
+        console.error('❌ Failed to update retry counter:', updateError);
+      }
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: false, 

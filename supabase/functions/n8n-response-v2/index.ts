@@ -189,7 +189,7 @@ serve(async (req) => {
             }
 
             // 🖼️ Fetch profile image from Evolution API
-            console.log(`🖼️ [${requestId}] Attempting to fetch profile image for ${sanitizedPhone}`);
+            console.log(`🖼️ [${requestId}] Attempting to fetch profile image for contact: ${contactId}, phone: ${sanitizedPhone}, workspace: ${workspaceId}`);
             
             try {
               // Get connection secrets for this instance
@@ -243,12 +243,12 @@ serve(async (req) => {
                     });
 
                     if (profileError) {
-                      console.error(`❌ [${requestId}] Failed to update profile image:`, profileError);
+                      console.error(`❌ [${requestId}] Failed to update profile image for contact ${contactId}, phone ${sanitizedPhone}, workspace ${workspaceId}:`, profileError);
                     } else {
-                      console.log(`✅ [${requestId}] Profile image update requested for ${sanitizedPhone}`);
+                      console.log(`✅ [${requestId}] Profile image update requested for contact ${contactId}, phone ${sanitizedPhone}, workspace ${workspaceId}`);
                     }
                   } else {
-                    console.log(`ℹ️ [${requestId}] No profile image URL found in Evolution API response or no contactId`);
+                    console.log(`ℹ️ [${requestId}] No profile image URL found in Evolution API response. ContactId: ${contactId}, ProfileData:`, JSON.stringify(profileData, null, 2));
                   }
                 } else {
                   console.error(`❌ [${requestId}] Failed to fetch profile from Evolution API:`, profileResponse.status, await profileResponse.text());
@@ -257,7 +257,7 @@ serve(async (req) => {
                 console.log(`⚠️ [${requestId}] No connection secrets found for instance ${instance}`);
               }
             } catch (error) {
-              console.error(`❌ [${requestId}] Error fetching profile image:`, error);
+              console.error(`❌ [${requestId}] Error fetching profile image for contact ${contactId}, phone ${sanitizedPhone}, workspace ${workspaceId}:`, error.message || error);
             }
 
             // Get connection_id for proper conversation association

@@ -511,6 +511,12 @@ export const useWhatsAppConversations = () => {
           console.log('🔔 Nova mensagem recebida:', payload.new);
           const newMessage = payload.new as any;
           
+          // ✅ Filtrar por workspace_id para garantir que apenas mensagens do workspace atual sejam processadas
+          if (newMessage.workspace_id !== selectedWorkspace?.workspace_id) {
+            console.log(`🚫 Mensagem ignorada - workspace diferente: ${newMessage.workspace_id} vs ${selectedWorkspace?.workspace_id}`);
+            return;
+          }
+          
           setConversations(prev => {
             return prev.map(conv => {
               if (conv.id === newMessage.conversation_id) {
@@ -608,6 +614,12 @@ export const useWhatsAppConversations = () => {
           // Só processar conversas do WhatsApp
           if (newConv.canal !== 'whatsapp') return;
           
+          // ✅ Filtrar por workspace_id para garantir que apenas conversas do workspace atual sejam processadas
+          if (newConv.workspace_id !== selectedWorkspace?.workspace_id) {
+            console.log(`🚫 Nova conversa ignorada - workspace diferente: ${newConv.workspace_id} vs ${selectedWorkspace?.workspace_id}`);
+            return;
+          }
+          
           console.log('🔔 Nova conversa criada:', newConv);
           
           // Buscar dados completos da nova conversa
@@ -668,6 +680,12 @@ export const useWhatsAppConversations = () => {
         (payload) => {
           console.log('🔄 Conversa atualizada:', payload.new);
           const updatedConv = payload.new as any;
+          
+          // ✅ Filtrar por workspace_id para garantir que apenas conversas do workspace atual sejam processadas
+          if (updatedConv.workspace_id !== selectedWorkspace?.workspace_id) {
+            console.log(`🚫 Atualização de conversa ignorada - workspace diferente: ${updatedConv.workspace_id} vs ${selectedWorkspace?.workspace_id}`);
+            return;
+          }
           
           setConversations(prev => {
             return prev.map(conv => 
