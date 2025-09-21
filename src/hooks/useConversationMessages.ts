@@ -189,14 +189,35 @@ export function useConversationMessages(): UseConversationMessagesReturn {
     setMessages(prevMessages => {
       // Verificar duplicação por ID
       if (prevMessages.some(m => m.id === message.id)) {
+        console.log('📄 Mensagem já existe com ID:', message.id);
         return prevMessages;
       }
       
       // Verificar duplicação por external_id se existir
       if (message.external_id && prevMessages.some(m => m.external_id === message.external_id)) {
+        console.log('📄 Mensagem já existe com external_id:', message.external_id);
         return prevMessages;
       }
 
+      // Se for uma mensagem do real-time com external_id, verificar se há mensagem temporária correspondente
+      if (message.external_id && message.sender_type === 'agent') {
+        const tempMessageIndex = prevMessages.findIndex(m => 
+          m.id.startsWith('temp-') && 
+          m.conversation_id === message.conversation_id &&
+          m.content === message.content &&
+          m.sender_type === message.sender_type &&
+          m.message_type === message.message_type
+        );
+        
+        if (tempMessageIndex !== -1) {
+          console.log('🔄 Substituindo mensagem temporária pela definitiva:', message.id);
+          const updatedMessages = [...prevMessages];
+          updatedMessages[tempMessageIndex] = message;
+          return updatedMessages;
+        }
+      }
+
+      console.log('📨 Adicionando nova mensagem:', message.id);
       // Adicionar no final (mensagem mais recente)
       return [...prevMessages, message];
     });
@@ -209,13 +230,37 @@ export function useConversationMessages(): UseConversationMessagesReturn {
   }, [selectedWorkspace?.workspace_id, currentConversationId]);
 
   const updateMessage = useCallback((messageId: string, updates: Partial<WhatsAppMessage>) => {
-    setMessages(prevMessages => 
-      prevMessages.map(message => 
-        message.id === messageId 
-          ? { ...message, ...updates }
-          : message
-      )
-    );
+    setMessages(prevMessages => {
+      const messageIndex = prevMessages.findIndex(m => m.id === messageId);
+      if (messageIndex === -1) {
+        return prevMessages;
+      }
+
+      const updatedMessages = [...prevMessages];
+      const currentMessage = updatedMessages[messageIndex];
+      const updatedMessage = { ...currentMessage, ...updates };
+      
+      // Se está mudando o ID (de temporário para real), verificar se já existe mensagem com o novo ID
+      if (updates.id && updates.id !== messageId) {
+        const existingMessageWithNewId = prevMessages.find(m => m.id === updates.id);
+        if (existingMessageWithNewId) {
+          // Já existe mensagem com o novo ID, remover a temporária
+          console.log('✏️ Removendo mensagem temporária, já existe com ID real:', updates.id);
+          return prevMessages.filter(m => m.id !== messageId);
+        }
+      }
+      
+      updatedMessages[messageIndex] = updatedMessage;
+      console.log('✏️ Mensagem atualizada:', { 
+        id: updatedMessage.id, 
+        status: updatedMessage.status,
+        message_type: updatedMessage.message_type,
+        file_url: updatedMessage.file_url,
+        file_name: updatedMessage.file_name
+      });
+      
+      return updatedMessages;
+    });
 
     // Invalidar cache
     if (selectedWorkspace?.workspace_id && currentConversationId) {
