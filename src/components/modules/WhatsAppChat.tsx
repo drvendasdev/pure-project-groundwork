@@ -1154,40 +1154,18 @@ export function WhatsAppChat({
             </div>
 
             {/* Área de mensagens */}
-            <ScrollArea 
-              className="flex-1 p-4"
-              onScrollCapture={(e) => {
-                const target = e.currentTarget;
-                const threshold = 100; // pixels do topo para disparar o carregamento
-                
-                if (target.scrollTop <= threshold && hasMore && !loadingMore && messages.length > 0) {
-                  const scrollHeight = target.scrollHeight;
-                  const scrollTop = target.scrollTop;
-                  
-                  loadMoreMessages().then(() => {
-                    // Manter posição aproximada do scroll após carregar novas mensagens
-                    setTimeout(() => {
-                      const newScrollHeight = target.scrollHeight;
-                      const newScrollTop = scrollTop + (newScrollHeight - scrollHeight);
-                      target.scrollTop = newScrollTop;
-                    }, 50);
-                  });
-                }
-              }}
-            >
+            <ScrollArea className="flex-1 p-4">
               {/* ✅ Loading inicial das mensagens */}
-              {messagesLoading && messages.length === 0 && (
-                <div className="flex justify-center p-4">
+              {messagesLoading && messages.length === 0 && <div className="flex justify-center p-4">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                </div>
-              )}
+                </div>}
               
-              {/* ✅ Loading discreto no topo durante lazy load */}
-              {loadingMore && messages.length > 0 && (
-                <div className="flex justify-center p-2 pb-4">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary opacity-70"></div>
-                </div>
-              )}
+              {/* ✅ Botão Load More (scroll infinito) */}
+              {hasMore && messages.length > 0 && <div className="flex justify-center p-2">
+                  <Button variant="ghost" size="sm" onClick={loadMoreMessages} disabled={loadingMore}>
+                    {loadingMore ? 'Carregando...' : 'Carregar mensagens anteriores'}
+                  </Button>
+                </div>}
               
               <div className="space-y-4">
                 {messages.map(message => <div key={message.id} className={cn("flex items-start gap-3 max-w-[80%]", message.sender_type === 'contact' ? "flex-row" : "flex-row-reverse ml-auto")}>
