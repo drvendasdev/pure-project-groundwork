@@ -140,6 +140,27 @@ serve(async (req) => {
 
       contactId = newContact.id
       console.log(`Created temporary contact with ID: ${contactId}`)
+
+      // 🖼️ Try to fetch profile image for new contact
+      try {
+        console.log(`🖼️ Attempting to fetch profile image for new contact: ${normalizedPhone}`);
+        
+        const { error: profileError } = await supabase.functions.invoke('fetch-contact-profile-image', {
+          body: {
+            phone: normalizedPhone,
+            contactId: contactId,
+            workspaceId: finalOrgId
+          }
+        });
+
+        if (profileError) {
+          console.error(`⚠️ Failed to fetch profile image (non-blocking):`, profileError);
+        } else {
+          console.log(`✅ Profile image fetch requested for ${normalizedPhone}`);
+        }
+      } catch (profileFetchError) {
+        console.error(`⚠️ Error requesting profile image (non-blocking):`, profileFetchError);
+      }
     } else {
       console.log(`Using existing contact with ID: ${contactId}`)
     }

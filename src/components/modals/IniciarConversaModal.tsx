@@ -88,6 +88,23 @@ export function IniciarConversaModal({ open, onOpenChange, onConversationCreated
 
         if (contactError) throw contactError;
         contactId = newContact.id;
+
+        // 🖼️ Try to fetch profile image for new contact (non-blocking)
+        try {
+          const { error: profileError } = await supabase.functions.invoke('fetch-contact-profile-image', {
+            body: {
+              phone: fullPhone.replace(/\D/g, ''),
+              contactId: contactId,
+              workspaceId: selectedWorkspace!.workspace_id
+            }
+          });
+
+          if (profileError) {
+            console.error('⚠️ Failed to fetch profile image (non-blocking):', profileError);
+          }
+        } catch (profileFetchError) {
+          console.error('⚠️ Error requesting profile image (non-blocking):', profileFetchError);
+        }
       }
 
       // Verificar se já existe uma conversa com este contato
