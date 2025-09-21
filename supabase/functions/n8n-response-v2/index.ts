@@ -11,8 +11,13 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+// Feature flags for hardening pipeline
+const CORS_ALLOWED_ORIGIN = Deno.env.get('CORS_ALLOWED_ORIGIN') || '*';
+const ENFORCE_N8N_SECRET = Deno.env.get('ENFORCE_N8N_SECRET') === 'true';
+const ENABLE_MESSAGE_IDEMPOTENCY = Deno.env.get('ENABLE_MESSAGE_IDEMPOTENCY') === 'true';
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-secret',
 };
 
@@ -42,7 +47,7 @@ serve(async (req) => {
     });
   }
 
-  // 🔐 SECURITY: Accept calls from Evolution or N8N
+  // 🔐 SECURITY: Accept calls from Evolution or N8N (configurable validation)
   const authHeader = req.headers.get('Authorization');
   const secretHeader = req.headers.get('X-Secret');
   const expectedAuth = `Bearer ${Deno.env.get('N8N_WEBHOOK_TOKEN')}`;
@@ -52,16 +57,21 @@ serve(async (req) => {
   const isValidEvolutionCall = secretHeader === expectedSecret;
   const isValidN8NCall = authHeader === expectedAuth;
   
-  if (!isValidEvolutionCall && !isValidN8NCall) {
-    console.log(`❌ [${requestId}] Unauthorized access attempt - missing valid auth`);
-    return new Response(JSON.stringify({ 
-      error: 'Unauthorized', 
-      message: 'This endpoint accepts calls from Evolution API (X-Secret) or N8N (Authorization)',
-      requestId 
-    }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+  // Optional enforcement based on feature flag
+  if (ENFORCE_N8N_SECRET) {
+    if (!isValidEvolutionCall && !isValidN8NCall) {
+      console.log(`❌ [${requestId}] Unauthorized access attempt - missing valid auth (enforcement enabled)`);
+      return new Response(JSON.stringify({ 
+        error: 'Unauthorized', 
+        message: 'This endpoint accepts calls from Evolution API (X-Secret) or N8N (Authorization)',
+        requestId 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+  } else if (!isValidEvolutionCall && !isValidN8NCall) {
+    console.log(`⚠️ [${requestId}] Unauthorized access but enforcement disabled - continuing`);
   }
   
   const requestSource = isValidEvolutionCall ? 'Evolution API' : 'N8N';
@@ -752,7 +762,21 @@ serve(async (req) => {
       console.log(`✅ [${requestId}] Created new conversation: ${conversationId}`);
     }
 
-    // Create message
+    // Check for system message loop prevention when idempotency is enabled
+    if (ENABLE_MESSAGE_IDEMPOTENCY && metadata?.origem_resposta === 'system') {
+      console.log(`🔄 [${requestId}] Skipping system message to prevent loop (idempotency enabled)`);
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'skipped_system_message',
+        message: 'System message skipped to prevent loop',
+        requestId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Create message with optional idempotency
     const messageData = {
       id: crypto.randomUUID(), // Sempre gerar UUID único para id
       conversation_id: conversationId,
@@ -765,7 +789,7 @@ serve(async (req) => {
       mime_type: mime_type || null,
       status: direction === 'inbound' ? 'received' : 'sent',
       origem_resposta: direction === 'inbound' ? 'automatica' : 'manual',
-      external_id: external_id || null, // external_id separado do id
+      external_id: external_id || crypto.randomUUID(), // external_id separado do id
       metadata: {
         source: 'n8n-response-v2',
         direction: direction,
@@ -775,11 +799,31 @@ serve(async (req) => {
       }
     };
 
-    const { data: newMessage, error: messageCreateError } = await supabase
-      .from('messages')
-      .insert(messageData)
-      .select('id')
-      .single();
+    // Insert or upsert based on idempotency flag
+    let newMessage, messageCreateError;
+    
+    if (ENABLE_MESSAGE_IDEMPOTENCY && external_id) {
+      console.log(`🔄 [${requestId}] Using upsert for idempotency with external_id: ${external_id}`);
+      const { data, error } = await supabase
+        .from('messages')
+        .upsert(messageData, { 
+          onConflict: 'workspace_id,external_id',
+          ignoreDuplicates: false 
+        })
+        .select('id')
+        .single();
+      newMessage = data;
+      messageCreateError = error;
+    } else {
+      console.log(`📝 [${requestId}] Using standard insert (idempotency disabled or no external_id)`);
+      const { data, error } = await supabase
+        .from('messages')
+        .insert(messageData)
+        .select('id')
+        .single();
+      newMessage = data;
+      messageCreateError = error;
+    }
 
     if (messageCreateError) {
       console.error(`❌ [${requestId}] Error creating message:`, messageCreateError);

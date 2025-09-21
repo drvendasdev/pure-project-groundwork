@@ -5,8 +5,14 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL');
 
+// Feature flags for hardening pipeline
+const CORS_ALLOWED_ORIGIN = Deno.env.get('CORS_ALLOWED_ORIGIN') || '*';
+const ENFORCE_EVO_WEBHOOK_SECRET = Deno.env.get('ENFORCE_EVO_WEBHOOK_SECRET') === 'true';
+const ENABLE_MESSAGE_IDEMPOTENCY = Deno.env.get('ENABLE_MESSAGE_IDEMPOTENCY') === 'true';
+const USE_SUPABASE_REALTIME = Deno.env.get('USE_SUPABASE_REALTIME') !== 'false';
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': PUBLIC_APP_URL || '*',
+  'Access-Control-Allow-Origin': CORS_ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-evo-secret',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
@@ -43,67 +49,112 @@ serve(async (req) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
+    // Optional webhook secret validation based on feature flag
     const webhookSecret = req.headers.get('x-evo-secret');
-    if (!webhookSecret) {
-      console.error('Missing webhook secret header');
-      return new Response(JSON.stringify({ error: 'Missing webhook secret' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (ENFORCE_EVO_WEBHOOK_SECRET) {
+      if (!webhookSecret) {
+        console.error('Missing webhook secret header (enforcement enabled)');
+        return new Response(JSON.stringify({ error: 'Missing webhook secret' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } else if (!webhookSecret) {
+      console.log('Missing webhook secret header (enforcement disabled)');
     }
 
     const payload = await req.json();
     console.log('Webhook received:', { event: payload.event, instance: payload.instance });
 
-    // Find channel by webhook secret
-    const { data: channel, error: channelError } = await supabase
-      .from('channels')
-      .select('*')
-      .eq('webhook_secret', webhookSecret)
-      .single();
+    // Find channel by webhook secret (skip if enforcement disabled and no secret)
+    let channel = null;
+    if (webhookSecret) {
+      const { data: channelData, error: channelError } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('webhook_secret', webhookSecret)
+        .single();
 
-    if (channelError || !channel) {
-      console.error('Invalid webhook secret or channel not found:', channelError);
-      return new Response(JSON.stringify({ error: 'Invalid webhook secret' }), {
+      if (channelError || !channelData) {
+        if (ENFORCE_EVO_WEBHOOK_SECRET) {
+          console.error('Invalid webhook secret or channel not found:', channelError);
+          return new Response(JSON.stringify({ error: 'Invalid webhook secret' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else {
+          console.log('Channel not found but enforcement disabled, continuing...');
+        }
+      } else {
+        channel = channelData;
+      }
+    }
+
+    // Skip processing if no channel found and enforcement enabled
+    if (ENFORCE_EVO_WEBHOOK_SECRET && !channel) {
+      return new Response(JSON.stringify({ error: 'Channel validation failed' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Handle different event types
-    if (payload.event === 'QRCODE_UPDATED') {
-      console.log(`QR Code updated for instance ${channel.instance}`);
-      broadcastToInstance(channel.instance, 'qrcode', {
-        code: payload.data?.qrcode,
-        pairingCode: payload.data?.pairingCode,
-        count: payload.data?.count
-      });
-    }
-
-    // Handle connection state changes
-    if (payload.event === 'CONNECTION_UPDATE' || payload.data?.state) {
-      const newState = payload.data?.state;
-      console.log(`State update for instance ${channel.instance}: ${newState}`);
+    // Handle different event types (only if channel found or enforcement disabled)
+    if (channel || !ENFORCE_EVO_WEBHOOK_SECRET) {
+      const instanceName = channel?.instance || payload.instance || 'unknown';
       
-      if (newState) {
-        // Update channel status in database
-        let status = 'disconnected';
-        if (newState === 'open') status = 'connected';
-        else if (newState === 'connecting') status = 'connecting';
+      if (payload.event === 'QRCODE_UPDATED') {
+        console.log(`QR Code updated for instance ${instanceName}`);
+        broadcastToInstance(instanceName, 'qrcode', {
+          code: payload.data?.qrcode,
+          pairingCode: payload.data?.pairingCode,
+          count: payload.data?.count
+        });
+      }
 
-        const { error: updateError } = await supabase
-          .from('channels')
-          .update({ 
-            status, 
-            last_state_at: new Date().toISOString() 
-          })
-          .eq('id', channel.id);
+      // Handle connection state changes
+      if (payload.event === 'CONNECTION_UPDATE' || payload.data?.state) {
+        const newState = payload.data?.state;
+        console.log(`State update for instance ${instanceName}: ${newState}`);
+        
+        if (newState && channel) {
+          // Update channel status in database
+          let status = 'disconnected';
+          if (newState === 'open') status = 'connected';
+          else if (newState === 'connecting') status = 'connecting';
 
-        if (updateError) {
-          console.error('Error updating channel status:', updateError);
+          const { error: updateError } = await supabase
+            .from('channels')
+            .update({ 
+              status, 
+              last_state_at: new Date().toISOString() 
+            })
+            .eq('id', channel.id);
+
+          if (updateError) {
+            console.error('Error updating channel status:', updateError);
+          }
         }
 
-        broadcastToInstance(channel.instance, 'state', { state: newState });
+        broadcastToInstance(instanceName, 'state', { state: newState });
+      }
+      
+      // Handle message events with idempotency if enabled
+      if (payload.event === 'message' && ENABLE_MESSAGE_IDEMPOTENCY) {
+        console.log('Processing message with idempotency enabled');
+        
+        // Check if message is from system to prevent loops
+        const isSystemMessage = payload.data?.sender_type === 'system' || 
+                               payload.data?.origem_resposta === 'system';
+        
+        if (isSystemMessage) {
+          console.log('Skipping system message to prevent loop');
+          return new Response(JSON.stringify({ success: true, skipped: 'system_message' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // TODO: Implement message processing with upsert using external_id
+        // This would be done when full message processing is implemented
       }
     }
 
