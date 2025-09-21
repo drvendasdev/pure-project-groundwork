@@ -7,65 +7,12 @@
     <meta name="description" content="Sistema CRM completo com gestão de negócios, contatos, automações e muito mais" />
     <meta name="author" content="Tezeus" />
     
-    <!-- Favicon será gerenciado dinamicamente pelo useFavicon hook -->
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;200;300;400;500;700&display=swap" rel="stylesheet">
-    
-    <!-- Prevent flash of unstyled content for dark mode and workspace colors -->
+    <!-- Prevent flash of unstyled content for dark mode -->
     <script>
       (function() {
-        // Apply dark mode
         const theme = localStorage.getItem('theme') || 'light';
         if (theme === 'dark') {
           document.documentElement.classList.add('dark');
-        }
-        
-        // Apply workspace colors immediately if available
-        const primaryHsl = localStorage.getItem('workspace-primary-hsl');
-        const contrastHsl = localStorage.getItem('workspace-contrast-hsl');
-        const backgroundHsl = localStorage.getItem('workspace-background-hsl');
-        const backgroundEnabled = localStorage.getItem('workspace-background-enabled') === 'true';
-        
-        if (primaryHsl && contrastHsl) {
-          const root = document.documentElement;
-          
-          // Apply primary colors
-          root.style.setProperty('--primary', primaryHsl);
-          root.style.setProperty('--primary-foreground', contrastHsl);
-          root.style.setProperty('--secondary', primaryHsl);
-          root.style.setProperty('--secondary-foreground', contrastHsl);
-          root.style.setProperty('--accent', primaryHsl);
-          root.style.setProperty('--accent-foreground', contrastHsl);
-          
-          // Create hover variant
-          const parts = primaryHsl.split(' ');
-          const hue = parts[0];
-          const saturation = parts[1];
-          const lightness = parseInt(parts[2]);
-          const darkerLightness = Math.max(lightness - 10, 0);
-          const hoverHsl = hue + ' ' + saturation + ' ' + darkerLightness + '%';
-          root.style.setProperty('--ring', hoverHsl);
-          
-          // Sidebar colors
-          root.style.setProperty('--sidebar-primary', primaryHsl);
-          root.style.setProperty('--sidebar-primary-foreground', contrastHsl);
-          root.style.setProperty('--sidebar-accent', hue + ' ' + saturation + ' 95%');
-          root.style.setProperty('--sidebar-accent-foreground', primaryHsl);
-          
-          console.log('⚡ Applied workspace colors immediately on page load');
-        }
-        
-        // Apply custom background if enabled
-        if (backgroundEnabled && backgroundHsl) {
-          document.documentElement.style.setProperty('--background', backgroundHsl);
-          // Apply to body as well
-          document.addEventListener('DOMContentLoaded', function() {
-            document.body.style.backgroundColor = 'hsl(' + backgroundHsl + ')';
-          });
-          console.log('⚡ Applied workspace background immediately on page load');
         }
       })();
     </script>
