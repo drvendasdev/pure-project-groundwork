@@ -1195,6 +1195,39 @@ export type Database = {
         }
         Relationships: []
       }
+      system_customization: {
+        Row: {
+          background_color: string | null
+          created_at: string
+          header_color: string | null
+          id: string
+          logo_url: string | null
+          primary_color: string | null
+          sidebar_color: string | null
+          updated_at: string
+        }
+        Insert: {
+          background_color?: string | null
+          created_at?: string
+          header_color?: string | null
+          id?: string
+          logo_url?: string | null
+          primary_color?: string | null
+          sidebar_color?: string | null
+          updated_at?: string
+        }
+        Update: {
+          background_color?: string | null
+          created_at?: string
+          header_color?: string | null
+          id?: string
+          logo_url?: string | null
+          primary_color?: string | null
+          sidebar_color?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_user_cargos: {
         Row: {
           cargo_id: string

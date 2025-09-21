@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,11 +9,24 @@ import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
 import { EvolutionApiConfig } from "./EvolutionApiConfig";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { ColorPicker } from "@/components/ui/color-picker";
+import { useSystemCustomization } from "@/hooks/useSystemCustomization";
+import { useAuth } from "@/hooks/useAuth";
+import { Upload, RotateCcw, Palette } from "lucide-react";
 
 export function AdministracaoConfiguracoes() {
   const [connectionLimit, setConnectionLimit] = useState("1");
   const [loading, setLoading] = useState(false);
   const { selectedWorkspace } = useWorkspace();
+  const { hasRole } = useAuth();
+  const { 
+    customization, 
+    loading: customizationLoading, 
+    updateCustomization, 
+    resetToDefaults 
+  } = useSystemCustomization();
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   // Load current settings for selected workspace
   useEffect(() => {
@@ -59,59 +73,95 @@ export function AdministracaoConfiguracoes() {
     loadData();
   }, [selectedWorkspace?.workspace_id]);
 
-  const handleConnectionLimitChange = async (value: string) => {
-    if (!selectedWorkspace?.workspace_id) return;
-
-    setLoading(true);
-    try {
-      const numericValue = value === "unlimited" ? 999 : parseInt(value);
-      
-      console.log('💾 Updating connection limit for workspace:', selectedWorkspace.workspace_id);
-      console.log('🔢 New limit:', numericValue);
-      
-      // Use edge function to update limits to avoid RLS issues
-      const userData = localStorage.getItem('currentUser');
-      const currentUserData = userData ? JSON.parse(userData) : null;
-      
-      if (!currentUserData?.id) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      const headers = {
-        'x-system-user-id': currentUserData.id,
-        'x-system-user-email': currentUserData.email || '',
-        'x-workspace-id': selectedWorkspace.workspace_id
+  // Handle logo file selection
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setLogoPreview(e.target?.result as string);
       };
+      reader.readAsDataURL(file);
+    }
+  };
 
-      const { data, error } = await supabase.functions.invoke('update-workspace-limits', {
-        body: { 
-          workspaceId: selectedWorkspace.workspace_id,
-          connectionLimit: numericValue 
-        },
-        headers
-      });
-
-      if (error) {
-        console.error('❌ Error updating workspace limits:', error);
-        throw error;
-      }
-
-      console.log('✅ Connection limit updated successfully:', data);
-
-      setConnectionLimit(value);
+  // Handle customization updates
+  const handleCustomizationUpdate = async (field: string, value: string) => {
+    try {
+      await updateCustomization({ [field]: value });
       toast({
-        title: 'Configuração atualizada',
-        description: 'Limite de conexões atualizado com sucesso'
+        title: 'Personalização atualizada',
+        description: 'As mudanças foram aplicadas com sucesso'
       });
     } catch (error: any) {
-      console.error('❌ Error updating connection limit:', error);
       toast({
         title: 'Erro ao atualizar',
         description: error.message,
         variant: 'destructive'
       });
+    }
+  };
+
+  // Handle logo upload
+  const handleLogoUpload = async () => {
+    if (!logoFile) return;
+
+    try {
+      setLoading(true);
+      
+      // Upload to Supabase storage
+      const fileExt = logoFile.name.split('.').pop();
+      const fileName = `system-logo-${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('workspace-media')
+        .upload(fileName, logoFile);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('workspace-media')
+        .getPublicUrl(fileName);
+
+      // Update customization with new logo URL
+      await updateCustomization({ logo_url: urlData.publicUrl });
+      
+      setLogoFile(null);
+      setLogoPreview(null);
+      
+      toast({
+        title: 'Logo atualizada',
+        description: 'A nova logo foi aplicada com sucesso'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao fazer upload',
+        description: error.message,
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle reset to defaults
+  const handleResetDefaults = async () => {
+    try {
+      await resetToDefaults();
+      toast({
+        title: 'Configurações restauradas',
+        description: 'O sistema foi restaurado para as configurações padrão'
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao restaurar',
+        description: error.message,
+        variant: 'destructive'
+      });
     }
   };
 
@@ -123,13 +173,13 @@ export function AdministracaoConfiguracoes() {
       </div>
       
       <div className="bg-card rounded-lg shadow-sm border border-border">
-        <Tabs defaultValue="opcoes" className="w-full">
+        <Tabs defaultValue="personalizacao" className="w-full">
           <TabsList className="grid w-full grid-cols-3 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
             <TabsTrigger 
-              value="opcoes" 
+              value="personalizacao" 
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
             >
-              Opções
+              Personalização
             </TabsTrigger>
             <TabsTrigger 
               value="webhooks" 
@@ -145,130 +195,115 @@ export function AdministracaoConfiguracoes() {
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="opcoes" className="p-6 mt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Moeda */}
-              <div className="space-y-2">
-                <Label htmlFor="currency" className="text-xs font-medium text-foreground">
-                  Moeda
-                </Label>
-                <Select defaultValue="brl">
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione a moeda" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="brl">BRL (R$)</SelectItem>
-                    <SelectItem value="usd">USD ($)</SelectItem>
-                    <SelectItem value="eur">EUR (€)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <TabsContent value="personalizacao" className="p-6 mt-0">
+            {hasRole(['master']) ? (
+              <div className="space-y-8">
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-6">
+                  <Palette className="w-6 h-6 text-primary" />
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Personalização do Sistema</h2>
+                    <p className="text-sm text-muted-foreground">Configure a aparência global do sistema</p>
+                  </div>
+                </div>
 
-              {/* Tipo de Agendamento */}
-              <div className="space-y-2">
-                <Label htmlFor="schedule-type" className="text-xs font-medium text-foreground">
-                  Tipo de Agendamento
-                </Label>
-                <Select defaultValue="disabled">
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Desabilitado</SelectItem>
-                    <SelectItem value="enabled">Habilitado</SelectItem>
-                    <SelectItem value="automatic">Automático</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                {/* Logo Section */}
+                <div className="space-y-4">
+                  <h3 className="text-md font-medium text-foreground">Logo do Sistema</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <Label className="text-xs font-medium text-foreground">
+                        Upload de Logo
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoChange}
+                          disabled={loading || customizationLoading}
+                          className="flex-1"
+                        />
+                        {logoFile && (
+                          <Button 
+                            onClick={handleLogoUpload} 
+                            disabled={loading || customizationLoading}
+                            size="sm"
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            Upload
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="text-xs font-medium text-foreground">
+                        Preview
+                      </Label>
+                      <div className="w-32 h-20 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/50">
+                        {logoPreview ? (
+                          <img src={logoPreview} alt="Logo preview" className="max-w-full max-h-full object-contain" />
+                        ) : customization.logo_url ? (
+                          <img src={customization.logo_url} alt="Current logo" className="max-w-full max-h-full object-contain" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Nenhuma logo</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-              {/* Enviar Mensagens no Horário Comercial */}
-              <div className="space-y-2">
-                <Label htmlFor="business-hours" className="text-xs font-medium text-foreground">
-                  Enviar Mensagens no Horário Comercial
-                </Label>
-                <Select defaultValue="disabled">
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione a opção" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Desabilitado</SelectItem>
-                    <SelectItem value="enabled">Habilitado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                {/* Colors Section */}
+                <div className="space-y-4">
+                  <h3 className="text-md font-medium text-foreground">Cores do Sistema</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <ColorPicker
+                      label="Cor de Fundo"
+                      value={customization.background_color}
+                      onChange={(value) => handleCustomizationUpdate('background_color', value)}
+                      disabled={loading || customizationLoading}
+                    />
+                    <ColorPicker
+                      label="Cor Primária"
+                      value={customization.primary_color}
+                      onChange={(value) => handleCustomizationUpdate('primary_color', value)}
+                      disabled={loading || customizationLoading}
+                    />
+                    <ColorPicker
+                      label="Cor dos Headers"
+                      value={customization.header_color}
+                      onChange={(value) => handleCustomizationUpdate('header_color', value)}
+                      disabled={loading || customizationLoading}
+                    />
+                    <ColorPicker
+                      label="Cor da Sidebar"
+                      value={customization.sidebar_color}
+                      onChange={(value) => handleCustomizationUpdate('sidebar_color', value)}
+                      disabled={loading || customizationLoading}
+                    />
+                  </div>
+                </div>
 
-              {/* Enviar Saudação ao Aceitar */}
-              <div className="space-y-2">
-                <Label htmlFor="greeting-accept" className="text-xs font-medium text-foreground">
-                  Enviar Saudação ao Aceitar
-                </Label>
-                <Select defaultValue="disabled">
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione a opção" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Desabilitado</SelectItem>
-                    <SelectItem value="enabled">Habilitado</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t border-border">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleResetDefaults}
+                    disabled={loading || customizationLoading}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Restaurar Padrão
+                  </Button>
+                </div>
               </div>
-
-              {/* Enviar Saudação na Transferência */}
-              <div className="space-y-2">
-                <Label htmlFor="greeting-transfer" className="text-xs font-medium text-foreground">
-                  Enviar Saudação na Transferência
-                </Label>
-                <Select defaultValue="disabled">
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione a opção" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Desabilitado</SelectItem>
-                    <SelectItem value="enabled">Habilitado</SelectItem>
-                  </SelectContent>
-                </Select>
+            ) : (
+              <div className="text-center py-12">
+                <Palette className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">Acesso Restrito</h3>
+                <p className="text-muted-foreground">
+                  Apenas usuários master podem personalizar o sistema.
+                </p>
               </div>
-
-              {/* Sincronizar responsável da conversa com o negócio */}
-              <div className="space-y-2">
-                <Label htmlFor="sync-responsible" className="text-xs font-medium text-foreground">
-                  Sincronizar o responsável da conversa com o negócio
-                </Label>
-                <Select defaultValue="disabled">
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione a opção" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Desabilitado</SelectItem>
-                    <SelectItem value="enabled">Habilitado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Limite de Conexões */}
-              <div className="space-y-2">
-                <Label htmlFor="connection-limit" className="text-xs font-medium text-foreground">
-                  Limite de Conexões WhatsApp
-                </Label>
-                <Select 
-                  value={connectionLimit} 
-                  onValueChange={handleConnectionLimitChange}
-                  disabled={loading}
-                >
-                  <SelectTrigger className="w-full border-t-0 border-l-0 border-r-0 border-b border-muted-foreground/40 bg-transparent rounded-none pt-1.5 pb-2 pr-6 pl-0 text-sm text-foreground select-none cursor-pointer shadow-none focus:ring-0 focus:outline-none">
-                    <SelectValue placeholder="Selecione o limite" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 conexão</SelectItem>
-                    <SelectItem value="2">2 conexões</SelectItem>
-                    <SelectItem value="3">3 conexões</SelectItem>
-                    <SelectItem value="5">5 conexões</SelectItem>
-                    <SelectItem value="10">10 conexões</SelectItem>
-                    <SelectItem value="unlimited">Ilimitado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            )}
           </TabsContent>
 
           <TabsContent value="webhooks" className="p-0 mt-0">
