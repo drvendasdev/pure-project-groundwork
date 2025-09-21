@@ -174,17 +174,41 @@ serve(async (req) => {
     }
 
     // Get N8N webhook URL from workspace configuration
-    const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${conversation.workspace_id}`;
+    // Try workspace_webhook_settings first (new table)
+    console.log(`🔍 [${requestId}] Looking for webhook URL in workspace_webhook_settings`);
     
-    const { data: webhookData, error: webhookError } = await supabase
-      .from('workspace_webhook_secrets')
+    const { data: webhookSettings, error: settingsError } = await supabase
+      .from('workspace_webhook_settings')
       .select('webhook_url')
       .eq('workspace_id', conversation.workspace_id)
-      .eq('secret_name', workspaceWebhookSecretName)
       .maybeSingle();
 
-    if (webhookError || !webhookData?.webhook_url) {
-      console.error(`❌ [${requestId}] N8N webhook not configured for workspace ${conversation.workspace_id}`);
+    let n8nWebhookUrl = null;
+
+    if (!settingsError && webhookSettings?.webhook_url) {
+      n8nWebhookUrl = webhookSettings.webhook_url;
+      console.log(`✅ [${requestId}] Found webhook in settings table: ${n8nWebhookUrl.substring(0, 50)}...`);
+    } else {
+      // Fallback to workspace_webhook_secrets (old table)
+      console.log(`🔄 [${requestId}] Webhook not found in settings, trying secrets table (fallback)`);
+      
+      const workspaceWebhookSecretName = `N8N_WEBHOOK_URL_${conversation.workspace_id}`;
+      
+      const { data: webhookData, error: webhookError } = await supabase
+        .from('workspace_webhook_secrets')
+        .select('webhook_url')
+        .eq('workspace_id', conversation.workspace_id)
+        .eq('secret_name', workspaceWebhookSecretName)
+        .maybeSingle();
+
+      if (!webhookError && webhookData?.webhook_url) {
+        n8nWebhookUrl = webhookData.webhook_url;
+        console.log(`✅ [${requestId}] Found webhook in secrets table (fallback): ${n8nWebhookUrl.substring(0, 50)}...`);
+      }
+    }
+
+    if (!n8nWebhookUrl) {
+      console.error(`❌ [${requestId}] N8N webhook not configured for workspace ${conversation.workspace_id} in either table`);
       return new Response(JSON.stringify({
         error: 'N8N webhook not configured for this workspace'
       }), {
@@ -192,8 +216,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
-
-    const n8nWebhookUrl = webhookData.webhook_url;
 
     // Generate external_id for tracking
     const external_id = crypto.randomUUID();
@@ -253,120 +275,32 @@ serve(async (req) => {
     
     let n8nPayload: any;
 
-    // Se for imagem com file_url, enviar no formato base64 para N8N
+    // Se for mensagem de mídia com file_url, usar URL diretamente (já salva no Supabase Storage)
     if (message_type !== 'text' && file_url) {
-      console.log(`🖼️ [${requestId}] Processing image for base64 conversion: ${file_url}`);
+      console.log(`📁 [${requestId}] Using direct media URL: ${file_url} (type: ${message_type})`);
       
-      try {
-        // Baixar a imagem da URL
-        console.log(`📥 [${requestId}] Downloading image from: ${file_url}`);
-        const imageResponse = await fetch(file_url);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status} ${imageResponse.statusText}`);
-        }
-        
-        const imageArrayBuffer = await imageResponse.arrayBuffer();
-        console.log(`📊 [${requestId}] Downloaded ${imageArrayBuffer.byteLength} bytes`);
-        
-        // Detectar mimeType da resposta ou usar padrão
-        let mimeType = imageResponse.headers.get('content-type');
-        if (!mimeType) {
-          // Tentar detectar pelo nome do arquivo
-          if (file_name) {
-            const ext = file_name.split('.').pop()?.toLowerCase();
-            switch (ext) {
-              case 'jpg':
-              case 'jpeg':
-                mimeType = 'image/jpeg';
-                break;
-              case 'png':
-                mimeType = 'image/png';
-                break;
-              case 'gif':
-                mimeType = 'image/gif';
-                break;
-              case 'webp':
-                mimeType = 'image/webp';
-                break;
-              default:
-                mimeType = 'image/jpeg';
-            }
-          } else {
-            mimeType = 'image/jpeg'; // fallback
-          }
-        }
-        
-        console.log(`🎯 [${requestId}] Detected MIME type: ${mimeType}`);
-        
-        // Converter para base64 usando método seguro para imagens grandes
-        const uint8Array = new Uint8Array(imageArrayBuffer);
-        
-        // Converter para base64 usando método chunk-based para evitar stack overflow
-        let imageBase64;
-        try {
-          let binaryString = '';
-          const chunkSize = 8192; // Processar em chunks para evitar stack overflow
-          
-          for (let i = 0; i < uint8Array.length; i += chunkSize) {
-            const chunk = uint8Array.slice(i, i + chunkSize);
-            binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-          }
-          
-          imageBase64 = btoa(binaryString);
-          console.log(`✅ [${requestId}] Image converted to base64 successfully (${imageBase64.length} chars, original: ${uint8Array.length} bytes)`);
-        } catch (conversionError) {
-          console.error(`❌ [${requestId}] Base64 conversion failed:`, conversionError);
-          throw new Error(`Base64 conversion failed: ${conversionError.message}`);
-        }
-        
-        // Usar file_name fornecido ou extrair da URL
-        let fileName = file_name;
-        if (!fileName) {
-          const urlParts = file_url.split('/');
-          fileName = urlParts[urlParts.length - 1];
-        }
-        
-        // Formato específico para N8N com base64 (incluindo phone_number)
-        n8nPayload = {
-          messageId: external_id,
-          external_id: external_id, // Incluir external_id explicitamente
-          base64: imageBase64,
-          fileName: fileName,
-          mimeType: mimeType,
-          direction: 'outbound',
-          phone_number: contact.phone,
-          workspace_id: conversation.workspace_id,
-          conversation_id: conversation_id,
-          connection_id: actualConnectionId,
-          contact_id: conversation.contact_id,
-          instance: instance_name
-        };
-        
-        
-        
-      } catch (imageError) {
-        console.error(`❌ [${requestId}] Error processing image:`, imageError);
-        // Fallback para formato normal se conversão falhar
-        n8nPayload = {
-          direction: 'outbound',
-          external_id: external_id,
-          message_id: external_id,
-          phone_number: contact.phone,
-          message_type: message_type,
-          sender_type: sender_type || 'agent',
-          sender_id: sender_id,
-          file_url: file_url,
-          file_name: file_name,
-          workspace_id: conversation.workspace_id,
-          conversation_id: conversation_id,
-          connection_id: actualConnectionId,
-          contact_id: conversation.contact_id,
-          instance: instance_name,
-          source: 'test-send-msg',
-          timestamp: new Date().toISOString(),
-          request_id: requestId
-        };
-      }
+      // Formato para N8N com URL direta (sem base64)
+      n8nPayload = {
+        direction: 'outbound',
+        external_id: external_id,
+        message_id: external_id,
+        phone_number: contact.phone,
+        message_type: message_type,
+        sender_type: sender_type || 'agent',
+        sender_id: sender_id,
+        file_url: file_url, // ✅ URL direta do Supabase Storage
+        file_name: file_name,
+        mime_type: null, // Será detectado pelo N8N se necessário
+        workspace_id: conversation.workspace_id,
+        conversation_id: conversation_id,
+        connection_id: actualConnectionId,
+        contact_id: conversation.contact_id,
+        instance: instance_name,
+        source: 'test-send-msg',
+        timestamp: new Date().toISOString(),
+        request_id: requestId,
+        content: effectiveContent || ''
+      };
     } else {
       // Formato padrão para mensagens de texto
       n8nPayload = {
