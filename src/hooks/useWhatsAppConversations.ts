@@ -710,7 +710,7 @@ export const useWhatsAppConversations = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, []);
+  }, [selectedWorkspace?.workspace_id]); // ✅ CORREÇÃO: Adicionar dependency para recriar subscriptions quando workspace muda
 
   return {
     conversations,
