@@ -81,13 +81,24 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient<Database>(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
         global: {
           headers: { Authorization: req.headers.get('Authorization')! },
         },
       }
     );
+
+    // Set user context for RLS
+    const userEmail = req.headers.get('x-system-user-email');
+    const userId = req.headers.get('x-system-user-id');
+    
+    if (userEmail && userId) {
+      await supabaseClient.rpc('set_current_user_context', {
+        user_id: userId,
+        user_email: userEmail
+      });
+    }
 
     const { method } = req;
     const url = new URL(req.url);
