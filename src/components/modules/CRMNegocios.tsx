@@ -219,6 +219,14 @@ interface CRMNegociosProps {
 export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
   const { selectedWorkspace } = useWorkspace();
   const { pipelines, selectedPipeline, isLoading: isPipelinesLoading, createPipeline, selectPipeline } = usePipelines();
+  
+  // Debug log temporário
+  console.log('CRMNegocios Debug:', { 
+    pipelines, 
+    selectedPipeline, 
+    isPipelinesLoading,
+    pipelinesLength: pipelines.length 
+  });
   const { columns, isLoading: isColumnsLoading, createColumn } = usePipelineColumns(selectedPipeline?.id || null);
   const { cards, isLoading: isCardsLoading, moveCard, getCardsByColumn } = usePipelineCards(selectedPipeline?.id || null);
   
