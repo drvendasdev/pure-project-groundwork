@@ -124,7 +124,7 @@ export function AdministracaoConfiguracoes() {
       
       <div className="bg-card rounded-lg shadow-sm border border-border">
         <Tabs defaultValue="opcoes" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
+          <TabsList className="grid w-full grid-cols-3 bg-muted/50 rounded-t-lg rounded-b-none h-auto p-0">
             <TabsTrigger 
               value="opcoes" 
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
@@ -142,12 +142,6 @@ export function AdministracaoConfiguracoes() {
               className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
             >
               Evolution API
-            </TabsTrigger>
-            <TabsTrigger 
-              value="whitelabel" 
-              className="rounded-t-lg rounded-b-none py-4 px-6 text-sm font-medium uppercase tracking-wide data-[state=active]:bg-transparent data-[state=active]:text-brand-yellow data-[state=active]:border-b-2 data-[state=active]:border-brand-yellow data-[state=active]:shadow-none"
-            >
-              White Label
             </TabsTrigger>
           </TabsList>
           
@@ -285,11 +279,6 @@ export function AdministracaoConfiguracoes() {
             <EvolutionApiConfig />
           </TabsContent>
 
-          <TabsContent value="whitelabel" className="p-6 mt-0">
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">Configurações de White Label em desenvolvimento...</p>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
     </div>
