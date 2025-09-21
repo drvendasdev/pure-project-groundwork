@@ -974,6 +974,160 @@ export type Database = {
           },
         ]
       }
+      pipeline_cards: {
+        Row: {
+          column_id: string
+          contact_id: string | null
+          conversation_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          pipeline_id: string
+          status: string
+          tags: Json | null
+          title: string
+          updated_at: string
+          value: number | null
+        }
+        Insert: {
+          column_id: string
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          pipeline_id: string
+          status?: string
+          tags?: Json | null
+          title: string
+          updated_at?: string
+          value?: number | null
+        }
+        Update: {
+          column_id?: string
+          contact_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          pipeline_id?: string
+          status?: string
+          tags?: Json | null
+          title?: string
+          updated_at?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_cards_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_columns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_cards_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_cards_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_cards_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_columns: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          order_position: number
+          pipeline_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          order_position?: number
+          pipeline_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          order_position?: number
+          pipeline_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_columns_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipelines: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          type: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          type?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          type?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipelines_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipelines_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces_view"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
