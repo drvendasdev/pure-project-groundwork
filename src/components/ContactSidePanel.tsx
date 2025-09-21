@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { usePipelines } from "@/hooks/usePipelines";
+import { usePipelineColumns } from "@/hooks/usePipelineColumns";
+import { usePipelineCards } from "@/hooks/usePipelineCards";
+import { useToast } from "@/hooks/use-toast";
 
 interface Contact {
   id: string;
@@ -69,6 +72,15 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
   
   // Hook para buscar pipelines reais
   const { pipelines, isLoading: pipelinesLoading } = usePipelines();
+  
+  // Hook para buscar colunas do pipeline selecionado
+  const { columns, fetchColumns } = usePipelineColumns(selectedPipeline || null);
+  
+  // Hook para criar cards
+  const { createCard } = usePipelineCards(selectedPipeline || null);
+  
+  // Hook para toast
+  const { toast } = useToast();
 
   // Mock data para demonstração
   const [deals] = useState<Deal[]>([
@@ -107,15 +119,59 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
     }
   }, [contact]);
 
-  const handleSaveContact = () => {
+  const handleSaveContact = async () => {
     if (!editingContact) return;
     
-    // Aqui você implementaria a chamada para salvar os dados do contato
-    console.log('Salvando contato:', editingContact);
-    console.log('Campos personalizados:', customFields);
-    
-    // Por ora, apenas fecha o painel
-    onClose();
+    try {
+      // Aqui você implementaria a chamada para salvar os dados do contato
+      console.log('Salvando contato:', editingContact);
+      console.log('Campos personalizados:', customFields);
+      
+      // Se um pipeline foi selecionado, criar um card na primeira coluna
+      if (selectedPipeline && selectedPipeline !== 'no-pipelines') {
+        // Buscar as colunas do pipeline selecionado
+        await fetchColumns();
+        
+        // Encontrar a primeira coluna (menor order_position)
+        const firstColumn = columns.sort((a, b) => a.order_position - b.order_position)[0];
+        
+        if (firstColumn) {
+          await createCard({
+            column_id: firstColumn.id,
+            contact_id: contact.id,
+            title: contact.name,
+            description: `Contato: ${contact.phone}${contact.email ? ` - ${contact.email}` : ''}`,
+            value: 0,
+            status: 'aberto'
+          });
+          
+          toast({
+            title: "Sucesso",
+            description: "Dados salvos e card criado no pipeline!",
+          });
+        } else {
+          toast({
+            title: "Aviso",
+            description: "Pipeline selecionado não possui colunas. Dados salvos.",
+          });
+        }
+      } else {
+        toast({
+          title: "Sucesso", 
+          description: "Dados do contato salvos com sucesso",
+        });
+      }
+      
+      // Fecha o painel após salvar
+      onClose();
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar dados do contato",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAddCustomField = () => {
