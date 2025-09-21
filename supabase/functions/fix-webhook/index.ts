@@ -31,7 +31,7 @@ serve(async (req) => {
         'apikey': evolutionApiKey
       },
       body: JSON.stringify({
-        url: "https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-webhook",
+        url: "https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-webhook-v2",
         webhook_by_events: false,
         webhook_base64: false,
         events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "SEND_MESSAGE"]

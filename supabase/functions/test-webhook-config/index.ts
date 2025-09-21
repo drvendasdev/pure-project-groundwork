@@ -27,7 +27,7 @@ serve(async (req) => {
     console.log(`🔧 Instance: ${instanceName}`);
     console.log(`🔗 Evolution URL: ${evolutionUrl}`);
     
-    const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-webhook';
+    const webhookUrl = 'https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-webhook-v2';
     
     console.log(`🔧 Configuring webhook for instance: ${instanceName}`);
     console.log(`🔗 Webhook URL: ${webhookUrl}`);
@@ -60,7 +60,7 @@ serve(async (req) => {
       success: response.ok,
       status: response.status,
       response: result,
-      message: response.ok ? 'Webhook configurado corretamente para evolution-webhook' : 'Erro ao configurar webhook'
+      message: response.ok ? 'Webhook configurado corretamente para evolution-webhook-v2' : 'Erro ao configurar webhook'
     }), { 
       status: 200, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

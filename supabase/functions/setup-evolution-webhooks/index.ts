@@ -47,7 +47,7 @@ serve(async (req) => {
       });
     }
 
-    const webhookUrl = `${publicAppUrl}/functions/v1/evolution-webhook`;
+    const webhookUrl = `${publicAppUrl}/functions/v1/evolution-webhook-v2`;
     const results = [];
 
     for (const connection of connections) {

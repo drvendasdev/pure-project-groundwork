@@ -326,7 +326,7 @@ serve(async (req) => {
                 origem_resposta: 'automatica',
                 external_id: evolutionMessageId,
                 metadata: {
-                  source: 'evolution-webhook',
+                  source: 'evolution-webhook-v2',
                   evolution_data: messageData,
                   request_id: requestId,
                   message_flow: 'inbound_original'

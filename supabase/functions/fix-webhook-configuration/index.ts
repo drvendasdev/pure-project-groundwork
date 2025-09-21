@@ -57,8 +57,8 @@ serve(async (req) => {
 
     console.log(`📋 [${requestId}] Found ${connections.length} connections to fix`);
 
-    // Our webhook URL (Supabase function that routes to N8N)
-    const correctWebhookUrl = `${publicAppUrl}/functions/v1/evolution-webhook`;
+    // Our webhook URL (Supabase function that routes to N8N) - Use v2 for proper message routing
+    const correctWebhookUrl = `${publicAppUrl}/functions/v1/evolution-webhook-v2`;
     
     const results = [];
     let successCount = 0;

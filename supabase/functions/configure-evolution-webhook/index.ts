@@ -86,8 +86,8 @@ serve(async (req) => {
       });
     }
 
-    // Configure webhook in Evolution API
-    const webhookUrl = customWebhookUrl || `${publicAppUrl}/functions/v1/evolution-webhook`;
+    // Configure webhook in Evolution API - Use v2 for proper message routing
+    const webhookUrl = customWebhookUrl || `${publicAppUrl}/functions/v1/evolution-webhook-v2`;
     const events = customEvents || [
       'QRCODE_UPDATED',
       'CONNECTION_UPDATE',
