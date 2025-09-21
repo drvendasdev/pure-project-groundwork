@@ -153,12 +153,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       group: "crm"
     },
     {
-      id: "recursos-chats",
-      label: "Chats",
-      icon: <MessageSquare className="w-5 h-5" />,
-      group: "recursos"
-    },
-    {
       id: "recursos-agendamentos",
       label: "Agendamentos",
       icon: <Calendar className="w-5 h-5" />,
