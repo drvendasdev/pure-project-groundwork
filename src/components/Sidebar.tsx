@@ -153,24 +153,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       group: "crm"
     },
     {
-      id: "recursos-agendamentos",
-      label: "Agendamentos",
-      icon: <Calendar className="w-5 h-5" />,
-      group: "recursos"
-    },
-    {
-      id: "recursos-tarefas",
-      label: "Tarefas",
-      icon: <CheckSquare className="w-5 h-5" />,
-      group: "recursos"
-    },
-    {
-      id: "recursos-modelos",
-      label: "Modelos de Mensagens",
-      icon: <MessageSquare className="w-5 h-5" />,
-      group: "recursos"
-    },
-    {
       id: "automacoes-agente",
       label: "DS Agente",
       icon: <BrainCircuit className="w-5 h-5" />,
@@ -312,7 +294,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   const ungroupedItems = menuItems.filter(item => !item.group);
   const workspaceItems = menuItems.filter(item => item.group === "workspace");
   const crmItems = menuItems.filter(item => item.group === "crm");
-  const recursosItems = menuItems.filter(item => item.group === "recursos");
+  
   const automacoesItems = menuItems.filter(item => item.group === "automacoes");
   const parceirosItems = menuItems.filter(item => item.group === "parceiros");
   const administracaoItems = menuItems.filter(item => item.group === "administracao");
@@ -378,7 +360,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
         
         {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
         {renderGroup("crm", "CRM", crmItems)}
-        {renderGroup("recursos", "Recursos", recursosItems)}
+        
         {renderGroup("automacoes", "Automações", automacoesItems)}
         {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
       </nav>

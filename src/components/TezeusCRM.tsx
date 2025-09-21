@@ -11,10 +11,6 @@ import { CRMLigacoes } from "./modules/CRMLigacoes";
 import { CRMContatos } from "./modules/CRMContatos";
 import { CRMTags } from "./modules/CRMTags";
 import { CRMProdutos } from "./modules/CRMProdutos";
-import { RecursosChats } from "./modules/RecursosChats";
-import { RecursosAgendamentos } from "./modules/RecursosAgendamentos";
-import { RecursosTarefas } from "./modules/RecursosTarefas";
-import { RecursosModelos } from "./modules/RecursosModelos";
 import { DSAgente } from "./modules/DSAgente";
 import { EditarAgente } from "./modules/EditarAgente";
 import { AutomacoesBot } from "./modules/AutomacoesBot";
@@ -40,10 +36,6 @@ export type ModuleType =
   | "crm-contatos"
   | "crm-tags"
   | "crm-produtos"
-  | "recursos-chats"
-  | "recursos-agendamentos"
-  | "recursos-tarefas"
-  | "recursos-modelos"
   | "automacoes-agente"
   | "automacoes-bot"
   | "automacoes-integracoes"
@@ -133,14 +125,6 @@ export function TezeusCRM() {
         return <CRMTags />;
       case "crm-produtos":
         return <CRMProdutos />;
-      case "recursos-chats":
-        return <RecursosChats />;
-      case "recursos-agendamentos":
-        return <RecursosAgendamentos />;
-      case "recursos-tarefas":
-        return <RecursosTarefas />;
-      case "recursos-modelos":
-        return <RecursosModelos />;
       case "automacoes-agente":
         return <DSAgente />;
       case "automacoes-bot":

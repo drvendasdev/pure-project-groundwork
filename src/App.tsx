@@ -32,10 +32,6 @@ const App = () => (
             <Route path="/crm-contatos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/crm-tags" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/crm-produtos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-            <Route path="/recursos-chats" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-            <Route path="/recursos-agendamentos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-            <Route path="/recursos-tarefas" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
-            <Route path="/recursos-modelos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/automacoes-agente" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/automacoes-bot" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/automacoes-integracoes" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
