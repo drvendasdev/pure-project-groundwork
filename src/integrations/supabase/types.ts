@@ -1698,6 +1698,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      fix_phone_numbers_from_remote_jid: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          action_taken: string
+          contact_id: string
+          new_phone: string
+          old_phone: string
+          workspace_id: string
+        }[]
+      }
       get_current_user_profile: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -1789,6 +1799,10 @@ export type Database = {
           p_status: string
         }
         Returns: undefined
+      }
+      update_fixed_phone_numbers: {
+        Args: Record<PropertyKey, never>
+        Returns: number
       }
       verify_password: {
         Args: { hash: string; password: string }
