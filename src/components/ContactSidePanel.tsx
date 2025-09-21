@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { usePipelines } from "@/hooks/usePipelines";
 
 interface Contact {
   id: string;
@@ -65,6 +66,9 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
   const [newCustomField, setNewCustomField] = useState({ key: '', value: '' });
   const [newObservation, setNewObservation] = useState('');
   const [selectedPipeline, setSelectedPipeline] = useState('');
+  
+  // Hook para buscar pipelines reais
+  const { pipelines, isLoading: pipelinesLoading } = usePipelines();
 
   // Mock data para demonstração
   const [deals] = useState<Deal[]>([
@@ -322,17 +326,25 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
 
                   {/* Criar novo negócio */}
                   <div className="space-y-2">
-                    <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
+                    <Select value={selectedPipeline} onValueChange={setSelectedPipeline} disabled={pipelinesLoading}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecionar pipeline/negócio" />
+                        <SelectValue placeholder={pipelinesLoading ? "Carregando pipelines..." : "Selecionar pipeline/negócio"} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="vendas">Pipeline de Vendas</SelectItem>
-                        <SelectItem value="expansao">Pipeline de Expansão</SelectItem>
-                        <SelectItem value="suporte">Pipeline de Suporte</SelectItem>
+                        {pipelines.length > 0 ? (
+                          pipelines.map((pipeline) => (
+                            <SelectItem key={pipeline.id} value={pipeline.id}>
+                              {pipeline.name} ({pipeline.type})
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-pipelines" disabled>
+                            Nenhum pipeline encontrado
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm" disabled={!selectedPipeline}>
+                    <Button variant="outline" size="sm" disabled={!selectedPipeline || selectedPipeline === 'no-pipelines' || pipelinesLoading}>
                       <Plus className="h-4 w-4 mr-2" />
                       Criar novo negócio
                     </Button>
