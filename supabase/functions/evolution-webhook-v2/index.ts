@@ -24,6 +24,22 @@ function sanitizePhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
+function extractPhoneFromRemoteJid(remoteJid: string): string {
+  // Handle different WhatsApp remoteJid formats:
+  // @s.whatsapp.net (normal WhatsApp contacts)
+  // @lid (LinkedIn imported contacts or other sources)
+  // @g.us (group chats)
+  // @broadcast (broadcast lists)
+  console.log(`📱 Extracting phone from remoteJid: ${remoteJid}`);
+  
+  // Remove any WhatsApp suffix using regex
+  const phoneNumber = remoteJid.replace(/@(s\.whatsapp\.net|lid|g\.us|broadcast|c\.us)$/, '');
+  const sanitized = sanitizePhoneNumber(phoneNumber);
+  
+  console.log(`📱 Extracted phone: ${phoneNumber} -> sanitized: ${sanitized}`);
+  return sanitized;
+}
+
 serve(async (req) => {
   const requestId = generateRequestId();
   
@@ -113,8 +129,11 @@ serve(async (req) => {
       
       // Extract message data from Evolution webhook
       const messageData = payload.data;
-      const phoneNumber = messageData.key?.remoteJid?.replace('@s.whatsapp.net', '') || '';
+      const remoteJid = messageData.key?.remoteJid || '';
+      const phoneNumber = extractPhoneFromRemoteJid(remoteJid);
       const evolutionMessageId = messageData.key?.id;
+      
+      console.log(`📱 [${requestId}] RemoteJid processing: ${remoteJid} -> ${phoneNumber}`);
       
       // Check if this message already exists (prevent duplicates)
       const { data: existingMessage } = await supabase
@@ -142,7 +161,7 @@ serve(async (req) => {
                               messageData.message?.documentMessage?.caption ||
                               '📎 Arquivo';
         
-        const sanitizedPhone = phoneNumber.replace(/\D/g, '');
+        const sanitizedPhone = phoneNumber; // Already sanitized by extractPhoneFromRemoteJid
         
         if (sanitizedPhone && messageContent) {
           // Find or create contact
