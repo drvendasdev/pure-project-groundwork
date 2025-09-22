@@ -86,9 +86,9 @@ serve(async (req) => {
     const instanceName = payload.instance || payload.instanceName;
     console.log(`📊 [${requestId}] Instance: ${instanceName}, Event: ${payload.event}`);
     
-    // HANDLE MESSAGE ACKNOWLEDGMENT (read receipts)
-    if (payload.event === 'MESSAGE_ACK' && payload.data?.ack !== undefined) {
-      console.log(`📬 [${requestId}] Processing message acknowledgment: ack=${payload.data.ack}`);
+    // HANDLE MESSAGE ACKNOWLEDGMENT (read receipts) - Evolution API v2
+    if (payload.event === 'MESSAGES_UPDATE' && payload.data?.ack !== undefined) {
+      console.log(`📬 [${requestId}] Processing message update acknowledgment: ack=${payload.data.ack}`);
       
       const messageKey = payload.data.key;
       const ackLevel = payload.data.ack;
@@ -113,7 +113,14 @@ serve(async (req) => {
             break;
           default:
             console.log(`⚠️ [${requestId}] Unknown ACK level: ${ackLevel}`);
-            newStatus = 'sent';
+            return new Response(JSON.stringify({
+              success: true,
+              action: 'ack_ignored_unknown_level',
+              ack_level: ackLevel,
+              requestId
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
         }
         
         // Update message status in database
@@ -134,6 +141,18 @@ serve(async (req) => {
         } else if (updatedMessage) {
           console.log(`✅ [${requestId}] Message ${evolutionMessageId} status updated to: ${newStatus}`);
           console.log(`📊 [${requestId}] Updated message data:`, updatedMessage);
+          
+          // Return early for ACK processing - no need to forward to N8N
+          return new Response(JSON.stringify({
+            success: true,
+            action: 'message_ack_processed',
+            message_id: updatedMessage.id,
+            status: newStatus,
+            external_id: evolutionMessageId,
+            requestId
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         } else {
           console.log(`⚠️ [${requestId}] Message not found for ACK update: ${evolutionMessageId}`);
         }
