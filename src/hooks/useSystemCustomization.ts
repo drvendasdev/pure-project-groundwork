@@ -79,11 +79,33 @@ export function useSystemCustomization() {
   const applyCustomization = (config: SystemCustomization) => {
     const root = document.documentElement;
     
-    // Convert hex colors to HSL format for CSS variables
-    const backgroundHsl = hexToHsl(config.background_color);
-    const primaryHsl = hexToHsl(config.primary_color);
-    const headerHsl = hexToHsl(config.header_color);
-    const sidebarHsl = hexToHsl(config.sidebar_color);
+    // Function to process color values - handle both hex and HSL formats
+    const processColor = (colorValue: string): string => {
+      if (!colorValue) return '0 0% 50%';
+      
+      // If already in HSL format like "hsl(240, 10%, 3.9%)", extract the values
+      const hslMatch = colorValue.match(/hsl\(([^)]+)\)/);
+      if (hslMatch) {
+        const values = hslMatch[1].split(',').map(v => v.trim());
+        if (values.length === 3) {
+          return `${values[0]} ${values[1]} ${values[2]}`;
+        }
+      }
+      
+      // If hex format, convert to HSL
+      if (colorValue.startsWith('#')) {
+        return hexToHsl(colorValue);
+      }
+      
+      // Return as-is for other formats
+      return colorValue;
+    };
+    
+    // Process and apply colors
+    const backgroundHsl = processColor(config.background_color);
+    const primaryHsl = processColor(config.primary_color);
+    const headerHsl = processColor(config.header_color);
+    const sidebarHsl = processColor(config.sidebar_color);
     
     // Apply colors as CSS custom properties in correct HSL format
     root.style.setProperty('--background', backgroundHsl);
