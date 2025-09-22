@@ -548,10 +548,10 @@ export function CRMNegocios({
                 return (
                   <DroppableColumn key={column.id} id={`column-${column.id}`}>
                     <div className="w-60 sm:w-68 flex-shrink-0">
-                      <div 
-                        className={cn("bg-card rounded-lg border border-t-4 h-full flex flex-col", `border-t-[${column.color}]`)} 
-                        style={{ borderTopColor: column.color }}
-                      >
+                       <div 
+                         className={cn("bg-card rounded-lg border border-t-4 h-[600px] max-h-[80vh] flex flex-col", `border-t-[${column.color}]`)} 
+                         style={{ borderTopColor: column.color }}
+                       >
                         <div className="p-4 pb-3 flex-shrink-0">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
