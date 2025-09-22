@@ -1,22 +1,6 @@
 import React, { useState, useCallback } from "react";
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  DragOverEvent,
-  Active,
-  Over,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, closestCenter, DragOverEvent, Active, Over } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,47 +36,47 @@ interface Deal {
   product?: string;
   lastContact?: string;
 }
-
 interface DroppableColumnProps {
   children: React.ReactNode;
   id: string;
 }
-
-function DroppableColumn({ children, id }: DroppableColumnProps) {
-  const { isOver, setNodeRef } = useDroppable({
-    id: id,
+function DroppableColumn({
+  children,
+  id
+}: DroppableColumnProps) {
+  const {
+    isOver,
+    setNodeRef
+  } = useDroppable({
+    id: id
   });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`h-full ${isOver ? 'bg-blue-50' : ''}`}
-    >
+  return <div ref={setNodeRef} className={`h-full ${isOver ? 'bg-blue-50' : ''}`}>
       {children}
-    </div>
-  );
+    </div>;
 }
-
 interface DraggableDealProps {
   deal: Deal;
   isDarkMode?: boolean;
   onClick: () => void;
 }
-
-function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps) {
+function DraggableDeal({
+  deal,
+  isDarkMode = false,
+  onClick
+}: DraggableDealProps) {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
-    transition,
-  } = useSortable({ id: deal.id });
-
+    transition
+  } = useSortable({
+    id: deal.id
+  });
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition
   };
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -102,37 +86,15 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
 
   // Gerar iniciais do responsável para o avatar
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .substring(0, 2)
-      .toUpperCase();
+    return name.split(' ').map(word => word.charAt(0)).join('').substring(0, 2).toUpperCase();
   };
-
-  return (
-    <Card 
-      ref={setNodeRef} 
-      style={style} 
-      {...attributes} 
-      {...listeners}
-      className={cn(
-        "cursor-pointer hover:shadow-md transition-shadow mb-3 border-l-4",
-        isDarkMode 
-          ? "bg-card border-border" 
-          : "bg-card border-border"
-      )}
-      onClick={onClick}
-    >
+  return <Card ref={setNodeRef} style={style} {...attributes} {...listeners} className={cn("cursor-pointer hover:shadow-md transition-shadow mb-3 border-l-4", isDarkMode ? "bg-card border-border" : "bg-card border-border")} onClick={onClick}>
       <CardContent className="p-3">
         {/* Header com avatar, nome e valor */}
-        <div className="flex items-start gap-2 mb-2">
+        <div className="flex items-start gap-3 mb-3">
           {/* Avatar do responsável */}
           <div className="flex-shrink-0">
-            <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium",
-              "bg-gradient-to-br from-primary/20 to-primary/10 text-primary border border-primary/20"
-            )}>
+            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium", "bg-gradient-to-br from-primary/20 to-primary/10 text-primary border border-primary/20")}>
               {getInitials(deal.responsible)}
             </div>
           </div>
@@ -140,141 +102,88 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
           {/* Nome e valor */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between">
-              <h3 className={cn(
-                "text-xs font-medium truncate pr-2",
-                "text-foreground"
-              )}>
+              <h3 className={cn("text-sm font-medium truncate pr-2", "text-foreground")}>
                 {deal.name}
               </h3>
               <div className="flex-shrink-0">
-                <span className={cn(
-                  "text-xs font-semibold",
-                  "text-primary"
-                )}>
+                <span className={cn("text-sm font-semibold", "text-primary")}>
                   {formatCurrency(deal.value)}
                 </span>
               </div>
             </div>
             
             {/* Responsável */}
-            <p className={cn(
-              "text-[11px] mt-0.5",
-              "text-muted-foreground"
-            )}>
-              {deal.responsible}
-            </p>
+            
           </div>
         </div>
         
         {/* Área central para tags */}
         <div className="mb-3 min-h-[28px] flex items-center">
-          {deal.tags && deal.tags.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {deal.tags.slice(0, 3).map((tag, index) => (
-                <Badge 
-                  key={index} 
-                  variant="secondary"
-                  className={cn(
-                    "text-xs px-2 py-0.5 h-auto",
-                    "bg-secondary/50 text-secondary-foreground border border-border/50"
-                  )}
-                >
+          {deal.tags && deal.tags.length > 0 ? <div className="flex flex-wrap gap-1">
+              {deal.tags.slice(0, 3).map((tag, index) => <Badge key={index} variant="secondary" className={cn("text-xs px-2 py-0.5 h-auto", "bg-secondary/50 text-secondary-foreground border border-border/50")}>
                   {tag}
-                </Badge>
-              ))}
-              {deal.tags.length > 3 && (
-                <Badge 
-                  variant="outline"
-                  className="text-xs px-2 py-0.5 h-auto"
-                >
+                </Badge>)}
+              {deal.tags.length > 3 && <Badge variant="outline" className="text-xs px-2 py-0.5 h-auto">
                   +{deal.tags.length - 3}
-                </Badge>
-              )}
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground italic">
+                </Badge>}
+            </div> : <span className="text-xs text-muted-foreground italic">
               Sem tags
-            </span>
-          )}
+            </span>}
         </div>
         
         {/* Footer com ícones de ação e prioridade */}
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
           <div className="flex items-center gap-1">
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600" onClick={e => e.stopPropagation()}>
               <MessageCircle className="w-3.5 h-3.5" />
             </Button>
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600" onClick={e => e.stopPropagation()}>
               <Phone className="w-3.5 h-3.5" />
             </Button>
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              className="h-6 w-6 p-0 hover:bg-purple-100 hover:text-purple-600"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-purple-100 hover:text-purple-600" onClick={e => e.stopPropagation()}>
               <Calendar className="w-3.5 h-3.5" />
             </Button>
-            <Button 
-              size="icon" 
-              variant="ghost" 
-              className="h-6 w-6 p-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClick();
-              }}
-            >
+            <Button size="icon" variant="ghost" className="h-6 w-6 p-0" onClick={e => {
+            e.stopPropagation();
+            onClick();
+          }}>
               <MoreHorizontal className="w-3.5 h-3.5" />
             </Button>
           </div>
           
           <div className="flex items-center gap-2">
-            {deal.lastContact && (
-              <span className="text-xs text-muted-foreground">
+            {deal.lastContact && <span className="text-xs text-muted-foreground">
                 {deal.lastContact}
-              </span>
-            )}
-            {deal.priority === 'high' && (
-              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-600">
+              </span>}
+            {deal.priority === 'high' && <div className="flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-600">
                 <AlertTriangle className="w-3 h-3" />
-              </div>
-            )}
+              </div>}
           </div>
         </div>
       </CardContent>
-    </Card>
-  );
+    </Card>;
 }
-
 interface CRMNegociosProps {
   isDarkMode?: boolean;
 }
-
-export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
-  const { selectedWorkspace } = useWorkspace();
-  const { 
-    pipelines, 
-    selectedPipeline, 
+export function CRMNegocios({
+  isDarkMode = false
+}: CRMNegociosProps) {
+  const {
+    selectedWorkspace
+  } = useWorkspace();
+  const {
+    pipelines,
+    selectedPipeline,
     columns,
     cards,
-    isLoading, 
+    isLoading,
     createPipeline,
     selectPipeline,
     createColumn,
     moveCard,
-    getCardsByColumn 
+    getCardsByColumn
   } = usePipelinesContext();
-  
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -285,14 +194,11 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
   const [isDealDetailsModalOpen, setIsDealDetailsModalOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8
+    }
+  }));
 
   // Função para formatar valores monetários
   const formatCurrency = (value: number) => {
@@ -306,31 +212,27 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
   const getFilteredCards = (columnId: string) => {
     const columnCards = getCardsByColumn(columnId);
     if (!searchTerm) return columnCards;
-    
-    return columnCards.filter(card => 
-      card.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      card.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    return columnCards.filter(card => card.title.toLowerCase().includes(searchTerm.toLowerCase()) || card.description?.toLowerCase().includes(searchTerm.toLowerCase()));
   };
-
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   }, []);
-
   const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { over } = event;
+    const {
+      over
+    } = event;
     if (over && over.id.toString().startsWith('column-')) {
       setDragOverColumn(over.id.toString().replace('column-', ''));
     } else {
       setDragOverColumn(null);
     }
   }, []);
-
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event;
-    
+    const {
+      active,
+      over
+    } = event;
     if (!over) return;
-
     const activeId = active.id as string;
     const overId = over.id as string;
 
@@ -340,7 +242,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
 
     // Determinar a nova coluna baseado no over
     let newColumnId = overId;
-    
+
     // Se over é outro card, usar a coluna desse card
     if (overId.startsWith('card-')) {
       const overCard = cards.find(card => `card-${card.id}` === overId);
@@ -357,130 +259,68 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
     if (activeCard.column_id !== newColumnId) {
       await moveCard(activeCard.id, newColumnId);
     }
-
     setActiveId(null);
     setDragOverColumn(null);
   }, [cards, moveCard]);
-
   const openCardDetails = (card: any) => {
     setSelectedCard(card);
     setIsDealDetailsModalOpen(true);
   };
-
   const handlePipelineCreate = async (nome: string, tipo: string) => {
     await createPipeline(nome, tipo);
   };
-
   const handleColumnCreate = async (nome: string, cor: string) => {
     await createColumn(nome, cor);
   };
-
   if (!selectedWorkspace) {
-    return (
-      <div className="flex items-center justify-center h-64">
+    return <div className="flex items-center justify-center h-64">
         <p className="text-muted-foreground">Selecione um workspace para continuar</p>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragOver={handleDragOver}
-    >
+  return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver}>
       <main className="min-h-screen flex flex-col max-w-[78vw]">
         
         {/* CARD DE FILTROS */}
         <div className="sticky top-0 z-10 p-4">
-          <div className={cn(
-            "flex items-center bg-background border rounded-lg p-3 shadow-sm",
-            isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white border-gray-200"
-          )}>
+          <div className={cn("flex items-center bg-background border rounded-lg p-3 shadow-sm", isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white border-gray-200")}>
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {/* Settings Button */}
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className={cn(
-                  "h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0",
-                  isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10"
-                )}
-                onClick={() => setIsConfigModalOpen(true)}
-                disabled={!selectedPipeline}
-              >
+              <Button size="icon" variant="ghost" className={cn("h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0", isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10")} onClick={() => setIsConfigModalOpen(true)} disabled={!selectedPipeline}>
                 <Settings className="w-5 h-5" />
               </Button>
               
               {/* Pipeline Select */}
               <div className="min-w-[200px] mr-2 flex-shrink-0">
-                {isLoading ? (
-                  <Skeleton className="h-10 w-full" />
-                ) : (
-                  <Select 
-                    value={selectedPipeline?.id || ""} 
-                    onValueChange={(value) => {
-                      const pipeline = pipelines.find(p => p.id === value);
-                      if (pipeline) selectPipeline(pipeline);
-                    }}
-                  >
-                    <SelectTrigger className={cn(
-                      "h-10 border-gray-300 focus:border-primary focus:ring-primary",
-                      isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white"
-                    )}>
+                {isLoading ? <Skeleton className="h-10 w-full" /> : <Select value={selectedPipeline?.id || ""} onValueChange={value => {
+                const pipeline = pipelines.find(p => p.id === value);
+                if (pipeline) selectPipeline(pipeline);
+              }}>
+                    <SelectTrigger className={cn("h-10 border-gray-300 focus:border-primary focus:ring-primary", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")}>
                       <SelectValue placeholder="Selecione um pipeline" />
                     </SelectTrigger>
                     <SelectContent>
-                      {pipelines.map((pipeline) => (
-                        <SelectItem key={pipeline.id} value={pipeline.id}>
+                      {pipelines.map(pipeline => <SelectItem key={pipeline.id} value={pipeline.id}>
                           <span className="font-bold">{pipeline.name}</span>
-                        </SelectItem>
-                      ))}
+                        </SelectItem>)}
                     </SelectContent>
-                  </Select>
-                )}
+                  </Select>}
               </div>
               
               {/* Plus Button */}
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className={cn(
-                  "h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0",
-                  isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10"
-                )}
-                onClick={() => setIsCriarPipelineModalOpen(true)}
-              >
+              <Button size="icon" variant="ghost" className={cn("h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0", isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10")} onClick={() => setIsCriarPipelineModalOpen(true)}>
                 <Plus className="w-5 h-5" />
               </Button>
 
               {/* Filtrar Button */}
               <div className="relative flex-shrink-0">
-                <Button 
-                  size="sm" 
-                  className={cn(
-                    "bg-warning text-black hover:bg-warning/90 font-medium",
-                    isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500"
-                  )}
-                  onClick={() => setIsFilterModalOpen(true)}
-                  disabled={!selectedPipeline}
-                >
+                <Button size="sm" className={cn("bg-warning text-black hover:bg-warning/90 font-medium", isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500")} onClick={() => setIsFilterModalOpen(true)} disabled={!selectedPipeline}>
                   <Filter className="w-4 h-4 mr-2" />
                   Filtrar
                 </Button>
               </div>
               
               {/* Visualizar mensagens Button */}
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                className={cn(
-                  "text-blue-600 hover:bg-blue-50 font-normal flex-shrink-0",
-                  isDarkMode ? "text-blue-400 hover:bg-blue-900/20" : "text-blue-600 hover:bg-blue-50"
-                )}
-              >
+              <Button size="sm" variant="ghost" className={cn("text-blue-600 hover:bg-blue-50 font-normal flex-shrink-0", isDarkMode ? "text-blue-400 hover:bg-blue-900/20" : "text-blue-600 hover:bg-blue-50")}>
                 <span className="text-[10px] font-light leading-[1.66]">
                   Visualizar mensagens
                 </span>
@@ -489,19 +329,8 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
               
               {/* Search Input */}
               <div className="relative flex-shrink-0 flex-1 max-w-xs">
-                <Search className={cn(
-                  "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4",
-                  isDarkMode ? "text-gray-400" : "text-gray-500"
-                )} />
-                <Input 
-                  placeholder="Buscar negócios..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className={cn(
-                    "pl-10 h-10 border-gray-300 bg-transparent",
-                    isDarkMode ? "border-gray-600 text-white placeholder:text-gray-400" : ""
-                  )}
-                />
+                <Search className={cn("absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4", isDarkMode ? "text-gray-400" : "text-gray-500")} />
+                <Input placeholder="Buscar negócios..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className={cn("pl-10 h-10 border-gray-300 bg-transparent", isDarkMode ? "border-gray-600 text-white placeholder:text-gray-400" : "")} />
               </div>
               
               {/* Avatar Group */}
@@ -519,27 +348,16 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
             </div>
             
             {/* + Coluna Button - Only show if pipeline exists */}
-            {selectedPipeline && (
-              <Button 
-                size="sm" 
-                className={cn(
-                  "bg-warning text-black hover:bg-warning/90 font-medium ml-4 flex-shrink-0",
-                  isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500"
-                )}
-                onClick={() => setIsAddColumnModalOpen(true)}
-              >
+            {selectedPipeline && <Button size="sm" className={cn("bg-warning text-black hover:bg-warning/90 font-medium ml-4 flex-shrink-0", isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500")} onClick={() => setIsAddColumnModalOpen(true)}>
                 + Coluna
-              </Button>
-            )}
+              </Button>}
           </div>
         </div>
 
         {/* CONTAINER DO PIPELINE */}
         <div className="flex-1 overflow-x-auto overflow-y-auto p-2">
-          {isLoading ? (
-            <div className="flex gap-2 sm:gap-4 h-full min-w-full">
-              {[...Array(4)].map((_, index) => (
-                <div key={index} className="w-60 sm:w-68 flex-shrink-0">
+          {isLoading ? <div className="flex gap-2 sm:gap-4 h-full min-w-full">
+              {[...Array(4)].map((_, index) => <div key={index} className="w-60 sm:w-68 flex-shrink-0">
                   <div className="bg-card rounded-lg border border-t-4 border-t-gray-400 h-full">
                     <div className="p-4 pb-3">
                       <div className="flex items-center justify-between">
@@ -552,8 +370,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
                       </div>
                     </div>
                     <div className="p-3 pt-0 space-y-3">
-                      {[...Array(3)].map((_, cardIndex) => (
-                        <div key={cardIndex} className="bg-muted/20 rounded-lg p-4 space-y-2">
+                      {[...Array(3)].map((_, cardIndex) => <div key={cardIndex} className="bg-muted/20 rounded-lg p-4 space-y-2">
                           <Skeleton className="h-5 w-full" />
                           <Skeleton className="h-4 w-3/4" />
                           <Skeleton className="h-4 w-1/2" />
@@ -561,15 +378,11 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
                             <Skeleton className="h-4 w-16" />
                             <Skeleton className="h-4 w-20" />
                           </div>
-                        </div>
-                      ))}
+                        </div>)}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : !selectedPipeline ? (
-            <div className="flex items-center justify-center h-64 border-2 border-dashed border-border rounded-lg">
+                </div>)}
+            </div> : !selectedPipeline ? <div className="flex items-center justify-center h-64 border-2 border-dashed border-border rounded-lg">
               <div className="text-center">
                 <p className="text-muted-foreground mb-4">Nenhum pipeline selecionado</p>
                 <Button onClick={() => setIsCriarPipelineModalOpen(true)}>
@@ -577,43 +390,26 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
                   Criar Pipeline
                 </Button>
               </div>
-            </div>
-          ) : (
-            <div 
-              className="flex gap-2 sm:gap-4 h-full"
-              style={{ 
-                width: `${columns.length * 272}px`, 
-                minWidth: '100%' 
-              }}
-            >
-              {columns.map((column) => {
-                const columnCards = getFilteredCards(column.id);
-                
-                return (
-                  <div 
-                    key={column.id} 
-                    className="w-60 sm:w-68 flex-shrink-0" 
-                    style={{ height: 'calc(100vh - 200px)' }}
-                  >
+            </div> : <div className="flex gap-2 sm:gap-4 h-full" style={{
+          width: `${columns.length * 272}px`,
+          minWidth: '100%'
+        }}>
+              {columns.map(column => {
+            const columnCards = getFilteredCards(column.id);
+            return <div key={column.id} className="w-60 sm:w-68 flex-shrink-0" style={{
+              height: 'calc(100vh - 200px)'
+            }}>
                     <DroppableColumn id={`column-${column.id}`}>
-                      <Card 
-                        className={cn(
-                          "h-full border-t-4",
-                          isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white border-gray-200"
-                        )}
-                        style={{borderTopColor: column.color}}
-                      >
+                      <Card className={cn("h-full border-t-4", isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white border-gray-200")} style={{
+                  borderTopColor: column.color
+                }}>
                         <CardHeader className="pb-3 px-3 sm:px-6">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: column.color }}
-                              />
-                              <CardTitle className={cn(
-                                "text-sm font-medium",
-                                isDarkMode ? "text-white" : "text-gray-900"
-                              )}>
+                              <div className="w-3 h-3 rounded-full" style={{
+                          backgroundColor: column.color
+                        }} />
+                              <CardTitle className={cn("text-sm font-medium", isDarkMode ? "text-white" : "text-gray-900")}>
                                 {column.name}
                               </CardTitle>
                               <Badge variant="secondary" className="text-xs">
@@ -626,110 +422,68 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
                           </div>
                         </CardHeader>
                         
-                        <CardContent className="p-3 pt-0 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                        <CardContent className="p-3 pt-0 overflow-y-auto" style={{
+                    maxHeight: 'calc(100vh - 280px)'
+                  }}>
                           <SortableContext items={columnCards.map(card => `card-${card.id}`)} strategy={verticalListSortingStrategy}>
                             <div className="space-y-3">
-                              {columnCards.map((card) => (
-                                <DraggableDeal
-                                  key={card.id}
-                                  deal={{
-                                    id: `card-${card.id}`,
-                                    name: card.title,
-                                    value: card.value,
-                                    stage: column.id,
-                                    responsible: card.contact?.name || 'N/A',
-                                    tags: card.tags || [],
-                                    priority: 'medium' as const,
-                                    product: card.description || '',
-                                    lastContact: new Date(card.created_at).toLocaleDateString('pt-BR')
-                                  }}
-                                  isDarkMode={isDarkMode}
-                                  onClick={() => openCardDetails(card)}
-                                />
-                              ))}
+                              {columnCards.map(card => <DraggableDeal key={card.id} deal={{
+                          id: `card-${card.id}`,
+                          name: card.title,
+                          value: card.value,
+                          stage: column.id,
+                          responsible: card.contact?.name || 'N/A',
+                          tags: card.tags || [],
+                          priority: 'medium' as const,
+                          product: card.description || '',
+                          lastContact: new Date(card.created_at).toLocaleDateString('pt-BR')
+                        }} isDarkMode={isDarkMode} onClick={() => openCardDetails(card)} />)}
                             </div>
                           </SortableContext>
                         </CardContent>
                       </Card>
                     </DroppableColumn>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </div>;
+          })}
+            </div>}
         </div>
         
         <DragOverlay>
           {activeId && (() => {
-            const activeCard = cards.find(card => `card-${card.id}` === activeId);
-            if (!activeCard) return null;
-            
-            const column = columns.find(col => col.id === activeCard.column_id);
-            return (
-              <DraggableDeal 
-                deal={{
-                  id: `card-${activeCard.id}`,
-                  name: activeCard.title,
-                  value: activeCard.value,
-                  stage: column?.id || '',
-                  responsible: activeCard.contact?.name || 'N/A',
-                  tags: activeCard.tags || [],
-                  priority: 'medium' as const,
-                  product: activeCard.description || '',
-                  lastContact: new Date(activeCard.created_at).toLocaleDateString('pt-BR')
-                }}
-                isDarkMode={isDarkMode} 
-                onClick={() => {}}
-              />
-            );
-          })()}
+          const activeCard = cards.find(card => `card-${card.id}` === activeId);
+          if (!activeCard) return null;
+          const column = columns.find(col => col.id === activeCard.column_id);
+          return <DraggableDeal deal={{
+            id: `card-${activeCard.id}`,
+            name: activeCard.title,
+            value: activeCard.value,
+            stage: column?.id || '',
+            responsible: activeCard.contact?.name || 'N/A',
+            tags: activeCard.tags || [],
+            priority: 'medium' as const,
+            product: activeCard.description || '',
+            lastContact: new Date(activeCard.created_at).toLocaleDateString('pt-BR')
+          }} isDarkMode={isDarkMode} onClick={() => {}} />;
+        })()}
         </DragOverlay>
       </main>
 
       {/* Modais */}
-      <AddColumnModal
-        open={isAddColumnModalOpen}
-        onOpenChange={setIsAddColumnModalOpen}
-        onAddColumn={handleColumnCreate}
-        isDarkMode={isDarkMode}
-      />
+      <AddColumnModal open={isAddColumnModalOpen} onOpenChange={setIsAddColumnModalOpen} onAddColumn={handleColumnCreate} isDarkMode={isDarkMode} />
 
-      <PipelineConfigModal
-        open={isConfigModalOpen}
-        onOpenChange={setIsConfigModalOpen}
-        onColumnsReorder={(newOrder) => {
-          // Implementar reordenação se necessário
-        }}
-      />
+      <PipelineConfigModal open={isConfigModalOpen} onOpenChange={setIsConfigModalOpen} onColumnsReorder={newOrder => {
+      // Implementar reordenação se necessário
+    }} />
 
-      <FilterModal
-        open={isFilterModalOpen}
-        onOpenChange={setIsFilterModalOpen}
-      />
+      <FilterModal open={isFilterModalOpen} onOpenChange={setIsFilterModalOpen} />
 
-      <CriarPipelineModal
-        isOpen={isCriarPipelineModalOpen}
-        onClose={() => setIsCriarPipelineModalOpen(false)}
-        onSave={handlePipelineCreate}
-      />
+      <CriarPipelineModal isOpen={isCriarPipelineModalOpen} onClose={() => setIsCriarPipelineModalOpen(false)} onSave={handlePipelineCreate} />
 
-      <CriarNegocioModal
-        isOpen={isCriarNegocioModalOpen}
-        onClose={() => setIsCriarNegocioModalOpen(false)}
-        onCreateBusiness={(negocio) => {
-          // Implementar criação de card baseado no negócio
-          setIsCriarNegocioModalOpen(false);
-        }}
-        isDarkMode={isDarkMode}
-      />
+      <CriarNegocioModal isOpen={isCriarNegocioModalOpen} onClose={() => setIsCriarNegocioModalOpen(false)} onCreateBusiness={negocio => {
+      // Implementar criação de card baseado no negócio
+      setIsCriarNegocioModalOpen(false);
+    }} isDarkMode={isDarkMode} />
 
-      <DealDetailsModal
-        isOpen={isDealDetailsModalOpen}
-        onClose={() => setIsDealDetailsModalOpen(false)}
-        dealName={selectedCard?.title || ""}
-        contactNumber={selectedCard?.contact?.phone || ""}
-        isDarkMode={isDarkMode}
-      />
-    </DndContext>
-  );
+      <DealDetailsModal isOpen={isDealDetailsModalOpen} onClose={() => setIsDealDetailsModalOpen(false)} dealName={selectedCard?.title || ""} contactNumber={selectedCard?.contact?.phone || ""} isDarkMode={isDarkMode} />
+    </DndContext>;
 }
