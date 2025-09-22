@@ -51,11 +51,11 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
   const { canCreateConnections } = useWorkspaceRole();
   
-  // Calculate current usage based on loaded connections
-  const currentUsage = {
-    current: connections.length,
-    limit: usage?.limit || 1,
-    canCreateMore: connections.length < (usage?.limit || 1)
+  // Use the actual usage data from the backend
+  const currentUsage = usage || {
+    current: 0,
+    limit: 1,
+    canCreateMore: false
   };
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
