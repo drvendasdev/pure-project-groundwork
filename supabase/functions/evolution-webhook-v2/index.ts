@@ -86,6 +86,60 @@ serve(async (req) => {
     const instanceName = payload.instance || payload.instanceName;
     console.log(`📊 [${requestId}] Instance: ${instanceName}, Event: ${payload.event}`);
     
+    // HANDLE MESSAGE ACKNOWLEDGMENT (read receipts)
+    if (payload.event === 'MESSAGE_ACK' && payload.data?.ack !== undefined) {
+      console.log(`📬 [${requestId}] Processing message acknowledgment: ack=${payload.data.ack}`);
+      
+      const messageKey = payload.data.key;
+      const ackLevel = payload.data.ack;
+      const evolutionMessageId = messageKey?.id;
+      
+      if (evolutionMessageId) {
+        // Map Evolution ACK levels to our message status
+        let newStatus: string;
+        let timestampField: string | null = null;
+        
+        switch (ackLevel) {
+          case 1:
+            newStatus = 'sent';
+            break;
+          case 2:
+            newStatus = 'delivered';
+            timestampField = 'delivered_at';
+            break;
+          case 3:
+            newStatus = 'read';
+            timestampField = 'read_at';
+            break;
+          default:
+            console.log(`⚠️ [${requestId}] Unknown ACK level: ${ackLevel}`);
+            newStatus = 'sent';
+        }
+        
+        // Update message status in database
+        const updateData: any = { status: newStatus };
+        if (timestampField) {
+          updateData[timestampField] = new Date().toISOString();
+        }
+        
+        const { data: updatedMessage, error: updateError } = await supabase
+          .from('messages')
+          .update(updateData)
+          .eq('external_id', evolutionMessageId)
+          .select('id, conversation_id, workspace_id')
+          .maybeSingle();
+          
+        if (updateError) {
+          console.error(`❌ [${requestId}] Error updating message status:`, updateError);
+        } else if (updatedMessage) {
+          console.log(`✅ [${requestId}] Message ${evolutionMessageId} status updated to: ${newStatus}`);
+          console.log(`📊 [${requestId}] Updated message data:`, updatedMessage);
+        } else {
+          console.log(`⚠️ [${requestId}] Message not found for ACK update: ${evolutionMessageId}`);
+        }
+      }
+    }
+    
     // Get workspace_id and webhook details from database
     let workspaceId = null;
     let webhookUrl = null;

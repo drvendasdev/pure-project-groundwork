@@ -329,7 +329,7 @@ export const useWhatsAppConversations = () => {
                   content,
                   sender_type: 'agent',
                   created_at: sendResult.message.created_at || new Date().toISOString(),
-                  status: 'sent',
+                  status: 'sending',
                   message_type: messageType as 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker',
                   file_url: fileUrl,
                   file_name: fileName,
