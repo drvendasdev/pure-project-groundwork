@@ -24,31 +24,55 @@ export function useSystemCustomization() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Convert hex to HSL for CSS variables
+  // Convert hex to HSL for CSS variables with validation
   const hexToHsl = (hex: string): string => {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    let h, s, l = (max + min) / 2;
-    
-    if (max === min) {
-      h = s = 0;
-    } else {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-      switch (max) {
-        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-        case g: h = (b - r) / d + 2; break;
-        case b: h = (r - g) / d + 4; break;
-        default: h = 0;
+    try {
+      // Ensure hex is valid format
+      if (!hex || !hex.startsWith('#') || hex.length !== 7) {
+        console.warn('⚠️ Invalid hex color format:', hex);
+        return '0 0% 50%'; // Return neutral gray as fallback
       }
-      h /= 6;
+
+      const r = parseInt(hex.slice(1, 3), 16) / 255;
+      const g = parseInt(hex.slice(3, 5), 16) / 255;
+      const b = parseInt(hex.slice(5, 7), 16) / 255;
+      
+      // Validate RGB values
+      if (isNaN(r) || isNaN(g) || isNaN(b)) {
+        console.warn('⚠️ Invalid RGB values from hex:', hex);
+        return '0 0% 50%';
+      }
+      
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      
+      if (max === min) {
+        h = s = 0; // achromatic (gray)
+      } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+          default: h = 0;
+        }
+        h /= 6;
+      }
+      
+      // Ensure no NaN values
+      const hue = isNaN(h) ? 0 : Math.round(h * 360);
+      const saturation = isNaN(s) ? 0 : Math.round(s * 100);
+      const lightness = isNaN(l) ? 50 : Math.round(l * 100);
+      
+      const result = `${hue} ${saturation}% ${lightness}%`;
+      console.log('🎨 Converted', hex, 'to HSL:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Error converting hex to HSL:', error);
+      return '0 0% 50%'; // Safe fallback
     }
-    
-    return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
   };
 
   // Apply customization to CSS variables
