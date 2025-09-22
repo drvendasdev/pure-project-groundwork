@@ -83,7 +83,7 @@ function DraggableDeal({
     transform,
     transition
   } = useSortable({
-    id: deal.id
+    id: `card-${deal.id}`
   });
   
   const style = {
