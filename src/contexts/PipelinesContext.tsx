@@ -124,7 +124,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
       setPipelines(data || []);
       
       // Auto-select first pipeline if none selected and we have pipelines
-      if (data?.length > 0) {
+      if (data?.length > 0 && !selectedPipeline) {
         console.log('🎯 Auto-selecting first pipeline:', data[0].name);
         setSelectedPipeline(data[0]);
       }
@@ -138,7 +138,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [getHeaders, selectedPipeline, toast]);
+  }, [getHeaders, toast]);
 
   const fetchColumns = useCallback(async (pipelineId: string) => {
     if (!getHeaders || !pipelineId) return;
