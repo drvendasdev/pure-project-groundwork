@@ -98,6 +98,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   const fetchPipelines = useCallback(async () => {
     console.log('📊 Starting fetchPipelines...');
+    console.log('🏢 Current workspace:', selectedWorkspace);
     
     if (!getHeaders) {
       console.warn('⚠️ Cannot fetch pipelines: headers not available');
@@ -323,10 +324,18 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   // Buscar pipelines quando o workspace mudar
   useEffect(() => {
+    console.log('🔄 Workspace effect triggered:', selectedWorkspace?.workspace_id);
+    console.log('🏢 Current workspace object:', selectedWorkspace);
+    console.log('🔑 Headers available:', !!getHeaders);
     if (selectedWorkspace?.workspace_id && getHeaders) {
+      console.log('✅ Fetching pipelines for workspace:', selectedWorkspace.workspace_id);
       fetchPipelines();
+    } else {
+      console.log('⚠️ No workspace selected or no headers, clearing pipelines');
+      setPipelines([]);
+      setSelectedPipeline(null);
     }
-  }, [selectedWorkspace?.workspace_id, fetchPipelines]);
+  }, [selectedWorkspace?.workspace_id, getHeaders, fetchPipelines]);
 
   // Buscar colunas e cards quando o pipeline selecionado mudar
   useEffect(() => {
