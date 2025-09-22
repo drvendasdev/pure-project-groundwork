@@ -600,6 +600,9 @@ export function CRMNegocios({
                                 />
                               );
                             })}
+                            
+                            {/* Invisible drop zone for empty columns and bottom of lists */}
+                            <div className="min-h-[40px] w-full" />
                           </SortableContext>
                         </div>
                       </div>
