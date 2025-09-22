@@ -282,7 +282,9 @@ serve(async (req) => {
           "CONNECTION_UPDATE",
           "MESSAGES_UPSERT",
           "MESSAGES_UPDATE",
-          "SEND_MESSAGE"
+          "SEND_MESSAGE",
+          "CONTACTS_UPDATE",
+          "CONTACTS_UPSERT"
         ]
       }
     }
