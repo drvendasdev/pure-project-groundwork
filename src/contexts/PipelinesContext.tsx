@@ -68,33 +68,56 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   // Estabilizar a função getHeaders para evitar re-renders desnecessários
   const getHeaders = useMemo(() => {
-    if (!selectedWorkspace?.workspace_id) return null;
+    console.log('🔄 Regenerando pipeline headers...');
+    
+    if (!selectedWorkspace?.workspace_id) {
+      console.warn('⚠️ No workspace selected for pipeline operations');
+      return null;
+    }
     
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    if (!currentUserData?.id) return null;
+    if (!currentUserData?.id) {
+      console.warn('⚠️ No user data available for pipeline operations');
+      return null;
+    }
 
-    return {
+    const headers = {
       'x-system-user-id': currentUserData.id,
       'x-system-user-email': currentUserData.email || '',
       'x-workspace-id': selectedWorkspace.workspace_id
     };
+    
+    console.log('✅ Pipeline headers generated:', headers);
+    
+    return headers;
   }, [selectedWorkspace?.workspace_id]);
 
   const fetchPipelines = useCallback(async () => {
-    if (!getHeaders) return;
+    console.log('📊 Starting fetchPipelines...');
+    
+    if (!getHeaders) {
+      console.warn('⚠️ Cannot fetch pipelines: headers not available');
+      setIsLoading(false);
+      return;
+    }
     
     try {
       setIsLoading(true);
+      console.log('🔄 Fetching pipelines with headers:', getHeaders);
       
       const { data, error } = await supabase.functions.invoke('pipeline-management/pipelines', {
         method: 'GET',
         headers: getHeaders
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Pipeline fetch error:', error);
+        throw error;
+      }
 
+      console.log('✅ Pipelines fetched successfully:', data?.length || 0, 'pipelines');
       setPipelines(data || []);
       
       // Auto-select first pipeline if none selected
@@ -102,10 +125,10 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
         setSelectedPipeline(data[0]);
       }
     } catch (error) {
-      console.error('Error fetching pipelines:', error);
+      console.error('❌ Error fetching pipelines:', error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar pipelines",
+        description: "Erro ao carregar pipelines. Verifique sua conexão.",
         variant: "destructive",
       });
     } finally {

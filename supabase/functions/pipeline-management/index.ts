@@ -79,6 +79,15 @@ serve(async (req) => {
   }
 
   try {
+    // Detailed logging for debugging
+    console.log('🚀 Pipeline Management Function Started');
+    console.log('📋 Headers received:', {
+      'x-system-user-id': req.headers.get('x-system-user-id'),
+      'x-system-user-email': req.headers.get('x-system-user-email'),
+      'x-workspace-id': req.headers.get('x-workspace-id'),
+      'user-agent': req.headers.get('user-agent')
+    });
+
     const supabaseClient = createClient<Database>(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -89,34 +98,56 @@ serve(async (req) => {
       }
     );
 
-    // Set user context for RLS
+    // Enhanced user context validation and logging
     const userEmail = req.headers.get('x-system-user-email');
     const userId = req.headers.get('x-system-user-id');
+    const workspaceId = req.headers.get('x-workspace-id');
     
-    if (userEmail && userId) {
+    console.log('🔐 Authentication check:', { userId, userEmail, workspaceId });
+    
+    if (!userId || !userEmail) {
+      console.error('❌ Missing user authentication headers');
+      return new Response(
+        JSON.stringify({ error: 'User authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!workspaceId) {
+      console.error('❌ Missing workspace ID');
+      return new Response(
+        JSON.stringify({ error: 'Workspace ID required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Set user context for RLS with error handling
+    try {
       await supabaseClient.rpc('set_current_user_context', {
         user_id: userId,
         user_email: userEmail
       });
+      console.log('✅ User context set successfully');
+    } catch (contextError) {
+      console.error('❌ Failed to set user context:', contextError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to set user context' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const { method } = req;
     const url = new URL(req.url);
     const pathSegments = url.pathname.split('/').filter(segment => segment !== '');
     const action = pathSegments[pathSegments.length - 1];
-
-    // Get workspace_id from headers
-    const workspaceId = req.headers.get('x-workspace-id');
-    if (!workspaceId) {
-      return new Response(
-        JSON.stringify({ error: 'Workspace ID required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    
+    console.log('📍 Request details:', { method, action, url: url.pathname });
 
     switch (action) {
       case 'pipelines':
         if (method === 'GET') {
+          console.log('📊 Fetching pipelines for workspace:', workspaceId);
+          
           const { data: pipelines, error } = await supabaseClient
             .from('pipelines')
             .select('*')
@@ -124,8 +155,13 @@ serve(async (req) => {
             .eq('is_active', true)
             .order('created_at', { ascending: false });
 
-          if (error) throw error;
-          return new Response(JSON.stringify(pipelines), {
+          if (error) {
+            console.error('❌ Error fetching pipelines:', error);
+            throw error;
+          }
+          
+          console.log('✅ Pipelines fetched successfully:', pipelines?.length || 0, 'pipelines found');
+          return new Response(JSON.stringify(pipelines || []), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -317,9 +353,17 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Pipeline Management Function Error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        action: 'pipeline-management'
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

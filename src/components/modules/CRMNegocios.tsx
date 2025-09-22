@@ -277,9 +277,61 @@ export function CRMNegocios({
     await createColumn(nome, cor);
   };
   if (!selectedWorkspace) {
-    return <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Selecione um workspace para continuar</p>
-      </div>;
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Selecione um workspace para continuar</p>
+        </div>
+        <PipelineDebugPanel />
+      </div>
+    );
+  }
+
+  // Show debug panel if loading or no pipelines found
+  if (isLoading || pipelines.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Negócios</h1>
+            <p className="text-muted-foreground">Gerencie seus negócios no pipeline de vendas</p>
+          </div>
+          {!isLoading && (
+            <Button 
+              onClick={() => setIsCriarPipelineModalOpen(true)}
+              className="bg-primary hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Criar Pipeline
+            </Button>
+          )}
+        </div>
+        
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-medium text-muted-foreground mb-2">
+              Nenhum pipeline encontrado
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              Crie seu primeiro pipeline para começar a gerenciar seus negócios
+            </p>
+            <Button 
+              onClick={() => setIsCriarPipelineModalOpen(true)}
+              className="bg-primary hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Criar Pipeline
+            </Button>
+          </div>
+        )}
+        
+        <PipelineDebugPanel />
+      </div>
+    );
   }
   return <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver}>
       <main className="min-h-screen flex flex-col max-w-[78vw]">
