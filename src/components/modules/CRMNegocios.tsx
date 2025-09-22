@@ -126,11 +126,11 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
     >
       <CardContent className="p-3">
         {/* Header com avatar, nome e valor */}
-        <div className="flex items-start gap-3 mb-3">
+        <div className="flex items-start gap-2 mb-2">
           {/* Avatar do responsável */}
           <div className="flex-shrink-0">
             <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium",
+              "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium",
               "bg-gradient-to-br from-primary/20 to-primary/10 text-primary border border-primary/20"
             )}>
               {getInitials(deal.responsible)}
@@ -141,14 +141,14 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between">
               <h3 className={cn(
-                "text-sm font-medium truncate pr-2",
+                "text-xs font-medium truncate pr-2",
                 "text-foreground"
               )}>
                 {deal.name}
               </h3>
               <div className="flex-shrink-0">
                 <span className={cn(
-                  "text-sm font-semibold",
+                  "text-xs font-semibold",
                   "text-primary"
                 )}>
                   {formatCurrency(deal.value)}
@@ -158,7 +158,7 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
             
             {/* Responsável */}
             <p className={cn(
-              "text-xs mt-0.5",
+              "text-[11px] mt-0.5",
               "text-muted-foreground"
             )}>
               {deal.responsible}
