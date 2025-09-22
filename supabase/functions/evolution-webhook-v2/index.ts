@@ -86,37 +86,34 @@ serve(async (req) => {
     const instanceName = payload.instance || payload.instanceName;
     console.log(`📊 [${requestId}] Instance: ${instanceName}, Event: ${payload.event}`);
     
-    // HANDLE MESSAGE STATUS UPDATES (read receipts)
-    if (payload.event === 'messages.update' && payload.data?.status) {
-      console.log(`📬 [${requestId}] Processing message status update: status=${payload.data.status}`);
+    // HANDLE MESSAGE ACKNOWLEDGMENT (read receipts)
+    if (payload.event === 'MESSAGE_ACK' && payload.data?.ack !== undefined) {
+      console.log(`📬 [${requestId}] Processing message acknowledgment: ack=${payload.data.ack}`);
       
       const messageKey = payload.data.key;
-      const messageStatus = payload.data.status;
+      const ackLevel = payload.data.ack;
       const evolutionMessageId = messageKey?.id;
       
       if (evolutionMessageId) {
-        // Map Evolution status to our message status
+        // Map Evolution ACK levels to our message status
         let newStatus: string;
         let timestampField: string | null = null;
         
-        switch (messageStatus) {
-          case 'PENDING':
-            newStatus = 'sending';
-            break;
-          case 'SENT':
+        switch (ackLevel) {
+          case 1:
             newStatus = 'sent';
             break;
-          case 'DELIVERY_ACK':
+          case 2:
             newStatus = 'delivered';
             timestampField = 'delivered_at';
             break;
-          case 'READ':
+          case 3:
             newStatus = 'read';
             timestampField = 'read_at';
             break;
           default:
-            console.log(`⚠️ [${requestId}] Unknown status: ${messageStatus}`);
-            return;
+            console.log(`⚠️ [${requestId}] Unknown ACK level: ${ackLevel}`);
+            newStatus = 'sent';
         }
         
         // Update message status in database
@@ -138,19 +135,9 @@ serve(async (req) => {
           console.log(`✅ [${requestId}] Message ${evolutionMessageId} status updated to: ${newStatus}`);
           console.log(`📊 [${requestId}] Updated message data:`, updatedMessage);
         } else {
-          console.log(`⚠️ [${requestId}] Message not found for status update: ${evolutionMessageId}`);
+          console.log(`⚠️ [${requestId}] Message not found for ACK update: ${evolutionMessageId}`);
         }
       }
-      
-      // Return early for status updates - no need to process as new message
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'Message status updated successfully',
-        status: newStatus
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      });
     }
     
     // Get workspace_id and webhook details from database
