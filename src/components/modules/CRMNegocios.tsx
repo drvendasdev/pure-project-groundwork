@@ -100,6 +100,16 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
     }).format(value);
   };
 
+  // Gerar iniciais do responsável para o avatar
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
   return (
     <Card 
       ref={setNodeRef} 
@@ -109,101 +119,136 @@ function DraggableDeal({ deal, isDarkMode = false, onClick }: DraggableDealProps
       className={cn(
         "cursor-pointer hover:shadow-md transition-shadow mb-3 border-l-4",
         isDarkMode 
-          ? "bg-[#2d2d2d] border-gray-600" 
-          : "bg-white border-gray-200"
+          ? "bg-card border-border" 
+          : "bg-card border-border"
       )}
       onClick={onClick}
     >
       <CardContent className="p-3">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
+        {/* Header com avatar, nome e valor */}
+        <div className="flex items-start gap-3 mb-3">
+          {/* Avatar do responsável */}
+          <div className="flex-shrink-0">
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium",
+              "bg-gradient-to-br from-primary/20 to-primary/10 text-primary border border-primary/20"
+            )}>
+              {getInitials(deal.responsible)}
+            </div>
+          </div>
+          
+          {/* Nome e valor */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between">
+              <h3 className={cn(
+                "text-sm font-medium truncate pr-2",
+                "text-foreground"
+              )}>
+                {deal.name}
+              </h3>
+              <div className="flex-shrink-0">
+                <span className={cn(
+                  "text-sm font-semibold",
+                  "text-primary"
+                )}>
+                  {formatCurrency(deal.value)}
+                </span>
+              </div>
+            </div>
+            
+            {/* Responsável */}
+            <p className={cn(
+              "text-xs mt-0.5",
+              "text-muted-foreground"
+            )}>
+              {deal.responsible}
+            </p>
+          </div>
+        </div>
+        
+        {/* Área central para tags */}
+        <div className="mb-3 min-h-[28px] flex items-center">
+          {deal.tags && deal.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {deal.tags.slice(0, 3).map((tag, index) => (
+                <Badge 
+                  key={index} 
+                  variant="secondary"
+                  className={cn(
+                    "text-xs px-2 py-0.5 h-auto",
+                    "bg-secondary/50 text-secondary-foreground border border-border/50"
+                  )}
+                >
+                  {tag}
+                </Badge>
+              ))}
+              {deal.tags.length > 3 && (
+                <Badge 
+                  variant="outline"
+                  className="text-xs px-2 py-0.5 h-auto"
+                >
+                  +{deal.tags.length - 3}
+                </Badge>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">
+              Sem tags
+            </span>
+          )}
+        </div>
+        
+        {/* Footer com ícones de ação e prioridade */}
+        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+          <div className="flex items-center gap-1">
             <Button 
               size="icon" 
               variant="ghost" 
-              className={cn(
-                "h-4 w-4 p-0",
-                isDarkMode ? "text-gray-400 hover:text-white" : "text-gray-400"
-              )}
+              className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Phone className="w-3.5 h-3.5" />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="h-6 w-6 p-0 hover:bg-purple-100 hover:text-purple-600"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="h-6 w-6 p-0"
               onClick={(e) => {
                 e.stopPropagation();
                 onClick();
               }}
             >
-              <MoreHorizontal className="w-3 h-3" />
+              <MoreHorizontal className="w-3.5 h-3.5" />
             </Button>
-            <div className="text-right">
-              <div className={cn(
-                "text-sm font-medium",
-                isDarkMode ? "text-white" : "text-gray-900"
-              )}>
-                {formatCurrency(deal.value)}
-              </div>
-            </div>
           </div>
           
           <div className="flex items-center gap-2">
-            <div className={cn(
-              "w-6 h-6 rounded-full flex items-center justify-center",
-              isDarkMode ? "bg-gray-600" : "bg-gray-200"
-            )}>
-              <User className={cn(
-                "w-3 h-3",
-                isDarkMode ? "text-white" : "text-gray-600"
-              )} />
-            </div>
-            <span className={cn(
-              "text-sm font-medium",
-              isDarkMode ? "text-white" : "text-gray-900"
-            )}>{deal.name}</span>
-          </div>
-          
-          {deal.tags && deal.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {deal.tags.map((tag, index) => (
-                <div key={index} className={cn(
-                  "text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 inline-block",
-                  isDarkMode ? "bg-blue-900 text-blue-200" : "bg-blue-100 text-blue-800"
-                )}>
-                  {tag}
-                </div>
-              ))}
-            </div>
-          )}
-          
-          <div className="flex items-center justify-between mt-3">
-            <div className="flex items-center gap-1">
-              <Button size="icon" variant="ghost" className={cn(
-                "h-5 w-5 p-0",
-                isDarkMode ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-600"
-              )}>
-                <User className="w-3 h-3" />
-              </Button>
-              <Button size="icon" variant="ghost" className={cn(
-                "h-5 w-5 p-0",
-                isDarkMode ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-600"
-              )}>
-                <MessageCircle className="w-3 h-3" />
-              </Button>
-              <Button size="icon" variant="ghost" className={cn(
-                "h-5 w-5 p-0",
-                isDarkMode ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-600"
-              )}>
-                <Phone className="w-3 h-3" />
-              </Button>
-              <Button size="icon" variant="ghost" className={cn(
-                "h-5 w-5 p-0",
-                isDarkMode ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-600"
-              )}>
-                <Calendar className="w-3 h-3" />
-              </Button>
-            </div>
-            <div className={cn(
-              "flex items-center text-xs",
-              isDarkMode ? "text-gray-400" : "text-gray-500"
-            )}>
-              <span>{deal.lastContact || "Hoje"}</span>
-              {deal.priority === 'high' && <AlertTriangle className="w-3 h-3 ml-1 text-orange-500" />}
-            </div>
+            {deal.lastContact && (
+              <span className="text-xs text-muted-foreground">
+                {deal.lastContact}
+              </span>
+            )}
+            {deal.priority === 'high' && (
+              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-600">
+                <AlertTriangle className="w-3 h-3" />
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
