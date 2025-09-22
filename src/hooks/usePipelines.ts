@@ -42,7 +42,7 @@ export interface PipelineCard {
 export function usePipelines() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const { getHeaders } = useWorkspaceHeaders();
   const { toast } = useToast();
 
@@ -114,7 +114,7 @@ export function usePipelines() {
 
   useEffect(() => {
     fetchPipelines();
-  }, []);
+  }, [getHeaders]); // Add dependency to ensure proper reloading
 
   return {
     pipelines,

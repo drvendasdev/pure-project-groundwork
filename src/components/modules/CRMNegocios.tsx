@@ -40,6 +40,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Interface compatível com o componente existente
 interface Deal {
@@ -219,14 +220,6 @@ interface CRMNegociosProps {
 export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
   const { selectedWorkspace } = useWorkspace();
   const { pipelines, selectedPipeline, isLoading: isPipelinesLoading, createPipeline, selectPipeline } = usePipelines();
-  
-  // Debug log temporário
-  console.log('CRMNegocios Debug:', { 
-    pipelines, 
-    selectedPipeline, 
-    isPipelinesLoading,
-    pipelinesLength: pipelines.length 
-  });
   const { columns, isLoading: isColumnsLoading, createColumn } = usePipelineColumns(selectedPipeline?.id || null);
   const { cards, isLoading: isCardsLoading, moveCard, getCardsByColumn } = usePipelineCards(selectedPipeline?.id || null);
   
@@ -371,27 +364,31 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
               
               {/* Pipeline Select */}
               <div className="min-w-[200px] mr-2 flex-shrink-0">
-                <Select 
-                  value={selectedPipeline?.id || ""} 
-                  onValueChange={(value) => {
-                    const pipeline = pipelines.find(p => p.id === value);
-                    if (pipeline) selectPipeline(pipeline);
-                  }}
-                >
-                  <SelectTrigger className={cn(
-                    "h-10 border-gray-300 focus:border-primary focus:ring-primary",
-                    isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white"
-                  )}>
-                    <SelectValue placeholder="Selecione um pipeline" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelines.map((pipeline) => (
-                      <SelectItem key={pipeline.id} value={pipeline.id}>
-                        <span className="font-bold">{pipeline.name}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isPipelinesLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : (
+                  <Select 
+                    value={selectedPipeline?.id || ""} 
+                    onValueChange={(value) => {
+                      const pipeline = pipelines.find(p => p.id === value);
+                      if (pipeline) selectPipeline(pipeline);
+                    }}
+                  >
+                    <SelectTrigger className={cn(
+                      "h-10 border-gray-300 focus:border-primary focus:ring-primary",
+                      isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white"
+                    )}>
+                      <SelectValue placeholder="Selecione um pipeline" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pipelines.map((pipeline) => (
+                        <SelectItem key={pipeline.id} value={pipeline.id}>
+                          <span className="font-bold">{pipeline.name}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               
               {/* Plus Button */}
@@ -487,7 +484,39 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
 
         {/* CONTAINER DO PIPELINE */}
         <div className="flex-1 overflow-x-auto overflow-y-auto p-2">
-          {!selectedPipeline ? (
+          {isPipelinesLoading ? (
+            <div className="flex gap-2 sm:gap-4 h-full min-w-full">
+              {[...Array(4)].map((_, index) => (
+                <div key={index} className="w-60 sm:w-68 flex-shrink-0">
+                  <div className="bg-card rounded-lg border border-t-4 border-t-gray-400 h-full">
+                    <div className="p-4 pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="w-3 h-3 rounded-full" />
+                          <Skeleton className="h-5 w-24" />
+                          <Skeleton className="h-5 w-8 rounded-full" />
+                        </div>
+                        <Skeleton className="h-4 w-16" />
+                      </div>
+                    </div>
+                    <div className="p-3 pt-0 space-y-3">
+                      {[...Array(3)].map((_, cardIndex) => (
+                        <div key={cardIndex} className="bg-muted/20 rounded-lg p-4 space-y-2">
+                          <Skeleton className="h-5 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-1/2" />
+                          <div className="flex justify-between items-center mt-3">
+                            <Skeleton className="h-4 w-16" />
+                            <Skeleton className="h-4 w-20" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !selectedPipeline ? (
             <div className="flex items-center justify-center h-64 border-2 border-dashed border-border rounded-lg">
               <div className="text-center">
                 <p className="text-muted-foreground mb-4">Nenhum pipeline selecionado</p>
