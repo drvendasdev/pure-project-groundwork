@@ -607,21 +607,6 @@ export function CRMNegocios({
                   </DroppableColumn>
                 );
               })}
-              
-              {/* Add Column Button - Última coluna */}
-              <div className="w-60 sm:w-68 flex-shrink-0">
-                <div className="h-full border-2 border-dashed border-border rounded-lg flex items-center justify-center min-h-[200px]">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="flex flex-col items-center gap-2 text-muted-foreground hover:text-foreground h-auto p-4" 
-                    onClick={() => setIsAddColumnModalOpen(true)}
-                  >
-                    <Plus className="h-6 w-6" />
-                    <span className="text-sm">Adicionar Coluna</span>
-                  </Button>
-                </div>
-              </div>
             </div>
           )}
         </div>
