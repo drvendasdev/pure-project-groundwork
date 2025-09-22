@@ -46,17 +46,45 @@ export function usePipelines() {
   const { getHeaders } = useWorkspaceHeaders();
   const { toast } = useToast();
 
-  const fetchPipelines = async () => {
+  const fetchPipelines = async (retryCount = 0) => {
+    const maxRetries = 3;
+    const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
+    
     try {
       setIsLoading(true);
-      const headers = getHeaders();
+      
+      // Refresh headers to ensure workspace context is current
+      let headers;
+      try {
+        headers = getHeaders();
+      } catch (headerError) {
+        console.error('Error getting headers:', headerError);
+        
+        // If headers fail, it might be a session issue - check localStorage
+        const userData = localStorage.getItem('currentUser');
+        if (!userData) {
+          throw new Error('Sessão expirada. Faça login novamente.');
+        }
+        throw headerError;
+      }
+      
+      console.log('🔄 Fetching pipelines with headers:', headers);
       
       const { data, error } = await supabase.functions.invoke('pipeline-management/pipelines', {
         method: 'GET',
         headers
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a specific error that should trigger retry
+        if (error.message?.includes('Failed to fetch') || 
+            error.message?.includes('workspace') ||
+            error.message?.includes('headers') ||
+            error.status >= 500) {
+          throw new Error(`API_ERROR: ${error.message}`);
+        }
+        throw error;
+      }
 
       setPipelines(data || []);
       
@@ -64,15 +92,41 @@ export function usePipelines() {
       if (data?.length > 0 && !selectedPipeline) {
         setSelectedPipeline(data[0]);
       }
+      
+      console.log('✅ Pipelines loaded successfully:', data?.length || 0);
+      
     } catch (error) {
       console.error('Error fetching pipelines:', error);
+      
+      // Retry logic for specific errors
+      if (retryCount < maxRetries && 
+          (error.message?.includes('API_ERROR') || 
+           error.message?.includes('Failed to fetch') ||
+           error.message?.includes('workspace'))) {
+        
+        console.log(`🔄 Retrying pipelines fetch in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+        
+        setTimeout(() => {
+          fetchPipelines(retryCount + 1);
+        }, retryDelay);
+        
+        return; // Don't show error toast on retry
+      }
+      
+      // Show error only on final failure
+      const errorMessage = error.message?.includes('Sessão expirada') 
+        ? 'Sessão expirada. Atualize a página e faça login novamente.'
+        : 'Erro ao carregar pipelines. Verifique sua conexão.';
+        
       toast({
         title: "Erro",
-        description: "Erro ao carregar pipelines",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (retryCount === 0) { // Only set loading false on initial call
+        setIsLoading(false);
+      }
     }
   };
 
@@ -113,7 +167,12 @@ export function usePipelines() {
   };
 
   useEffect(() => {
-    fetchPipelines();
+    // Add debouncing to prevent excessive calls when workspace changes
+    const timeoutId = setTimeout(() => {
+      fetchPipelines();
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
   }, [getHeaders]); // Add dependency to ensure proper reloading
 
   return {

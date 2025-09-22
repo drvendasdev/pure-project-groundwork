@@ -502,13 +502,21 @@ export const useWhatsAppConversations = () => {
       return;
     }
 
-    // Subscription para novas mensagens
+    // Subscription para novas mensagens  
+    console.log('🔌 Setting up realtime subscriptions for workspace:', selectedWorkspace?.workspace_id);
+    
     const messagesChannel = supabase
       .channel('whatsapp-messages')
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
-          console.log('🔔 Nova mensagem recebida:', payload.new);
+          console.log('🔔 Realtime: Nova mensagem recebida:', {
+            id: payload.new?.id,
+            conversation_id: payload.new?.conversation_id,
+            workspace_id: payload.new?.workspace_id,
+            sender_type: payload.new?.sender_type,
+            current_workspace: selectedWorkspace?.workspace_id
+          });
           const newMessage = payload.new as any;
           
           // ✅ Filtrar por workspace_id para garantir que apenas mensagens do workspace atual sejam processadas
@@ -609,6 +617,12 @@ export const useWhatsAppConversations = () => {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'conversations' },
         async (payload) => {
+          console.log('🔔 Realtime: Nova conversa recebida:', {
+            id: payload.new?.id,
+            workspace_id: payload.new?.workspace_id,
+            canal: payload.new?.canal,
+            current_workspace: selectedWorkspace?.workspace_id
+          });
           const newConv = payload.new as any;
           
           // Só processar conversas do WhatsApp
@@ -678,7 +692,13 @@ export const useWhatsAppConversations = () => {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'conversations' },
         (payload) => {
-          console.log('🔄 Conversa atualizada:', payload.new);
+          console.log('🔄 Realtime: Conversa atualizada:', {
+            id: payload.new?.id,
+            workspace_id: payload.new?.workspace_id,
+            unread_count: payload.new?.unread_count,
+            status: payload.new?.status,
+            current_workspace: selectedWorkspace?.workspace_id
+          });
           const updatedConv = payload.new as any;
           
           // ✅ Filtrar por workspace_id para garantir que apenas conversas do workspace atual sejam processadas
@@ -703,10 +723,27 @@ export const useWhatsAppConversations = () => {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Conversations channel status:', status);
+      });
+
+    // Monitor subscription status
+    messagesChannel.subscribe((status) => {
+      console.log('📡 Messages channel status:', status);
+    });
+
+    // Test realtime connection
+    setTimeout(() => {
+      console.log('🔍 Realtime debug info:', {
+        messagesChannelState: messagesChannel.state,
+        conversationsChannelState: conversationsChannel.state,
+        workspace: selectedWorkspace?.workspace_id,
+        subscriptions: supabase.getChannels().length
+      });
+    }, 2000);
 
     return () => {
-      console.log('🧹 Limpando subscriptions real-time');
+      console.log('🧹 Limpando subscriptions real-time para workspace:', selectedWorkspace?.workspace_id);
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };

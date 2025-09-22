@@ -157,7 +157,16 @@ serve(async (req) => {
       }
 
       const profileData = await profileResponse.json();
-      console.log(`✅ Profile data received:`, JSON.stringify(profileData, null, 2));
+      console.log(`✅ Profile data received for ${sanitizedPhone}:`, profileData ? 'success' : 'empty');
+      console.log(`🔍 Profile data structure:`, Object.keys(profileData || {}));
+      if (profileData) {
+        console.log(`📊 Available fields:`, {
+          profilePictureUrl: !!profileData.profilePictureUrl,
+          picture: !!profileData.picture,
+          name: !!profileData.name,
+          status: !!profileData.status
+        });
+      }
       
       const profileImageUrl = profileData?.profilePictureUrl || profileData?.picture;
       
