@@ -13,10 +13,10 @@ interface SystemCustomization {
 }
 
 const defaultCustomization: SystemCustomization = {
-  background_color: '#0a0a0a',
+  background_color: '#f5f5f5',
   primary_color: '#eab308',
-  header_color: '#1a1a1a',
-  sidebar_color: '#1a1a1a'
+  header_color: '#ffffff',
+  sidebar_color: '#fafafa'
 };
 
 export function useSystemCustomization() {
