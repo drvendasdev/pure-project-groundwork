@@ -7,6 +7,7 @@ import { TezeusCRM } from "@/components/TezeusCRM";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./components/AuthProvider";
 import { WorkspaceProvider } from "./contexts/WorkspaceContext";
+import { PipelinesProvider } from "./contexts/PipelinesContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { RoleProtectedRoute } from "./components/RoleProtectedRoute";
 import { Login } from "./pages/Login";
@@ -20,7 +21,8 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <WorkspaceProvider>
-          <BrowserRouter>
+          <PipelinesProvider>
+            <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -51,7 +53,8 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
+            </BrowserRouter>
+          </PipelinesProvider>
         </WorkspaceProvider>
       </AuthProvider>
     </TooltipProvider>

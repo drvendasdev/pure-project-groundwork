@@ -31,9 +31,7 @@ import { CriarPipelineModal } from "@/components/modals/CriarPipelineModal";
 import { CriarNegocioModal } from "@/components/modals/CriarNegocioModal";
 import { DealDetailsModal } from "@/components/modals/DealDetailsModal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { usePipelines } from "@/hooks/usePipelines";
-import { usePipelineColumns } from "@/hooks/usePipelineColumns";
-import { usePipelineCards } from "@/hooks/usePipelineCards";
+import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
@@ -219,9 +217,18 @@ interface CRMNegociosProps {
 
 export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
   const { selectedWorkspace } = useWorkspace();
-  const { pipelines, selectedPipeline, isLoading: isPipelinesLoading, createPipeline, selectPipeline } = usePipelines();
-  const { columns, isLoading: isColumnsLoading, createColumn } = usePipelineColumns(selectedPipeline?.id || null);
-  const { cards, isLoading: isCardsLoading, moveCard, getCardsByColumn } = usePipelineCards(selectedPipeline?.id || null);
+  const { 
+    pipelines, 
+    selectedPipeline, 
+    columns,
+    cards,
+    isLoading, 
+    createPipeline,
+    selectPipeline,
+    createColumn,
+    moveCard,
+    getCardsByColumn 
+  } = usePipelinesContext();
   
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCard, setSelectedCard] = useState<any>(null);
@@ -364,7 +371,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
               
               {/* Pipeline Select */}
               <div className="min-w-[200px] mr-2 flex-shrink-0">
-                {isPipelinesLoading ? (
+                {isLoading ? (
                   <Skeleton className="h-10 w-full" />
                 ) : (
                   <Select 
@@ -484,7 +491,7 @@ export function CRMNegocios({ isDarkMode = false }: CRMNegociosProps) {
 
         {/* CONTAINER DO PIPELINE */}
         <div className="flex-1 overflow-x-auto overflow-y-auto p-2">
-          {isPipelinesLoading ? (
+          {isLoading ? (
             <div className="flex gap-2 sm:gap-4 h-full min-w-full">
               {[...Array(4)].map((_, index) => (
                 <div key={index} className="w-60 sm:w-68 flex-shrink-0">
