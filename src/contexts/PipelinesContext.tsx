@@ -123,8 +123,9 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
       console.log('✅ Pipelines fetched successfully:', data?.length || 0, 'pipelines');
       setPipelines(data || []);
       
-      // Auto-select first pipeline if none selected
-      if (data?.length > 0 && !selectedPipeline) {
+      // Auto-select first pipeline if none selected and we have pipelines
+      if (data?.length > 0) {
+        console.log('🎯 Auto-selecting first pipeline:', data[0].name);
         setSelectedPipeline(data[0]);
       }
     } catch (error) {
