@@ -16,7 +16,6 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
   const fetchConnections = async () => {
     if (!workspaceId) return;
     
-    console.log('🔍 fetchConnections called with workspaceId:', workspaceId);
     setIsLoading(true);
     try {
       // First, try direct query to connections table
@@ -26,18 +25,16 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
         .eq('workspace_id', workspaceId)
         .order('instance_name');
 
-      console.log('📊 Direct query result:', { data, error, workspaceId });
-
       if (error || !data || data.length === 0) {
-        console.warn('Error fetching connections directly or empty results, trying fallback:', error);
-        // Fallback to edge function
+        // Fallback to edge function silently
         try {
           // Get user data for headers
           const userData = localStorage.getItem('currentUser');
           const currentUserData = userData ? JSON.parse(userData) : null;
           
           if (!currentUserData?.id) {
-            throw new Error('Usuário não autenticado');
+            setConnections([]);
+            return;
           }
 
           const { data: functionData, error: functionError } = await supabase.functions.invoke('evolution-list-connections', {
@@ -50,12 +47,8 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
           });
 
           if (functionError) {
-            console.error('Error calling evolution-list-connections:', functionError);
-            toast({
-              title: "Erro",
-              description: "Não foi possível carregar as conexões",
-              variant: "destructive",
-            });
+            // Silently fail - Evolution API not configured
+            setConnections([]);
             return;
           }
 
@@ -70,23 +63,16 @@ export const useWorkspaceConnections = (workspaceId?: string) => {
             setConnections([]);
           }
         } catch (fallbackError) {
-          console.error('Fallback error:', fallbackError);
-          toast({
-            title: "Erro",
-            description: "Erro inesperado ao carregar conexões",
-            variant: "destructive",
-          });
+          // Silently fail - Evolution API not configured or other network issues
+          setConnections([]);
         }
       } else {
         setConnections(data || []);
       }
     } catch (error) {
+      // Only log serious errors, not configuration issues
       console.error('Error fetching connections:', error);
-      toast({
-        title: "Erro",
-        description: "Erro inesperado ao carregar conexões",
-        variant: "destructive",
-      });
+      setConnections([]);
     } finally {
       setIsLoading(false);
     }

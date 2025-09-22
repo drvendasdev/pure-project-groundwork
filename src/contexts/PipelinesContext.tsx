@@ -68,11 +68,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   // Estabilizar a função getHeaders para evitar re-renders desnecessários
   const getHeaders = useMemo(() => {
-    console.log('🔄 Regenerando pipeline headers...');
-    console.log('📊 Selected workspace:', selectedWorkspace);
-    
     if (!selectedWorkspace?.workspace_id) {
-      console.warn('⚠️ No workspace selected for pipeline operations');
       return null;
     }
     
@@ -80,7 +76,6 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (!currentUserData?.id) {
-      console.warn('⚠️ No user data available for pipeline operations');
       return null;
     }
 
@@ -90,25 +85,17 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
       'x-workspace-id': selectedWorkspace.workspace_id
     };
     
-    console.log('✅ Pipeline headers generated:', headers);
-    console.log('📊 Workspace ID being sent:', selectedWorkspace.workspace_id);
-    
     return headers;
   }, [selectedWorkspace?.workspace_id]);
 
   const fetchPipelines = useCallback(async () => {
-    console.log('📊 Starting fetchPipelines...');
-    console.log('🏢 Current workspace:', selectedWorkspace);
-    
     if (!getHeaders) {
-      console.warn('⚠️ Cannot fetch pipelines: headers not available');
       setIsLoading(false);
       return;
     }
     
     try {
       setIsLoading(true);
-      console.log('🔄 Fetching pipelines with headers:', getHeaders);
       
       const { data, error } = await supabase.functions.invoke('pipeline-management/pipelines', {
         method: 'GET',
@@ -120,12 +107,10 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
 
-      console.log('✅ Pipelines fetched successfully:', data?.length || 0, 'pipelines');
       setPipelines(data || []);
       
       // Auto-select first pipeline if none selected and we have pipelines
       if (data?.length > 0 && !selectedPipeline) {
-        console.log('🎯 Auto-selecting first pipeline:', data[0].name);
         setSelectedPipeline(data[0]);
       }
     } catch (error) {
@@ -325,14 +310,9 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   // Buscar pipelines quando o workspace mudar
   useEffect(() => {
-    console.log('🔄 Workspace effect triggered:', selectedWorkspace?.workspace_id);
-    console.log('🏢 Current workspace object:', selectedWorkspace);
-    console.log('🔑 Headers available:', !!getHeaders);
     if (selectedWorkspace?.workspace_id && getHeaders) {
-      console.log('✅ Fetching pipelines for workspace:', selectedWorkspace.workspace_id);
       fetchPipelines();
     } else {
-      console.log('⚠️ No workspace selected or no headers, clearing pipelines');
       setPipelines([]);
       setSelectedPipeline(null);
     }
