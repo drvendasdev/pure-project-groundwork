@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ActiveUser {
   id: string;
@@ -12,6 +13,7 @@ interface ActiveUser {
 export function usePipelineActiveUsers(pipelineId?: string) {
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!pipelineId) {
@@ -22,8 +24,20 @@ export function usePipelineActiveUsers(pipelineId?: string) {
     const fetchActiveUsers = async () => {
       setIsLoading(true);
       try {
-        // Buscar cards do pipeline que tenham conversas ativas
-        const { data: cardsWithConversations, error: cardsError } = await supabase
+        // Buscar informações do usuário atual para verificar permissões
+        const { data: currentUser } = await supabase
+          .from('system_users')
+          .select('id, profile')
+          .eq('email', user?.email)
+          .single();
+
+        if (!currentUser) {
+          console.error('Current user not found');
+          return;
+        }
+
+        // Construir query base
+        let query = supabase
           .from('pipeline_cards')
           .select(`
             id,
@@ -43,6 +57,14 @@ export function usePipelineActiveUsers(pipelineId?: string) {
           .eq('pipeline_id', pipelineId)
           .not('conversation_id', 'is', null)
           .eq('conversations.status', 'open');
+
+        // Aplicar filtro de permissão: usuário comum só vê seus próprios negócios
+        if (currentUser.profile === 'user') {
+          query = query.eq('conversations.assigned_user_id', currentUser.id);
+        }
+        // Admin e Master veem todos os negócios (sem filtro adicional)
+
+        const { data: cardsWithConversations, error: cardsError } = await query;
 
         if (cardsError) {
           console.error('Error fetching cards with conversations:', cardsError);
