@@ -173,7 +173,7 @@ export function usePipelines() {
     }, 100);
     
     return () => clearTimeout(timeoutId);
-  }, [getHeaders]); // Add dependency to ensure proper reloading
+  }, []); // Remove dependency to prevent infinite re-renders
 
   return {
     pipelines,

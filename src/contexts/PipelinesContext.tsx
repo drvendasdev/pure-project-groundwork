@@ -316,7 +316,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
       setPipelines([]);
       setSelectedPipeline(null);
     }
-  }, [selectedWorkspace?.workspace_id, getHeaders, fetchPipelines]);
+  }, [selectedWorkspace?.workspace_id, fetchPipelines]);
 
   // Buscar colunas e cards quando o pipeline selecionado mudar
   useEffect(() => {
