@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { usePipelineActiveUsers } from "@/hooks/usePipelineActiveUsers";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { PipelineDebugPanel } from "@/components/PipelineDebugPanel";
+
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -283,7 +283,6 @@ export function CRMNegocios({
         <div className="flex items-center justify-center h-64">
           <p className="text-muted-foreground">Selecione um workspace para continuar</p>
         </div>
-        <PipelineDebugPanel />
       </div>
     );
   }
@@ -330,7 +329,7 @@ export function CRMNegocios({
           </div>
         )}
         
-        <PipelineDebugPanel />
+        
       </div>
     );
   }

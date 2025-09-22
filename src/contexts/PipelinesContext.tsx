@@ -69,6 +69,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   // Estabilizar a função getHeaders para evitar re-renders desnecessários
   const getHeaders = useMemo(() => {
     console.log('🔄 Regenerando pipeline headers...');
+    console.log('📊 Selected workspace:', selectedWorkspace);
     
     if (!selectedWorkspace?.workspace_id) {
       console.warn('⚠️ No workspace selected for pipeline operations');
@@ -90,6 +91,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     };
     
     console.log('✅ Pipeline headers generated:', headers);
+    console.log('📊 Workspace ID being sent:', selectedWorkspace.workspace_id);
     
     return headers;
   }, [selectedWorkspace?.workspace_id]);
