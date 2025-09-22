@@ -58,11 +58,13 @@ interface DraggableDealProps {
   deal: Deal;
   isDarkMode?: boolean;
   onClick: () => void;
+  columnColor?: string;
 }
 function DraggableDeal({
   deal,
   isDarkMode = false,
-  onClick
+  onClick,
+  columnColor = '#6b7280'
 }: DraggableDealProps) {
   const {
     attributes,
@@ -88,7 +90,7 @@ function DraggableDeal({
   const getInitials = (name: string) => {
     return name.split(' ').map(word => word.charAt(0)).join('').substring(0, 2).toUpperCase();
   };
-  return <Card ref={setNodeRef} style={style} {...attributes} {...listeners} className={cn("cursor-pointer hover:shadow-md transition-shadow mb-3 border-l-4", isDarkMode ? "bg-card border-border" : "bg-card border-border")} onClick={onClick}>
+  return <Card ref={setNodeRef} style={{...style, borderLeftColor: columnColor}} {...attributes} {...listeners} className={cn("cursor-pointer hover:shadow-md transition-shadow mb-3 border-l-4", isDarkMode ? "bg-card border-border" : "bg-card border-border")} onClick={onClick}>
       <CardContent className="p-3">
         {/* Header com avatar, nome e valor */}
         <div className="flex items-start gap-3 mb-3">
@@ -437,7 +439,7 @@ export function CRMNegocios({
                           priority: 'medium' as const,
                           product: card.description || '',
                           lastContact: new Date(card.created_at).toLocaleDateString('pt-BR')
-                        }} isDarkMode={isDarkMode} onClick={() => openCardDetails(card)} />)}
+                        }} isDarkMode={isDarkMode} columnColor={column.color} onClick={() => openCardDetails(card)} />)}
                             </div>
                           </SortableContext>
                         </CardContent>
@@ -463,7 +465,7 @@ export function CRMNegocios({
             priority: 'medium' as const,
             product: activeCard.description || '',
             lastContact: new Date(activeCard.created_at).toLocaleDateString('pt-BR')
-          }} isDarkMode={isDarkMode} onClick={() => {}} />;
+          }} isDarkMode={isDarkMode} columnColor={column?.color} onClick={() => {}} />;
         })()}
         </DragOverlay>
       </main>
