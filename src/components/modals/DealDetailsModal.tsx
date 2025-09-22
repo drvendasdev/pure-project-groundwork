@@ -17,6 +17,8 @@ import { AddTagModal } from "./AddTagModal";
 import { CreateActivityModal } from "./CreateActivityModal";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { usePipelinesContext } from "@/contexts/PipelinesContext";
+import { usePipelineColumns } from "@/hooks/usePipelineColumns";
 
 interface Tag {
   id: string;
@@ -45,20 +47,12 @@ interface DealDetailsModalProps {
 }
 
 interface PipelineStep {
-  id: number;
+  id: string;
   name: string;
+  color: string;
   isActive: boolean;
   isCompleted: boolean;
 }
-
-const pipelineSteps: PipelineStep[] = [
-  { id: 1, name: "Operação Venda Máxima", isActive: true, isCompleted: false },
-  { id: 2, name: "Tezeus Clientes", isActive: false, isCompleted: false },
-  { id: 3, name: "Tráfego Pago Clientes", isActive: false, isCompleted: false },
-  { id: 4, name: "ERP Bling Clientes", isActive: false, isCompleted: false },
-  { id: 5, name: "Mentorado Titans Alpha", isActive: false, isCompleted: false },
-  { id: 6, name: "Treinamento Lojista Milionário", isActive: false, isCompleted: false },
-];
 
 export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isDarkMode = false }: DealDetailsModalProps) {
   const [activeTab, setActiveTab] = useState("negocios");
@@ -70,7 +64,10 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
   const [showAddTagModal, setShowAddTagModal] = useState(false);
   const [showCreateActivityModal, setShowCreateActivityModal] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
   const { toast } = useToast();
+  const { selectedPipeline } = usePipelinesContext();
+  const { columns, isLoading: isLoadingColumns } = usePipelineColumns(selectedPipeline?.id || null);
 
   const tabs = [
     { id: "negocios", label: "Negócios" },
@@ -85,6 +82,22 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
       fetchUsers();
     }
   }, [isOpen, contactNumber]);
+
+  // Converter colunas do pipeline em steps
+  useEffect(() => {
+    if (columns.length > 0) {
+      const steps: PipelineStep[] = columns
+        .sort((a, b) => a.order_position - b.order_position)
+        .map((column, index) => ({
+          id: column.id,
+          name: column.name,
+          color: column.color,
+          isActive: index === 0, // Primeira coluna ativa por padrão
+          isCompleted: false
+        }));
+      setPipelineSteps(steps);
+    }
+  }, [columns]);
 
   const fetchContactData = async () => {
     setIsLoadingData(true);
@@ -402,56 +415,76 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
 
               {/* Pipeline Timeline */}
               <div className="space-y-6">
-                <div className="w-full">
-                  {/* Timeline Steps */}
-                  <div className="flex items-center justify-between mb-4">
-                    {pipelineSteps.map((step, index) => (
-                      <div key={step.id} className="flex items-center flex-1">
-                        <div className="flex flex-col items-center">
-                          <div className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2",
-                            step.isActive
-                              ? "bg-yellow-400 text-black border-yellow-400"
-                              : "bg-gray-300 text-gray-600 border-gray-300",
-                            isDarkMode && !step.isActive
-                              ? "bg-gray-600 text-gray-300 border-gray-500"
-                              : ""
-                          )}>
-                            {step.id}
+                {isLoadingColumns ? (
+                  <div className="flex justify-center py-8">
+                    <div className="text-gray-500">Carregando colunas do pipeline...</div>
+                  </div>
+                ) : pipelineSteps.length > 0 ? (
+                  <div className="w-full">
+                    {/* Timeline Steps */}
+                    <div className="flex items-center justify-between mb-4">
+                      {pipelineSteps.map((step, index) => (
+                        <div key={step.id} className="flex items-center flex-1">
+                          <div className="flex flex-col items-center">
+                            <div 
+                              className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2",
+                                step.isActive
+                                  ? "text-black border-2"
+                                  : "bg-gray-300 text-gray-600 border-gray-300",
+                                isDarkMode && !step.isActive
+                                  ? "bg-gray-600 text-gray-300 border-gray-500"
+                                  : ""
+                              )}
+                              style={step.isActive ? { 
+                                backgroundColor: step.color, 
+                                borderColor: step.color 
+                              } : {}}
+                            >
+                              {index + 1}
+                            </div>
                           </div>
+                          {index < pipelineSteps.length - 1 && (
+                            <div 
+                              className={cn(
+                                "flex-1 h-1 mx-2",
+                                !step.isActive && "bg-gray-300",
+                                isDarkMode && !step.isActive ? "bg-gray-600" : ""
+                              )}
+                              style={step.isActive ? { backgroundColor: step.color } : {}}
+                            />
+                          )}
                         </div>
-                        {index < pipelineSteps.length - 1 && (
-                          <div className={cn(
-                            "flex-1 h-1 mx-2",
-                            step.isActive
-                              ? "bg-yellow-400"
-                              : "bg-gray-300",
-                            isDarkMode && !step.isActive ? "bg-gray-600" : ""
-                          )} />
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
 
-                  {/* Timeline Labels */}
-                  <div className="flex justify-between">
-                    {pipelineSteps.map((step) => (
-                      <div
-                        key={step.id}
-                        className={cn(
-                          "text-xs text-center flex-1 px-1",
-                          step.isActive
-                            ? "text-yellow-600 font-medium"
-                            : isDarkMode
-                              ? "text-gray-400"
-                              : "text-gray-600"
-                        )}
-                      >
-                        {step.name}
-                      </div>
-                    ))}
+                    {/* Timeline Labels */}
+                    <div className="flex justify-between">
+                      {pipelineSteps.map((step) => (
+                        <div
+                          key={step.id}
+                          className={cn(
+                            "text-xs text-center flex-1 px-1",
+                            step.isActive
+                              ? "font-medium"
+                              : isDarkMode
+                                ? "text-gray-400"
+                                : "text-gray-600"
+                          )}
+                          style={step.isActive ? { color: step.color } : {}}
+                        >
+                          {step.name}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
+                      Nenhuma coluna encontrada no pipeline
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Cadência de Tarefas */}
