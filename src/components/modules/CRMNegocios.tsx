@@ -16,6 +16,7 @@ import { CriarNegocioModal } from "@/components/modals/CriarNegocioModal";
 import { DealDetailsModal } from "@/components/modals/DealDetailsModal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
+import { usePipelineActiveUsers } from "@/hooks/usePipelineActiveUsers";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
@@ -186,6 +187,7 @@ export function CRMNegocios({
     moveCard,
     getCardsByColumn
   } = usePipelinesContext();
+  const { activeUsers, isLoading: isLoadingActiveUsers } = usePipelineActiveUsers(selectedPipeline?.id);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
@@ -335,17 +337,62 @@ export function CRMNegocios({
                 <Input placeholder="Buscar negócios..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className={cn("pl-10 h-10 border-gray-300 bg-transparent", isDarkMode ? "border-gray-600 text-white placeholder:text-gray-400" : "")} />
               </div>
               
-              {/* Avatar Group */}
+              {/* Avatar Group - Usuários com conversas ativas */}
               <div className="flex items-center -space-x-2 ml-2 flex-shrink-0">
-                <Avatar className="w-8 h-8 border-2 border-white cursor-pointer">
-                  <AvatarFallback className="bg-blue-500 text-white text-xs">CD</AvatarFallback>
-                </Avatar>
-                <Avatar className="w-8 h-8 border-2 border-white cursor-pointer">
-                  <AvatarFallback className="bg-green-500 text-white text-xs">BR</AvatarFallback>
-                </Avatar>
-                <Avatar className="w-8 h-8 border-2 border-white cursor-pointer">
-                  <AvatarFallback className="bg-purple-500 text-white text-xs">LU</AvatarFallback>
-                </Avatar>
+                {isLoadingActiveUsers ? (
+                  // Loading state
+                  <div className="flex items-center gap-1">
+                    <Skeleton className="w-8 h-8 rounded-full" />
+                    <Skeleton className="w-8 h-8 rounded-full" />
+                    <Skeleton className="w-8 h-8 rounded-full" />
+                  </div>
+                ) : activeUsers.length > 0 ? (
+                  activeUsers.slice(0, 5).map((user, index) => {
+                    // Generate initials from user name
+                    const initials = user.name
+                      .split(' ')
+                      .map(word => word.charAt(0))
+                      .join('')
+                      .substring(0, 2)
+                      .toUpperCase();
+                    
+                    // Different colors for different users
+                    const colors = [
+                      'bg-blue-500',
+                      'bg-green-500', 
+                      'bg-purple-500',
+                      'bg-orange-500',
+                      'bg-pink-500'
+                    ];
+                    
+                    return (
+                      <div key={user.id} className="relative">
+                        <Avatar className="w-8 h-8 border-2 border-white cursor-pointer">
+                          <AvatarFallback className={`${colors[index % colors.length]} text-white text-xs`}>
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        {/* Badge com número de negócios */}
+                        {user.dealCount > 1 && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                            {user.dealCount}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <span className="text-xs text-muted-foreground">Nenhuma conversa ativa</span>
+                )}
+                
+                {/* Show +X if there are more than 5 users */}
+                {activeUsers.length > 5 && (
+                  <Avatar className="w-8 h-8 border-2 border-white cursor-pointer">
+                    <AvatarFallback className="bg-gray-500 text-white text-xs">
+                      +{activeUsers.length - 5}
+                    </AvatarFallback>
+                  </Avatar>
+                )}
               </div>
             </div>
             
