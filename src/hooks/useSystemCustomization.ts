@@ -13,16 +13,69 @@ interface SystemCustomization {
 }
 
 const defaultCustomization: SystemCustomization = {
-  background_color: 'hsl(240, 10%, 3.9%)',
-  primary_color: 'hsl(47.9, 95.8%, 53.1%)',
-  header_color: 'hsl(240, 5.9%, 10%)',
-  sidebar_color: 'hsl(240, 5.9%, 10%)'
+  background_color: '#0a0a0a',
+  primary_color: '#eab308',
+  header_color: '#1a1a1a',
+  sidebar_color: '#1a1a1a'
 };
 
 export function useSystemCustomization() {
   const [customization, setCustomization] = useState<SystemCustomization>(defaultCustomization);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Convert hex to HSL for CSS variables
+  const hexToHsl = (hex: string): string => {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+        default: h = 0;
+      }
+      h /= 6;
+    }
+    
+    return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+  };
+
+  // Apply customization to CSS variables
+  const applyCustomization = (config: SystemCustomization) => {
+    const root = document.documentElement;
+    
+    // Convert hex colors to HSL format for CSS variables
+    const backgroundHsl = hexToHsl(config.background_color);
+    const primaryHsl = hexToHsl(config.primary_color);
+    const headerHsl = hexToHsl(config.header_color);
+    const sidebarHsl = hexToHsl(config.sidebar_color);
+    
+    // Apply colors as CSS custom properties in correct HSL format
+    root.style.setProperty('--background', backgroundHsl);
+    root.style.setProperty('--primary', primaryHsl);
+    root.style.setProperty('--card', headerHsl);
+    root.style.setProperty('--popover', headerHsl);
+    root.style.setProperty('--sidebar-background', sidebarHsl);
+    root.style.setProperty('--sidebar', sidebarHsl);
+    
+    console.log('🎨 Applied system customization:', {
+      background: backgroundHsl,
+      primary: primaryHsl,
+      header: headerHsl,
+      sidebar: sidebarHsl
+    });
+  };
 
   // Load customization settings
   const loadCustomization = async () => {
@@ -50,25 +103,6 @@ export function useSystemCustomization() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Apply customization to CSS variables
-  const applyCustomization = (config: SystemCustomization) => {
-    const root = document.documentElement;
-    
-    // Apply colors as CSS custom properties
-    root.style.setProperty('--custom-background', config.background_color);
-    root.style.setProperty('--custom-primary', config.primary_color);
-    root.style.setProperty('--custom-header', config.header_color);
-    root.style.setProperty('--custom-sidebar', config.sidebar_color);
-    
-    // Update semantic tokens
-    root.style.setProperty('--background', config.background_color);
-    root.style.setProperty('--primary', config.primary_color);
-    root.style.setProperty('--card', config.header_color);
-    root.style.setProperty('--popover', config.header_color);
-    
-    console.log('🎨 Applied system customization:', config);
   };
 
   // Update customization (master only)
@@ -122,7 +156,7 @@ export function useSystemCustomization() {
   const resetToDefaults = async () => {
     try {
       await updateCustomization({
-        logo_url: null,
+        logo_url: '',
         ...defaultCustomization
       });
     } catch (err) {

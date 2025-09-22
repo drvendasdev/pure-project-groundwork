@@ -9,7 +9,7 @@ import { WebhooksEvolutionConfig } from "./WebhooksEvolutionConfig";
 import { EvolutionApiConfig } from "./EvolutionApiConfig";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { ColorPicker } from "@/components/ui/color-picker";
+import { ColorPickerModal } from "@/components/modals/ColorPickerModal";
 import { useSystemCustomization } from "@/hooks/useSystemCustomization";
 import { useAuth } from "@/hooks/useAuth";
 import { Upload, RotateCcw, Palette } from "lucide-react";
@@ -27,6 +27,8 @@ export function AdministracaoConfiguracoes() {
   } = useSystemCustomization();
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [activeColorField, setActiveColorField] = useState<'primary' | 'background' | 'header' | 'sidebar' | null>(null);
 
   // Load current settings for selected workspace
   useEffect(() => {
@@ -101,6 +103,19 @@ export function AdministracaoConfiguracoes() {
         variant: 'destructive'
       });
     }
+  };
+
+  const handleColorSelect = (color: string) => {
+    if (activeColorField) {
+      handleCustomizationUpdate(`${activeColorField}_color`, color);
+    }
+    setColorPickerOpen(false);
+    setActiveColorField(null);
+  };
+
+  const openColorPicker = (field: 'primary' | 'background' | 'header' | 'sidebar') => {
+    setActiveColorField(field);
+    setColorPickerOpen(true);
   };
 
   // Handle logo upload
@@ -255,31 +270,66 @@ export function AdministracaoConfiguracoes() {
                 {/* Colors Section */}
                 <div className="space-y-4">
                   <h3 className="text-md font-medium text-foreground">Cores do Sistema</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <ColorPicker
-                      label="Cor de Fundo"
-                      value={customization.background_color}
-                      onChange={(value) => handleCustomizationUpdate('background_color', value)}
-                      disabled={loading || customizationLoading}
-                    />
-                    <ColorPicker
-                      label="Cor Primária"
-                      value={customization.primary_color}
-                      onChange={(value) => handleCustomizationUpdate('primary_color', value)}
-                      disabled={loading || customizationLoading}
-                    />
-                    <ColorPicker
-                      label="Cor dos Headers"
-                      value={customization.header_color}
-                      onChange={(value) => handleCustomizationUpdate('header_color', value)}
-                      disabled={loading || customizationLoading}
-                    />
-                    <ColorPicker
-                      label="Cor da Sidebar"
-                      value={customization.sidebar_color}
-                      onChange={(value) => handleCustomizationUpdate('sidebar_color', value)}
-                      disabled={loading || customizationLoading}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Cor Primária</Label>
+                      <Button
+                        variant="outline"
+                        className="w-full h-20 p-2 flex flex-col items-center gap-2"
+                        onClick={() => openColorPicker('primary')}
+                        disabled={loading || customizationLoading}
+                        style={{ backgroundColor: customization.primary_color }}
+                      >
+                        <div className="text-xs font-mono text-black">
+                          {customization.primary_color}
+                        </div>
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Cor de Fundo</Label>
+                      <Button
+                        variant="outline"
+                        className="w-full h-20 p-2 flex flex-col items-center gap-2"
+                        onClick={() => openColorPicker('background')}
+                        disabled={loading || customizationLoading}
+                        style={{ backgroundColor: customization.background_color }}
+                      >
+                        <div className="text-xs font-mono text-white">
+                          {customization.background_color}
+                        </div>
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Cor do Header</Label>
+                      <Button
+                        variant="outline"
+                        className="w-full h-20 p-2 flex flex-col items-center gap-2"
+                        onClick={() => openColorPicker('header')}
+                        disabled={loading || customizationLoading}
+                        style={{ backgroundColor: customization.header_color }}
+                      >
+                        <div className="text-xs font-mono text-white">
+                          {customization.header_color}
+                        </div>
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Cor da Sidebar</Label>
+                      <Button
+                        variant="outline"
+                        className="w-full h-20 p-2 flex flex-col items-center gap-2"
+                        onClick={() => openColorPicker('sidebar')}
+                        disabled={loading || customizationLoading}
+                        style={{ backgroundColor: customization.sidebar_color }}
+                      >
+                        <div className="text-xs font-mono text-white">
+                          {customization.sidebar_color}
+                        </div>
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -316,6 +366,12 @@ export function AdministracaoConfiguracoes() {
 
         </Tabs>
       </div>
+
+      <ColorPickerModal
+        open={colorPickerOpen}
+        onOpenChange={setColorPickerOpen}
+        onColorSelect={handleColorSelect}
+      />
     </div>
   );
 }
