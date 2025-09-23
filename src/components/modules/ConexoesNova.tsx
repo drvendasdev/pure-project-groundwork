@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star, Bug } from 'lucide-react';
+import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star, Bug, ArrowRight } from 'lucide-react';
 import { TestWebhookReceptionModal } from "@/components/modals/TestWebhookReceptionModal";
 
 import { toast } from '@/hooks/use-toast';
@@ -18,6 +18,8 @@ import { evolutionProvider } from '@/services/EvolutionProvider';
 import type { Connection, HISTORY_RECOVERY_MAP } from '@/types/evolution';
 import { useWorkspaceLimits } from '@/hooks/useWorkspaceLimits';
 import { useWorkspaceRole } from '@/hooks/useWorkspaceRole';
+import { usePipelinesContext } from '@/contexts/PipelinesContext';
+import { useNavigate } from 'react-router-dom';
 
 // Helper functions for phone number formatting
 const normalizePhoneNumber = (phone: string): string => {
@@ -53,6 +55,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   
   const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
   const { canCreateConnections } = useWorkspaceRole();
+  const { pipelines } = usePipelinesContext();
+  const navigate = useNavigate();
   
   // Use the actual usage data from the backend
   const currentUsage = usage || {
@@ -784,16 +788,36 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                       <Label htmlFor="pipeline" className="text-sm font-medium text-foreground">
                         Selecionar Pipeline
                       </Label>
-                      <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
-                        <SelectTrigger className="h-11">
-                          <SelectValue placeholder="Selecionar Pipeline" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="vendas">Vendas</SelectItem>
-                          <SelectItem value="perdidos">Perdidos</SelectItem>
-                          <SelectItem value="sucesso-cliente">Sucesso do Cliente</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      {pipelines.length > 0 ? (
+                        <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
+                          <SelectTrigger className="h-11">
+                            <SelectValue placeholder="Selecionar Pipeline" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pipelines.map((pipeline) => (
+                              <SelectItem key={pipeline.id} value={pipeline.id}>
+                                {pipeline.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="flex items-center gap-2 p-3 border border-border rounded-md bg-muted/30">
+                          <span className="text-sm text-muted-foreground flex-1">
+                            Nenhum pipeline encontrado para esta empresa
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate('/pipeline-configuracao')}
+                            className="gap-1"
+                          >
+                            Criar Pipeline
+                            <ArrowRight className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
