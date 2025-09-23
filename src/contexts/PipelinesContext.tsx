@@ -62,7 +62,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [columns, setColumns] = useState<PipelineColumn[]>([]);
   const [cards, setCards] = useState<PipelineCard[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start as loading
   const { selectedWorkspace } = useWorkspace();
   const { toast } = useToast();
 
@@ -89,13 +89,19 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   }, [selectedWorkspace?.workspace_id]);
 
   const fetchPipelines = useCallback(async () => {
+    console.log('🔄 PipelinesContext: Starting fetchPipelines');
+    console.log('🔄 PipelinesContext: Headers available:', !!getHeaders);
+    console.log('🔄 PipelinesContext: Selected workspace:', selectedWorkspace?.workspace_id);
+    
     if (!getHeaders) {
+      console.log('❌ PipelinesContext: No headers available, stopping fetch');
       setIsLoading(false);
       return;
     }
     
     try {
       setIsLoading(true);
+      console.log('🔄 PipelinesContext: Making request with headers:', getHeaders);
       
       const { data, error } = await supabase.functions.invoke('pipeline-management/pipelines', {
         method: 'GET',
@@ -107,10 +113,13 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
 
+      console.log('✅ PipelinesContext: Received pipelines data:', data);
+      console.log('✅ PipelinesContext: Number of pipelines:', data?.length || 0);
       setPipelines(data || []);
       
       // Auto-select first pipeline if none selected and we have pipelines
       if (data?.length > 0 && !selectedPipeline) {
+        console.log('🔄 PipelinesContext: Auto-selecting first pipeline:', data[0]);
         setSelectedPipeline(data[0]);
       }
     } catch (error) {
@@ -122,6 +131,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
       });
     } finally {
       setIsLoading(false);
+      console.log('✅ PipelinesContext: fetchPipelines completed');
     }
   }, [getHeaders, toast]);
 
@@ -310,9 +320,15 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   // Buscar pipelines quando o workspace mudar
   useEffect(() => {
+    console.log('🔄 PipelinesContext: useEffect triggered');
+    console.log('🔄 PipelinesContext: selectedWorkspace?.workspace_id:', selectedWorkspace?.workspace_id);
+    console.log('🔄 PipelinesContext: getHeaders available:', !!getHeaders);
+    
     if (selectedWorkspace?.workspace_id && getHeaders) {
+      console.log('🔄 PipelinesContext: Calling fetchPipelines');
       fetchPipelines();
     } else {
+      console.log('🔄 PipelinesContext: Clearing pipelines due to missing workspace or headers');
       setPipelines([]);
       setSelectedPipeline(null);
     }
