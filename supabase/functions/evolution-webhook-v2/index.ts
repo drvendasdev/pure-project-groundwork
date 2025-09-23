@@ -503,20 +503,21 @@ serve(async (req) => {
         // Check if this is a message event or other type of event
         const isMessageEvent = payload.event === 'messages.upsert';
         
+        // Extract message content with multiple fallback paths (needed for both logs and processing)
+        const messageContent = isMessageEvent ? (
+          payload.data?.message?.conversation || 
+          payload.data?.message?.text || 
+          payload.data?.message?.caption ||
+          payload.data?.message?.body ||
+          payload.data?.conversation ||
+          payload.data?.text ||
+          payload.data?.caption ||
+          payload.data?.body ||
+          ''
+        ) : '';
+        
         if (isMessageEvent) {
           // ============ PROCESS MESSAGE EVENTS ============
-          
-          // Extract message content with multiple fallback paths
-          const messageContent = payload.data?.message?.conversation || 
-                                payload.data?.message?.text || 
-                                payload.data?.message?.caption ||
-                                payload.data?.message?.body ||
-                                payload.data?.conversation ||
-                                payload.data?.text ||
-                                payload.data?.caption ||
-                                payload.data?.body ||
-                                '';
-
           console.log(`💬 [${requestId}] Message content found: "${messageContent}" (${messageContent.length} chars)`);
 
           // Extract and map message types from Evolution API to standardized types
@@ -665,14 +666,15 @@ serve(async (req) => {
           console.log(`📎 [${requestId}] Media data found:`, cleanMediaFields);
         }
 
-        // Additional debug log for message content
-        if (messageContent) {
-          console.log(`💬 [${requestId}] Message content found: "${messageContent}" (${messageContent.length} chars)`);
-        } else {
-          console.log(`⚠️ [${requestId}] No message content found in:`, {
-            conversation: payload.data?.message?.conversation,
-            text: payload.data?.message?.text,
-            caption: payload.data?.message?.caption,
+        // Debug log for message content (only for message events)
+        if (isMessageEvent) {
+          if (messageContent) {
+            console.log(`💬 [${requestId}] Message content extracted: "${messageContent}" (${messageContent.length} chars)`);
+          } else {
+            console.log(`⚠️ [${requestId}] No message content found in:`, {
+              conversation: payload.data?.message?.conversation,
+              text: payload.data?.message?.text,
+              caption: payload.data?.message?.caption,
             body: payload.data?.message?.body,
             message_object: payload.data?.message ? Object.keys(payload.data.message) : 'no message object'
           });
