@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Pencil, Plus, Trash2, ChevronDown, Menu, Users } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Pencil, Plus, Trash2, ChevronDown, Menu, Users, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
+import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import {
   DndContext,
   DragEndEvent,
@@ -32,6 +37,7 @@ interface SortableColumnProps {
   column: any;
   isDarkMode: boolean;
   onDelete: (id: string) => void;
+  onUpdatePermissions: (columnId: string, userIds: string[]) => void;
 }
 
 interface Action {
@@ -66,8 +72,11 @@ const initialActions: Action[] = [
   }
 ];
 
-function SortableColumn({ column, isDarkMode, onDelete }: SortableColumnProps) {
+function SortableColumn({ column, isDarkMode, onDelete, onUpdatePermissions }: SortableColumnProps) {
   const { getCardsByColumn } = usePipelinesContext();
+  const { selectedWorkspace } = useWorkspace();
+  const { members } = useWorkspaceMembers(selectedWorkspace?.workspace_id);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>(column.permissions || []);
   
   const {
     attributes,
@@ -136,10 +145,59 @@ function SortableColumn({ column, isDarkMode, onDelete }: SortableColumnProps) {
         <p className="text-xs text-gray-500 mt-2">Usuarios que podem ver a coluna</p>
         <div className="flex items-center mt-1 mb-1">
           <Users className="h-3 w-3 mr-2 text-gray-400" />
-          <span className="text-xs text-gray-500">0 usuários</span>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-2">
-            <Pencil className="h-3 w-3" />
-          </Button>
+          <span className="text-xs text-gray-500">
+            {selectedUsers.length === 0 ? 'Todos podem ver' : `${selectedUsers.length} usuário${selectedUsers.length > 1 ? 's' : ''}`}
+          </span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-2">
+                <Pencil className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="space-y-4">
+                <h4 className="font-medium">Selecionar Usuários</h4>
+                <div className="flex flex-wrap gap-2">
+                  {members?.filter(member => !member.is_hidden).map((member) => (
+                    <div key={member.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`user-${member.id}`}
+                        checked={selectedUsers.includes(member.user_id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedUsers([...selectedUsers, member.user_id]);
+                          } else {
+                            setSelectedUsers(selectedUsers.filter(id => id !== member.user_id));
+                          }
+                        }}
+                      />
+                      <div className="flex items-center space-x-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback>
+                            <User className="h-4 w-4" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <label 
+                          htmlFor={`user-${member.id}`}
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          {member.user?.name}
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button 
+                  className="w-full" 
+                  onClick={() => {
+                    onUpdatePermissions(column.id, selectedUsers);
+                  }}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Usuários que podem ver todos os negócios */}
@@ -203,6 +261,12 @@ export function PipelineConfiguracao({
   const deleteColumn = (columnId: string) => {
     // TODO: Implementar exclusão de coluna via API
     console.log('Delete column:', columnId);
+  };
+
+  const handleUpdateColumnPermissions = (columnId: string, userIds: string[]) => {
+    // Aqui você pode implementar a lógica para salvar as permissões no banco de dados
+    console.log('Updating column permissions:', { columnId, userIds });
+    // TODO: Implementar call para API/supabase para salvar as permissões
   };
 
   const sensors = useSensors(
@@ -362,6 +426,7 @@ export function PipelineConfiguracao({
                     column={column}
                     isDarkMode={isDarkMode}
                     onDelete={deleteColumn}
+                    onUpdatePermissions={handleUpdateColumnPermissions}
                   />
                 ))}
               </div>
