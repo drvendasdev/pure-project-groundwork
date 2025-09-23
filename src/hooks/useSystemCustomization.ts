@@ -129,6 +129,10 @@ export function useSystemCustomization() {
       setLoading(true);
       setError(null);
 
+      // Apply defaults first to avoid black colors during loading
+      setCustomization(defaultCustomization);
+      applyCustomization(defaultCustomization);
+
       const { data, error } = await supabase.functions.invoke('get-system-customization');
 
       if (error) {
@@ -137,13 +141,14 @@ export function useSystemCustomization() {
       }
 
       if (data) {
-        setCustomization({ ...defaultCustomization, ...data });
-        applyCustomization({ ...defaultCustomization, ...data });
+        const config = { ...defaultCustomization, ...data };
+        setCustomization(config);
+        applyCustomization(config);
       }
     } catch (err: any) {
       console.error('❌ Error in loadCustomization:', err);
       setError(err.message);
-      // Use defaults if loading fails
+      // Keep defaults if loading fails
       setCustomization(defaultCustomization);
       applyCustomization(defaultCustomization);
     } finally {

@@ -35,10 +35,10 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             logo_url: null,
-            background_color: 'hsl(240, 10%, 3.9%)',
-            primary_color: 'hsl(47.9, 95.8%, 53.1%)',
-            header_color: 'hsl(240, 5.9%, 10%)',
-            sidebar_color: 'hsl(240, 5.9%, 10%)'
+            background_color: '#f5f5f5',
+            primary_color: '#eab308',
+            header_color: '#ffffff',
+            sidebar_color: '#fafafa'
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
