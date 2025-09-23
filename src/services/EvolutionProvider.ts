@@ -9,6 +9,13 @@ interface ConnectionCreateRequest {
   defaultPipelineId?: string;
 }
 
+interface ConnectionUpdateRequest {
+  connectionId: string;
+  phone_number?: string;
+  auto_create_crm_card?: boolean;
+  default_pipeline_id?: string;
+}
+
 interface ConnectionResponse {
   id: string;
   instance_name: string;
@@ -274,6 +281,49 @@ class EvolutionProvider {
     });
     
     return { success: data?.success || false };
+  }
+
+  async updateConnection(request: ConnectionUpdateRequest): Promise<ConnectionResponse> {
+    try {
+      console.log('🔄 EvolutionProvider.updateConnection called with request:', request);
+      
+      // Get user data for headers
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
+      if (!currentUserData?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const headers = {
+        'x-system-user-id': currentUserData.id,
+        'x-system-user-email': currentUserData.email || '',
+        'x-workspace-id': currentUserData.workspace_id || ''
+      };
+      
+      console.log('📤 Calling update-connection with headers:', headers);
+
+      const { data, error } = await supabase.functions.invoke('update-connection', {
+        body: request,
+        headers
+      });
+      
+      console.log('📥 Update response:', { data, error });
+      
+      if (error) {
+        console.error('❌ Supabase function error:', error);
+        throw new Error(error.message || 'Erro ao atualizar conexão');
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Falha ao atualizar conexão');
+      }
+      
+      return data.connection;
+    } catch (error) {
+      console.error('❌ Error in updateConnection:', error);
+      throw error;
+    }
   }
 
   async deleteConnection(connectionId: string): Promise<{ success: boolean }> {

@@ -302,13 +302,44 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   };
 
   const editConnection = async () => {
-    if (!editingConnection || !phoneNumber.trim()) {
+    if (!selectedConnection || !editingConnection) return;
+    
+    setIsLoading(true);
+    try {
+      const updateData = {
+        connectionId: selectedConnection.id,
+        phone_number: phoneNumber?.trim() || null,
+        auto_create_crm_card: editingConnection.auto_create_crm_card || false,
+        default_pipeline_id: editingConnection.default_pipeline_id || null,
+      };
+
+      console.log('Updating connection with data:', updateData);
+
+      await evolutionProvider.updateConnection(updateData);
+      
       toast({
-        title: 'Erro',
-        description: 'Número de telefone é obrigatório',
-        variant: 'destructive',
+        title: "Sucesso",
+        description: "Conexão atualizada com sucesso!",
       });
-      return;
+
+      // Refresh connections list
+      await loadConnections();
+      
+      // Close modal
+      setIsEditMode(false);
+      setSelectedConnection(null);
+      setEditingConnection(null);
+      setPhoneNumber('');
+      
+    } catch (error) {
+      console.error('Error updating connection:', error);
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao atualizar conexão",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
 
     try {
