@@ -126,26 +126,23 @@ export function DealDetailsModal({
 
   // Converter colunas do pipeline em steps com progresso real
   useEffect(() => {
-    if (columns.length > 0 && currentColumnId) {
+    if (columns.length > 0) {
       const sortedColumns = columns.sort((a, b) => a.order_position - b.order_position);
-      const currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
+      let currentIndex = -1;
+      
+      // Se temos currentColumnId, encontrar o índice correto
+      if (currentColumnId) {
+        currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
+      }
+      
       const steps: PipelineStep[] = sortedColumns.map((column, index) => ({
         id: column.id,
         name: column.name,
         color: column.color,
         isActive: index === currentIndex,
-        isCompleted: index < currentIndex
+        isCompleted: currentIndex >= 0 && index < currentIndex
       }));
-      setPipelineSteps(steps);
-    } else if (columns.length > 0) {
-      // Fallback para primeira coluna se não encontrar o card
-      const steps: PipelineStep[] = columns.sort((a, b) => a.order_position - b.order_position).map((column, index) => ({
-        id: column.id,
-        name: column.name,
-        color: column.color,
-        isActive: index === 0,
-        isCompleted: false
-      }));
+      
       setPipelineSteps(steps);
     }
   }, [columns, currentColumnId, isLoadingColumns]);
