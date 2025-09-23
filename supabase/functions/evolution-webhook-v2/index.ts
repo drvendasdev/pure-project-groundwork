@@ -507,70 +507,122 @@ serve(async (req) => {
                               payload.data?.message?.body ||
                               '';
 
-        // Extract complete contact data
-        const contactData = {
-          remoteJid: payload.data?.key?.remoteJid || payload.data?.remoteJid,
-          pushName: payload.data?.pushName,
-          profilePicUrl: payload.data?.profilePicUrl,
-          phone: payload.data?.key?.remoteJid ? extractPhoneFromRemoteJid(payload.data.key.remoteJid) : null
+        // Extract and map message types from Evolution API to standardized types
+        const getMessageType = (evolutionData) => {
+          const messageType = evolutionData?.messageType?.toLowerCase();
+          const message = evolutionData?.message;
+          
+          if (messageType === 'conversation' || message?.conversation) return 'text';
+          if (messageType === 'imagemessage' || message?.imageMessage) return 'image';
+          if (messageType === 'videomessage' || message?.videoMessage) return 'video';
+          if (messageType === 'audiomessage' || message?.audioMessage) return 'audio';
+          if (messageType === 'documentmessage' || message?.documentMessage) return 'file';
+          if (messageType === 'pttmessage' || message?.pttMessage) return 'audio';
+          if (messageType === 'stickermessage' || message?.stickerMessage) return 'sticker';
+          
+          return messageType || 'text';
         };
 
-        // Prepare N8N payload with ORIGINAL Evolution data structure + enhanced data
+        // Extract file information for media messages
+        const getFileInfo = (evolutionData, mediaFields) => {
+          const message = evolutionData?.message;
+          const messageType = getMessageType(evolutionData);
+          
+          // Extract file URL from various possible locations
+          let fileUrl = mediaFields.url || 
+                       message?.imageMessage?.url ||
+                       message?.videoMessage?.url ||
+                       message?.audioMessage?.url ||
+                       message?.documentMessage?.url ||
+                       message?.stickerMessage?.url;
+          
+          // Extract file name
+          let fileName = mediaFields.fileName ||
+                        message?.documentMessage?.fileName ||
+                        message?.imageMessage?.fileName ||
+                        message?.videoMessage?.fileName ||
+                        message?.audioMessage?.fileName;
+          
+          // Extract MIME type
+          let mimeType = mediaFields.mimetype ||
+                        message?.imageMessage?.mimetype ||
+                        message?.videoMessage?.mimetype ||
+                        message?.audioMessage?.mimetype ||
+                        message?.documentMessage?.mimetype;
+
+          return { fileUrl, fileName, mimeType };
+        };
+
+        const fileInfo = getFileInfo(payload.data, cleanMediaFields);
+        const messageType = getMessageType(payload.data);
+        const conversationId = payload.data?.key?.remoteJid || payload.data?.remoteJid;
+        const externalId = payload.data?.key?.id;
+        const senderType = payload.data?.key?.fromMe === true ? 'agent' : 'contact';
+
+        // Create simplified N8N payload structure following user's example
         const n8nPayload = {
-          // ============ PRESERVE ORIGINAL EVOLUTION DATA COMPLETELY ============
-          ...payload,
-          
-          // ============ ENHANCED STRUCTURED DATA FOR N8N ============
-          
-          // Media data (all possible media fields)
-          media_data: cleanMediaFields,
-          
-          // Message data (enhanced extraction)
-          message_data: {
-            content: messageContent,
-            type: payload.data?.messageType || 'unknown',
-            external_id: payload.data?.key?.id,
-            timestamp: payload.data?.messageTimestamp,
-            fromMe: payload.data?.key?.fromMe,
-            status: payload.data?.status,
-            // All message object fields
-            message_raw: payload.data?.message || null
+          // ============ ROOT LEVEL FIELDS (as per user example) ============
+          conversation_id: conversationId,
+          sender_type: senderType,
+          content: messageContent || null,
+          message_type: messageType,
+          file_url: fileInfo.fileUrl || null,
+          file_name: fileInfo.fileName || null,
+          mime_type: fileInfo.mimeType || null,
+          external_id: externalId,
+          created_at: new Date().toISOString(),
+          delivered_at: payload.data?.messageTimestamp ? new Date(payload.data.messageTimestamp * 1000).toISOString() : null,
+          status: payload.data?.status || 'delivered',
+          workspace_id: workspaceId,
+          metadata: {
+            instance: payload.instance,
+            origem_resposta: 'evolution',
+            ptt: payload.data?.message?.ptt || cleanMediaFields.ptt || false,
+            request_id: requestId,
+            event_type: payload.event
           },
           
-          // Contact data (enhanced extraction)
-          contact_data: contactData,
+          // ============ PRESERVE ORIGINAL EVOLUTION DATA FOR DEBUGGING ============
+          evolution_original: {
+            ...payload,
+            processed_data: processedData
+          },
           
-          // Additional context fields for convenience
-          workspace_id: workspaceId,
-          processed_data: processedData,
-          timestamp: new Date().toISOString(),
-          request_id: requestId,
-          
-          // Computed fields for convenience
-          message_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
-          phone_number: payload.data?.key?.remoteJid ? extractPhoneFromRemoteJid(payload.data.key.remoteJid) : null,
-          
-          // Debug info with enhanced details
+          // ============ ENHANCED DEBUG INFO ============
           debug_info: {
             original_payload_keys: Object.keys(payload),
             data_keys: payload.data ? Object.keys(payload.data) : [],
             message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
-            fromMe_value: payload.data?.key?.fromMe,
-            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
-            media_fields_found: Object.keys(cleanMediaFields),
-            message_content_found: !!messageContent,
-            message_content_length: messageContent.length
+            message_content_extraction: {
+              conversation: payload.data?.message?.conversation,
+              text: payload.data?.message?.text,
+              caption: payload.data?.message?.caption,
+              body: payload.data?.message?.body,
+              extracted: messageContent
+            },
+            file_extraction: {
+              extracted_url: fileInfo.fileUrl,
+              extracted_name: fileInfo.fileName,
+              extracted_mime: fileInfo.mimeType,
+              media_fields_found: Object.keys(cleanMediaFields)
+            },
+            type_mapping: {
+              original_type: payload.data?.messageType,
+              mapped_type: messageType
+            }
           }
         };
 
-        console.log(`🚀 [${requestId}] Sending to N8N:`, {
+        console.log(`🚀 [${requestId}] Sending to N8N (NEW STRUCTURE):`, {
           url: webhookUrl,
           event_type: payload.event,
-          has_message_data: !!n8nPayload.message_data?.content,
-          has_contact_data: !!n8nPayload.contact_data?.phone,
-          has_media_data: Object.keys(cleanMediaFields).length > 0,
-          media_fields_count: Object.keys(cleanMediaFields).length,
-          message_content_preview: messageContent.substring(0, 50) + (messageContent.length > 50 ? '...' : '')
+          conversation_id: n8nPayload.conversation_id,
+          sender_type: n8nPayload.sender_type,
+          content: n8nPayload.content?.substring(0, 50) + (n8nPayload.content?.length > 50 ? '...' : '') || 'no content',
+          message_type: n8nPayload.message_type,
+          has_file: !!n8nPayload.file_url,
+          file_url: n8nPayload.file_url,
+          external_id: n8nPayload.external_id
         });
 
         // Additional debug log for media data
