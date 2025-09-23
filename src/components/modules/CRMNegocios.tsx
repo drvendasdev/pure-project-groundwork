@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Search, Plus, Filter, Eye, MoreHorizontal, Phone, MessageCircle, Calendar, DollarSign, User, EyeOff, Folder, AlertTriangle, Check } from "lucide-react";
+import { Settings, Search, Plus, Filter, Eye, MoreHorizontal, Phone, MessageCircle, MessageSquare, Calendar, DollarSign, User, EyeOff, Folder, AlertTriangle, Check } from "lucide-react";
 import { AddColumnModal } from "@/components/modals/AddColumnModal";
 import { PipelineConfigModal } from "@/components/modals/PipelineConfigModal";
 import { FilterModal } from "@/components/modals/FilterModal";
@@ -163,11 +163,20 @@ function DraggableDeal({
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
           <div className="flex items-center gap-1">
             <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600" onClick={(e) => e.stopPropagation()}>
-              <MessageCircle className="w-3.5 h-3.5" />
+              <MessageSquare className="w-3.5 h-3.5" />
             </Button>
-            <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600" onClick={(e) => e.stopPropagation()}>
-              <Phone className="w-3.5 h-3.5" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600" onClick={(e) => e.stopPropagation()}>
+                    <User className="w-3.5 h-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{deal.responsible || 'Sem responsável'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-purple-100 hover:text-purple-600" onClick={(e) => e.stopPropagation()}>
               <Calendar className="w-3.5 h-3.5" />
             </Button>
