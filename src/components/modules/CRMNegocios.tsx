@@ -175,7 +175,7 @@ function DraggableDeal({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>
-                    {deal.responsible ? `Responsável: ${deal.responsible}` : "Não atribuído"}
+                    {deal.responsible !== "Não atribuído" ? `Responsável: ${deal.responsible}` : "Não atribuído"}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -588,7 +588,7 @@ export function CRMNegocios({
                                 name: card.title,
                                 value: card.value || 0,
                                 stage: column.name,
-                                responsible: "Usuário", // Placeholder
+                                responsible: card.conversation?.assigned_user?.name || "Não atribuído",
                                 tags: Array.isArray(card.tags) ? card.tags : [],
                                 priority: 'medium',
                                 lastContact: "2h atrás" // Placeholder
@@ -627,7 +627,7 @@ export function CRMNegocios({
                 name: activeCard.title,
                 value: activeCard.value || 0,
                 stage: activeColumn?.name || "",
-                responsible: "Usuário",
+                responsible: activeCard.conversation?.assigned_user?.name || "Não atribuído",
                 tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
                 priority: 'medium'
               };
