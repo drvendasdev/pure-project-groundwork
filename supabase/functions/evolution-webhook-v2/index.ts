@@ -451,6 +451,7 @@ serve(async (req) => {
       try {
         // Debug log the payload structure
         console.log(`🔍 [${requestId}] Debug payload structure:`, {
+          event: payload.event,
           fromMe: payload.data?.key?.fromMe,
           messageType: payload.data?.messageType,
           conversation: payload.data?.message?.conversation,
@@ -458,39 +459,46 @@ serve(async (req) => {
           messageKeys: payload.data?.message ? Object.keys(payload.data.message) : []
         });
 
-        // Determine direction based on fromMe flag - false means message FROM contact (inbound)
-        const isInbound = payload.data?.key?.fromMe === false;
+        // Determine if this is a message event
+        const isMessageEvent = payload.event === 'messages.upsert' || payload.event === 'messages.update';
         
-        // Extract message content with better fallbacks
-        let messageContent = 'Unknown message';
-        if (payload.data?.message) {
-          const msg = payload.data.message;
-          messageContent = msg.conversation ||
-                          msg.extendedTextMessage?.text ||
-                          msg.imageMessage?.caption ||
-                          msg.videoMessage?.caption ||
-                          msg.audioMessage?.ptt ? '[Audio message]' : msg.audioMessage?.caption ||
-                          msg.documentMessage?.title ||
-                          msg.stickerMessage ? '[Sticker]' :
-                          msg.locationMessage ? '[Location]' :
-                          msg.contactMessage ? '[Contact]' :
-                          msg.imageMessage ? '[Image]' :
-                          msg.videoMessage ? '[Video]' :
-                          msg.audioMessage ? '[Audio]' :
-                          msg.documentMessage ? '[Document]' :
-                          'Media message';
-        }
-
-        // Create a clean, structured payload for N8N
+        // Create base payload structure
         const n8nPayload = {
           event_type: payload.event,
           instance_name: payload.instance || payload.instanceName,
           workspace_id: workspaceId,
-          timestamp: new Date().toISOString(),
-          message_data: {
-            external_id: payload.data?.key?.id,
+          timestamp: new Date().toISOString()
+        };
+
+        // Add message-specific data only for message events
+        if (isMessageEvent && payload.data?.key) {
+          // Determine direction based on fromMe flag - false means message FROM contact (inbound)
+          const isInbound = payload.data.key.fromMe === false;
+          
+          // Extract message content with better fallbacks
+          let messageContent = null;
+          if (payload.data?.message) {
+            const msg = payload.data.message;
+            messageContent = msg.conversation ||
+                            msg.extendedTextMessage?.text ||
+                            msg.imageMessage?.caption ||
+                            msg.videoMessage?.caption ||
+                            msg.audioMessage?.ptt ? '[Audio message]' : msg.audioMessage?.caption ||
+                            msg.documentMessage?.title ||
+                            msg.stickerMessage ? '[Sticker]' :
+                            msg.locationMessage ? '[Location]' :
+                            msg.contactMessage ? '[Contact]' :
+                            msg.imageMessage ? '[Image]' :
+                            msg.videoMessage ? '[Video]' :
+                            msg.audioMessage ? '[Audio]' :
+                            msg.documentMessage ? '[Document]' :
+                            'Media message';
+          }
+
+          n8nPayload.message_data = {
+            external_id: payload.data.key.id,
             direction: isInbound ? 'inbound' : 'outbound',
-            phone_number: payload.data?.key?.remoteJid?.replace(/@.*$/, ''),
+            phone_number: payload.data.key.remoteJid?.replace(/@.*$/, ''),
             message_type: payload.data?.messageType || 'text',
             content: messageContent,
             media_url: payload.data?.message?.imageMessage?.url ||
@@ -499,21 +507,42 @@ serve(async (req) => {
                       payload.data?.message?.documentMessage?.url,
             quoted_message: payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage,
             sender_name: payload.data?.pushName || null,
-            from_me: payload.data?.key?.fromMe
-          },
-          processed_data: processedData && {
+            from_me: payload.data.key.fromMe
+          };
+
+          n8nPayload.debug_info = {
+            original_fromMe: payload.data.key.fromMe,
+            calculated_direction: isInbound ? 'inbound' : 'outbound',
+            message_keys: payload.data?.message ? Object.keys(payload.data.message) : []
+          };
+        } else {
+          // For non-message events (like contacts.update), include basic contact info
+          if (payload.data) {
+            n8nPayload.contact_data = {
+              remote_jid: Array.isArray(payload.data) ? payload.data[0]?.remoteJid : payload.data.remoteJid,
+              push_name: Array.isArray(payload.data) ? payload.data[0]?.pushName : payload.data.pushName,
+              profile_pic_url: Array.isArray(payload.data) ? payload.data[0]?.profilePicUrl : payload.data.profilePicUrl
+            };
+          }
+        }
+
+        // Add processed data if available (only for message events that were processed locally)
+        if (processedData && isMessageEvent) {
+          n8nPayload.processed_data = {
             contact_id: processedData.contact_id,
             conversation_id: processedData.conversation_id,
             message_id: processedData.message_id,
             contact_name: processedData.contact_name,
             contact_phone: processedData.contact_phone
-          },
-          debug_info: {
-            original_fromMe: payload.data?.key?.fromMe,
-            calculated_direction: isInbound ? 'inbound' : 'outbound',
-            message_keys: payload.data?.message ? Object.keys(payload.data.message) : []
-          }
-        };
+          };
+        }
+
+        console.log(`🚀 [${requestId}] Sending to N8N:`, {
+          url: webhookUrl,
+          event_type: payload.event,
+          has_message_data: !!n8nPayload.message_data,
+          has_contact_data: !!n8nPayload.contact_data
+        });
 
         const response = await fetch(webhookUrl, {
           method: 'POST',
