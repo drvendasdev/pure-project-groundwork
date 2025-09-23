@@ -313,9 +313,6 @@ serve(async (req) => {
           "QRCODE_UPDATED",
           "CONNECTION_UPDATE",
           "MESSAGES_UPSERT",
-          "MESSAGES_UPDATE",
-          "SEND_MESSAGE",
-          "CONTACTS_UPDATE",
           "CONTACTS_UPSERT"
         ]
       }

@@ -79,9 +79,7 @@ serve(async (req) => {
               events: [
                 'QRCODE_UPDATED',
                 'CONNECTION_UPDATE', 
-                'MESSAGES_UPSERT',
-                'MESSAGES_UPDATE',
-                'SEND_MESSAGE'
+                'MESSAGES_UPSERT'
               ]
             })
           }

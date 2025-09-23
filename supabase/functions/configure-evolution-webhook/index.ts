@@ -91,9 +91,7 @@ serve(async (req) => {
     const events = customEvents || [
       'QRCODE_UPDATED',
       'CONNECTION_UPDATE',
-      'MESSAGES_UPSERT',
-      'MESSAGES_UPDATE',
-      'SEND_MESSAGE'
+      'MESSAGES_UPSERT'
     ];
     
     console.log(`🔧 [${requestId}] Setting webhook URL: ${webhookUrl}`);
