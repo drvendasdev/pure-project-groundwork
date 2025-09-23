@@ -278,16 +278,36 @@ serve(async (req) => {
             .select(`
               *,
               contact:contacts(*),
-              conversation:conversations(
-                *,
-                assigned_user:system_users(id, name, avatar)
-              )
+              conversation:conversations(*)
             `)
             .eq('pipeline_id', pipelineId)
             .order('created_at', { ascending: false });
 
           if (error) throw error;
-          return new Response(JSON.stringify(cards), {
+
+          // Buscar informações dos usuários responsáveis separadamente
+          const cardsWithAssignedUsers = await Promise.all(
+            (cards || []).map(async (card) => {
+              if (card.conversation?.assigned_user_id) {
+                const { data: assignedUser } = await supabaseClient
+                  .from('system_users')
+                  .select('id, name, avatar')
+                  .eq('id', card.conversation.assigned_user_id)
+                  .single();
+                
+                return {
+                  ...card,
+                  conversation: {
+                    ...card.conversation,
+                    assigned_user: assignedUser
+                  }
+                };
+              }
+              return card;
+            })
+          );
+
+          return new Response(JSON.stringify(cardsWithAssignedUsers), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
