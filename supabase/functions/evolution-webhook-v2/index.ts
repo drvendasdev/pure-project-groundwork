@@ -501,17 +501,23 @@ serve(async (req) => {
         );
 
         // Check if this is a message event or other type of event
-        const isMessageEvent = payload.event === 'messages.upsert' && payload.data?.message;
+        const isMessageEvent = payload.event === 'messages.upsert';
         
         if (isMessageEvent) {
           // ============ PROCESS MESSAGE EVENTS ============
           
-          // Extract message content comprehensively 
+          // Extract message content with multiple fallback paths
           const messageContent = payload.data?.message?.conversation || 
                                 payload.data?.message?.text || 
                                 payload.data?.message?.caption ||
                                 payload.data?.message?.body ||
+                                payload.data?.conversation ||
+                                payload.data?.text ||
+                                payload.data?.caption ||
+                                payload.data?.body ||
                                 '';
+
+          console.log(`💬 [${requestId}] Message content found: "${messageContent}" (${messageContent.length} chars)`);
 
           // Extract and map message types from Evolution API to standardized types
           const getMessageType = (evolutionData) => {
