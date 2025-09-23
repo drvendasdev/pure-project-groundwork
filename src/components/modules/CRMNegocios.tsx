@@ -329,13 +329,6 @@ export function CRMNegocios({
 
   // Show debug panel if loading or no pipelines found
   if (isLoading || pipelines.length === 0) {
-    console.log('🔍 CRMNegocios Debug Info:');
-    console.log('  - isLoading:', isLoading);
-    console.log('  - pipelines.length:', pipelines.length);
-    console.log('  - pipelines:', pipelines);
-    console.log('  - selectedWorkspace:', selectedWorkspace);
-    console.log('  - selectedPipeline:', selectedPipeline);
-    
     return (
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">

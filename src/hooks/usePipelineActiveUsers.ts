@@ -36,7 +36,7 @@ export function usePipelineActiveUsers(pipelineId?: string) {
           return;
         }
 
-        // Construir query base
+        // Construir query base - usar relacionamento através de assigned_user_id
         let query = supabase
           .from('pipeline_cards')
           .select(`
@@ -46,12 +46,7 @@ export function usePipelineActiveUsers(pipelineId?: string) {
             conversations!inner(
               id,
               status,
-              assigned_user_id,
-              system_users!inner(
-                id,
-                name,
-                avatar
-              )
+              assigned_user_id
             )
           `)
           .eq('pipeline_id', pipelineId)
@@ -71,28 +66,51 @@ export function usePipelineActiveUsers(pipelineId?: string) {
           return;
         }
 
+        // Buscar informações dos usuários separadamente
+        const userIds = Array.from(new Set(
+          cardsWithConversations?.map((card: any) => card.conversations?.assigned_user_id).filter(Boolean) || []
+        ));
+
+        if (userIds.length === 0) {
+          setActiveUsers([]);
+          return;
+        }
+
+        const { data: users, error: usersError } = await supabase
+          .from('system_users')
+          .select('id, name, avatar')
+          .in('id', userIds);
+
+        if (usersError) {
+          console.error('Error fetching users:', usersError);
+          return;
+        }
+
         // Agrupar por usuário
         const userMap = new Map<string, ActiveUser>();
         
         cardsWithConversations?.forEach((card: any) => {
           const conversation = card.conversations;
-          if (conversation?.assigned_user_id && conversation.system_users) {
-            const userId = conversation.system_users.id;
-            const userName = conversation.system_users.name;
-            const userAvatar = conversation.system_users.avatar;
-            
-            if (userMap.has(userId)) {
-              const existingUser = userMap.get(userId)!;
-              existingUser.dealCount += 1;
-              existingUser.dealIds.push(card.id);
-            } else {
-              userMap.set(userId, {
-                id: userId,
-                name: userName,
-                avatar: userAvatar,
-                dealCount: 1,
-                dealIds: [card.id]
-              });
+          if (conversation?.assigned_user_id) {
+            const user = users?.find(u => u.id === conversation.assigned_user_id);
+            if (user) {
+              const userId = user.id;
+              const userName = user.name;
+              const userAvatar = user.avatar;
+              
+              if (userMap.has(userId)) {
+                const existingUser = userMap.get(userId)!;
+                existingUser.dealCount += 1;
+                existingUser.dealIds.push(card.id);
+              } else {
+                userMap.set(userId, {
+                  id: userId,
+                  name: userName,
+                  avatar: userAvatar,
+                  dealCount: 1,
+                  dealIds: [card.id]
+                });
+              }
             }
           }
         });
