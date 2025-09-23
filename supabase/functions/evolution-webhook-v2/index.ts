@@ -516,8 +516,9 @@ serve(async (req) => {
           ''
         ) : '';
         
-        if (isMessageEvent) {
-          // ============ PROCESS MESSAGE EVENTS ============
+        // Initialize n8nPayload variable outside the if blocks
+        let n8nPayload: any = {};
+          if (isMessageEvent) {
           console.log(`💬 [${requestId}] Message content found: "${messageContent}" (${messageContent.length} chars)`);
 
           // Extract and map message types from Evolution API to standardized types
@@ -572,7 +573,7 @@ serve(async (req) => {
           const senderType = payload.data?.key?.fromMe === true ? 'agent' : 'contact';
 
           // Create simplified N8N payload structure for MESSAGE events
-          var n8nPayload = {
+          n8nPayload = {
             // ============ ROOT LEVEL FIELDS (as per user example) ============
             conversation_id: conversationId,
             sender_type: senderType,
@@ -630,7 +631,7 @@ serve(async (req) => {
           // ============ PROCESS NON-MESSAGE EVENTS (contacts.update, etc.) ============
           
           // For non-message events, preserve original structure and add minimal metadata
-          var n8nPayload = {
+          n8nPayload = {
             // ============ PRESERVE ORIGINAL EVOLUTION DATA COMPLETELY ============
             ...payload,
             
