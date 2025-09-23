@@ -91,12 +91,7 @@ serve(async (req) => {
 
     const supabaseClient = createClient<Database>(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     // Enhanced user context validation and logging
@@ -124,15 +119,23 @@ serve(async (req) => {
     
     // Set user context for RLS with error handling
     try {
-      await supabaseClient.rpc('set_current_user_context', {
+      console.log('🔧 Setting user context:', { userId, userEmail, workspaceId });
+      
+      const { error: contextError } = await supabaseClient.rpc('set_current_user_context', {
         user_id: userId,
         user_email: userEmail
       });
+      
+      if (contextError) {
+        console.error('❌ RPC set_current_user_context failed:', contextError);
+        throw contextError;
+      }
+      
       console.log('✅ User context set successfully');
     } catch (contextError) {
       console.error('❌ Failed to set user context:', contextError);
       return new Response(
-        JSON.stringify({ error: 'Failed to set user context' }),
+        JSON.stringify({ error: 'Failed to set user context', details: contextError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
