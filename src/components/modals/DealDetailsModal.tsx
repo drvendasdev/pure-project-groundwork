@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { ArrowLeft, MessageSquare, User, Phone, Plus, Check, X, Clock, Upload, CalendarIcon } from "lucide-react";
+import { ArrowLeft, MessageSquare, User, Phone, Plus, Check, X, Clock, Upload, CalendarIcon, Mail } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,12 @@ export function DealDetailsModal({
   const [currentColumnId, setCurrentColumnId] = useState<string>("");
   const [contactPipelines, setContactPipelines] = useState<any[]>([]);
   const [pipelineCardsCount, setPipelineCardsCount] = useState(0);
+  const [contactData, setContactData] = useState<{
+    name: string;
+    email: string | null;
+    phone: string;
+    profile_image_url: string | null;
+  } | null>(null);
   const {
     toast
   } = useToast();
@@ -146,16 +152,22 @@ export function DealDetailsModal({
   const fetchContactData = async () => {
     setIsLoadingData(true);
     try {
-      // Buscar contato pelo número de telefone
+      // Buscar contato pelo número de telefone com todos os dados
       const {
         data: contact,
         error: contactError
-      } = await supabase.from('contacts').select('id').eq('phone', contactNumber).single();
+      } = await supabase.from('contacts').select('id, name, email, phone, profile_image_url').eq('phone', contactNumber).single();
       if (contactError) {
         console.error('Contato não encontrado:', contactError);
         return;
       }
       setContactId(contact.id);
+      setContactData({
+        name: contact.name,
+        email: contact.email,
+        phone: contact.phone,
+        profile_image_url: contact.profile_image_url
+      });
 
       // Buscar TODOS os cards do contato em diferentes pipelines
       const {
@@ -650,8 +662,68 @@ export function DealDetailsModal({
                 </div>}
             </div>}
 
-          {activeTab === "contato" && <div className={cn("text-center py-8", isDarkMode ? "text-gray-400" : "text-gray-500")}>
-              <p>Informações de contato serão exibidas aqui</p>
+          {activeTab === "contato" && <div className="space-y-6">
+              {/* Informações de Contato */}
+              <div className="space-y-4">
+                <h3 className={cn("text-lg font-semibold", isDarkMode ? "text-white" : "text-gray-900")}>
+                  Informações de Contato
+                </h3>
+                
+                {contactData ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Card Email */}
+                    <div className={cn(
+                      "border rounded-lg p-4 flex items-center gap-3",
+                      isDarkMode ? "border-gray-600 bg-gray-800/50" : "border-gray-200 bg-gray-50"
+                    )}>
+                      <div className={cn(
+                        "w-10 h-10 rounded-lg flex items-center justify-center",
+                        isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                      )}>
+                        <Mail className={cn("w-5 h-5", isDarkMode ? "text-gray-300" : "text-gray-600")} />
+                      </div>
+                      <div className="flex-1">
+                        <p className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
+                          Email
+                        </p>
+                        <p className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
+                          {contactData.email || "Não informado"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Card Telefone */}
+                    <div className={cn(
+                      "border rounded-lg p-4 flex items-center gap-3",
+                      isDarkMode ? "border-gray-600 bg-gray-800/50" : "border-gray-200 bg-gray-50"
+                    )}>
+                      <div className={cn(
+                        "w-10 h-10 rounded-lg flex items-center justify-center",
+                        isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                      )}>
+                        <Phone className={cn("w-5 h-5", isDarkMode ? "text-gray-300" : "text-gray-600")} />
+                      </div>
+                      <div className="flex-1">
+                        <p className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
+                          Telefone
+                        </p>
+                        <p className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
+                          {contactData.phone ? 
+                            contactData.phone.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3') : 
+                            "Não informado"
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-center py-8">
+                    <div className={cn("text-center", isDarkMode ? "text-gray-400" : "text-gray-500")}>
+                      Carregando informações do contato...
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>}
         </div>
 
