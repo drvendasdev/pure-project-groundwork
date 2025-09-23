@@ -159,7 +159,7 @@ export function TezeusCRM() {
   };
 
   return (
-    <div className="compact-container min-h-screen flex w-full gap-2 bg-gradient-to-br from-background via-background to-muted">
+    <div className="min-h-screen flex w-full gap-2 bg-gradient-to-br from-background via-background to-muted">
       <Sidebar 
         activeModule={activeModule}
         onModuleChange={(module) => {
@@ -178,8 +178,8 @@ export function TezeusCRM() {
           navigate(`/conversas?id=${conversationId}`);
         }}
       />
-      <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'compact-p-4' : ''}`}>
-        <main className={`flex-1 overflow-y-auto ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'bg-white text-card-foreground shadow-lg rounded-lg border compact-p-5' : ''}`}>
+      <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'p-4' : ''}`}>
+        <main className={`flex-1 overflow-y-auto ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'bg-white text-card-foreground shadow-lg rounded-lg border p-5' : ''}`}>
           {renderModule()}
         </main>
       </div>

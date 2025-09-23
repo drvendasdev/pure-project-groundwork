@@ -71,25 +71,23 @@ export function DashboardPromotionalCards({ onNavigate }: DashboardPromotionalCa
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {promotionalCards.map((card) => (
         <Card key={card.id} className="relative overflow-hidden border-0 shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <div className={`${card.gradient} compact-p-5 text-white relative`}>
+          <div className={`${card.gradient} p-6 text-white relative`}>
             {card.badge && (
-              <Badge variant="secondary" className="absolute top-2 right-2 bg-white/20 text-white border-white/30 compact-text-xs">
+              <Badge variant="secondary" className="absolute top-3 right-3 bg-white/20 text-white border-white/30">
                 {card.badge}
               </Badge>
             )}
             
-            <div className="flex items-start space-x-2 mb-3">
-              <div className="bg-white/20 p-1.5 rounded-lg">
-                <div className="w-5 h-5">
-                  {card.icon}
-                </div>
+            <div className="flex items-start space-x-3 mb-4">
+              <div className="bg-white/20 p-2 rounded-lg">
+                {card.icon}
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold compact-text-lg mb-1">{card.title}</h3>
-                <p className="text-white/90 compact-text-sm leading-relaxed">
+                <h3 className="font-semibold text-lg mb-2">{card.title}</h3>
+                <p className="text-white/90 text-sm leading-relaxed">
                   {card.description}
                 </p>
               </div>
@@ -98,7 +96,7 @@ export function DashboardPromotionalCards({ onNavigate }: DashboardPromotionalCa
             <Button 
               variant="secondary" 
               size="sm" 
-              className="w-full bg-white/20 text-white border-white/30 hover:bg-white/30 compact-text-xs"
+              className="w-full bg-white/20 text-white border-white/30 hover:bg-white/30"
               onClick={card.action.onClick}
             >
               {card.action.text}

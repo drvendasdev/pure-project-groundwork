@@ -27,7 +27,7 @@ export function DashboardUpdatesCarousel({
               <CarouselItem key={i} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3">
                 <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 to-accent/10">
                   <CardContent className="p-0">
-                    <div className="relative compact-h-48 overflow-hidden">
+                    <div className="relative h-48 overflow-hidden">
                       <div className="w-full h-full bg-muted animate-pulse" />
                     </div>
                   </CardContent>
@@ -148,7 +148,7 @@ export function DashboardUpdatesCarousel({
                 onClick={() => card.action_url && onNavigate(card.action_url)}
               >
                 <CardContent className="p-0">
-                  <div className="relative compact-h-48 overflow-hidden">
+                  <div className="relative h-48 overflow-hidden">
                     <img 
                       src={card.image_url || getThemeImage(card.type)}
                       alt={card.title}

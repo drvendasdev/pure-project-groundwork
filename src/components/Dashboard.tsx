@@ -10,11 +10,11 @@ export function Dashboard({ isDarkMode }: { isDarkMode?: boolean }) {
   };
 
   return (
-    <div className="compact-p-6 compact-space-y-6 bg-background min-h-screen">
+    <div className="p-6 space-y-6 bg-background min-h-screen">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="compact-text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="compact-text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
             Novidades e atualizações do sistema
           </p>
         </div>
