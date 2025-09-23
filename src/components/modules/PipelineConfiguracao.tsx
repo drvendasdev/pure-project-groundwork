@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pencil, Plus, Trash2, ChevronDown, Menu, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import {
   DndContext,
   DragEndEvent,
@@ -24,23 +25,13 @@ import { CSS } from '@dnd-kit/utilities';
 
 interface PipelineConfigProps {
   isDarkMode?: boolean;
-  onColumnsReorder?: (newOrder: Column[]) => void;
+  onColumnsReorder?: (newOrder: any[]) => void;
 }
 
 interface SortableColumnProps {
-  column: Column;
+  column: any;
   isDarkMode: boolean;
   onDelete: (id: string) => void;
-}
-
-interface Column {
-  id: string;
-  name: string;
-  total: string;
-  deals: number;
-  visibility: string;
-  permissions: string;
-  color: string;
 }
 
 interface Action {
@@ -50,72 +41,6 @@ interface Action {
   targetColumn: string;
   dealState: string;
 }
-
-const initialColumns: Column[] = [
-  {
-    id: "1",
-    name: "Qualificar",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#FFA51D"
-  },
-  {
-    id: "2",
-    name: "Ligar de novo",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#FFD02B"
-  },
-  {
-    id: "3",
-    name: "Agendar a Reunião",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#D3D72A"
-  },
-  {
-    id: "4",
-    name: "Fazer a Reunião presencial / online",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#31FEA2"
-  },
-  {
-    id: "5",
-    name: "Fazer follow up após Reunião Realizada",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#44E9FF"
-  },
-  {
-    id: "6",
-    name: "Fazer follow up de comprovante PIX",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#6981FF"
-  },
-  {
-    id: "7",
-    name: "Ganho",
-    total: "R$ 0,00",
-    deals: 0,
-    visibility: "Todos os usuários podem ver a coluna",
-    permissions: "Usuários que podem ver todos os negócios",
-    color: "#119108"
-  }
-];
 
 const initialActions: Action[] = [
   {
@@ -142,6 +67,8 @@ const initialActions: Action[] = [
 ];
 
 function SortableColumn({ column, isDarkMode, onDelete }: SortableColumnProps) {
+  const { getCardsByColumn } = usePipelinesContext();
+  
   const {
     attributes,
     listeners,
@@ -156,6 +83,14 @@ function SortableColumn({ column, isDarkMode, onDelete }: SortableColumnProps) {
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  // Calcular estatísticas da coluna baseado nos cards
+  const columnCards = getCardsByColumn(column.id);
+  const totalValue = columnCards.reduce((sum, card) => sum + (card.value || 0), 0);
+  const formattedTotal = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(totalValue);
 
   return (
     <div ref={setNodeRef} style={style} className="grid-item">
@@ -191,8 +126,8 @@ function SortableColumn({ column, isDarkMode, onDelete }: SortableColumnProps) {
         {/* Estatísticas */}
         <div className="flex justify-between items-start mt-2">
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">{column.deals} negócios</p>
-            <p className="text-xs text-gray-500">{column.total}</p>
+            <p className="text-xs text-gray-500 mb-0.5">{columnCards.length} negócios</p>
+            <p className="text-xs text-gray-500">{formattedTotal}</p>
           </div>
           <div></div>
         </div>
@@ -239,13 +174,14 @@ export function PipelineConfiguracao({
   onColumnsReorder 
 }: PipelineConfigProps) {
   const [activeTab, setActiveTab] = useState("configuracoes-gerais");
-  const [pipelineName, setPipelineName] = useState("Vendas");
-  const [pipelineType, setPipelineType] = useState("padrao");
-  const [currency, setCurrency] = useState("brl");
-  const [columns, setColumns] = useState<Column[]>(initialColumns);
-  const [actions, setActions] = useState<Action[]>(initialActions);
   const [selectedColumn, setSelectedColumn] = useState("qualificar");
   const [selectedAutomation, setSelectedAutomation] = useState("");
+  const { columns, selectedPipeline, getCardsByColumn } = usePipelinesContext();
+  
+  const [pipelineName, setPipelineName] = useState(selectedPipeline?.name || "Vendas");
+  const [pipelineType, setPipelineType] = useState(selectedPipeline?.type || "padrao");
+  const [currency, setCurrency] = useState("brl");
+  const [actions, setActions] = useState<Action[]>([]);
 
   const addNewAction = () => {
     const newAction: Action = {
@@ -265,7 +201,8 @@ export function PipelineConfiguracao({
   };
 
   const deleteColumn = (columnId: string) => {
-    setColumns(columns.filter(col => col.id !== columnId));
+    // TODO: Implementar exclusão de coluna via API
+    console.log('Delete column:', columnId);
   };
 
   const sensors = useSensors(
@@ -279,21 +216,12 @@ export function PipelineConfiguracao({
     const { active, over } = event;
 
     if (active.id !== over?.id) {
-      setColumns((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over?.id);
-
-        const newItems = [...items];
-        newItems.splice(oldIndex, 1);
-        newItems.splice(newIndex, 0, items[oldIndex]);
-        
-        // Chama a função de callback se fornecida
-        if (onColumnsReorder) {
-          onColumnsReorder(newItems);
-        }
-        
-        return newItems;
-      });
+      // TODO: Implementar reordenação de colunas via API
+      console.log('Reorder columns:', active.id, over?.id);
+      
+      if (onColumnsReorder) {
+        onColumnsReorder(columns);
+      }
     }
   };
 
