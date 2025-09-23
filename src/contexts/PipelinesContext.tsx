@@ -286,10 +286,10 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     if (!getHeaders) throw new Error('Headers not available');
 
     try {
-      const { data, error } = await supabase.functions.invoke('pipeline-management/cards', {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/cards?id=${cardId}`, {
         method: 'PUT',
         headers: getHeaders,
-        body: { id: cardId, ...updates }
+        body: updates
       });
 
       if (error) throw error;
