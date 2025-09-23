@@ -132,6 +132,32 @@
   }
 }
 
+/* Compact view system - 80% scale */
+.compact-container {
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%; /* Compensate for scale reduction */
+  height: 125%; /* Compensate for scale reduction */
+}
+
+/* Compact utilities for specific elements */
+.compact-p-6 { @apply p-5; }
+.compact-p-5 { @apply p-4; }
+.compact-p-4 { @apply p-3; }
+.compact-p-3 { @apply p-2; }
+.compact-space-y-6 > * + * { margin-top: 1rem; }
+.compact-space-y-4 > * + * { margin-top: 0.75rem; }
+.compact-space-y-3 > * + * { margin-top: 0.5rem; }
+.compact-h-48 { height: 9.6rem; }
+.compact-h-12 { height: 2.4rem; }
+.compact-w-64 { width: 12.8rem; }
+.compact-w-20 { width: 4rem; }
+.compact-text-2xl { font-size: 1.4rem; line-height: 1.75rem; }
+.compact-text-xl { font-size: 1.1rem; line-height: 1.6rem; }
+.compact-text-lg { font-size: 1rem; line-height: 1.4rem; }
+.compact-text-sm { font-size: 0.75rem; line-height: 1rem; }
+.compact-text-xs { font-size: 0.65rem; line-height: 0.9rem; }
+
 /* Custom utilities */
 .min-w-80 {
   min-width: 9rem;

@@ -317,20 +317,20 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       data-sidebar
       className={cn(
         "rounded-lg shadow-md m-2 flex flex-col max-h-[calc(100vh-1rem)] transition-all duration-300 relative bg-white border border-border/50",
-        isCollapsed ? "w-20" : "w-64"
+        isCollapsed ? "compact-w-20" : "compact-w-64"
       )}
     >
       {/* Logo */}
       <div 
         className={cn(
           "flex-shrink-0 flex items-center justify-between border-b",
-          isCollapsed ? "p-3" : "p-6"
+          isCollapsed ? "compact-p-3" : "compact-p-6"
         )}
       >
         <h1 
           className={cn(
             "font-bold transition-all duration-300 text-black",
-            isCollapsed ? "text-lg" : "text-2xl"
+            isCollapsed ? "compact-text-lg" : "compact-text-2xl"
           )}
         >
           {isCollapsed ? "T" : "TEZEUS"}
@@ -349,7 +349,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       </div>
       
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      <nav className="flex-1 compact-p-4 compact-space-y-2 overflow-y-auto">
         {ungroupedItems.map(renderMenuItem)}
         
         {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
@@ -360,7 +360,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       </nav>
 
       {/* Action Icons */}
-      <div className={cn("flex-shrink-0", isCollapsed ? "p-3" : "p-4")}>
+      <div className={cn("flex-shrink-0", isCollapsed ? "compact-p-3" : "compact-p-4")}>
         <div className={cn(
           "flex items-center",
           isCollapsed ? "flex-col gap-2" : "gap-2 justify-between"
@@ -453,7 +453,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
 
       {/* User Info */}
       <div 
-        className={cn("flex-shrink-0 rounded-t-lg bg-muted border-t", isCollapsed ? "p-3" : "p-4")} 
+        className={cn("flex-shrink-0 rounded-t-lg bg-muted border-t", isCollapsed ? "compact-p-3" : "compact-p-4")} 
       >
         <div className={cn(
           "flex items-center",

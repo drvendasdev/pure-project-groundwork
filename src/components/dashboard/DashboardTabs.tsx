@@ -20,31 +20,31 @@ export function DashboardTabs({ onNavigate }: DashboardTabsProps) {
 
   return (
     <Tabs defaultValue="visao-geral" className="w-full">
-      <TabsList className="grid w-full grid-cols-4 mb-6">
-        <TabsTrigger value="visao-geral" className="text-sm">
-          <Home className="w-4 h-4 mr-2" />
+      <TabsList className="grid w-full grid-cols-4 mb-5">
+        <TabsTrigger value="visao-geral" className="compact-text-sm">
+          <Home className="w-3 h-3 mr-1" />
           Visão Geral
         </TabsTrigger>
-        <TabsTrigger value="novidades" className="text-sm">
-          <Newspaper className="w-4 h-4 mr-2" />
+        <TabsTrigger value="novidades" className="compact-text-sm">
+          <Newspaper className="w-3 h-3 mr-1" />
           Novidades
         </TabsTrigger>
-        <TabsTrigger value="eventos" className="text-sm">
-          <Calendar className="w-4 h-4 mr-2" />
+        <TabsTrigger value="eventos" className="compact-text-sm">
+          <Calendar className="w-3 h-3 mr-1" />
           Eventos
         </TabsTrigger>
-        <TabsTrigger value="relatorios" className="text-sm">
-          <BarChart3 className="w-4 h-4 mr-2" />
+        <TabsTrigger value="relatorios" className="compact-text-sm">
+          <BarChart3 className="w-3 h-3 mr-1" />
           Relatórios
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="visao-geral" className="space-y-6">
+      <TabsContent value="visao-geral" className="compact-space-y-6">
         <DashboardPromotionalCards onNavigate={onNavigate} />
       </TabsContent>
 
-      <TabsContent value="novidades" className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <TabsContent value="novidades" className="compact-space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
