@@ -78,6 +78,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [instanceName, setInstanceName] = useState('');
   const [historyRecovery, setHistoryRecovery] = useState('none');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [createCrmCard, setCreateCrmCard] = useState(false);
+  const [selectedPipeline, setSelectedPipeline] = useState<string>('');
 
   // Load connections on component mount
   useEffect(() => {
@@ -697,91 +699,115 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               </div>
             </div>
 
-            {/* Form Content */}
-            <div className="px-6 space-y-4">
-              {!isEditMode && (
-                <div className="p-3 bg-muted/50 rounded-lg border">
-                  <div className="text-sm text-muted-foreground">
-                    Conexões: {currentUsage.current}/{currentUsage.limit}
-                    {currentUsage.current >= currentUsage.limit && (
-                      <span className="text-destructive font-medium ml-1">- Limite atingido</span>
-                    )}
+            {/* Form Content - Layout Horizontal */}
+            <div className="flex px-6 space-x-8">
+              {/* Primeira Coluna */}
+              <div className="flex-1 space-y-4">
+                {!isEditMode && (
+                  <div className="p-3 bg-muted/50 rounded-lg border">
+                    <div className="text-sm text-muted-foreground">
+                      Conexões: {currentUsage.current}/{currentUsage.limit}
+                      {currentUsage.current >= currentUsage.limit && (
+                        <span className="text-destructive font-medium ml-1">- Limite atingido</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="space-y-2">
-                <Label htmlFor="instanceName" className="text-sm font-medium text-foreground">
-                  Nome *
-                </Label>
-                <Input
-                  id="instanceName"
-                  value={instanceName}
-                  onChange={(e) => setInstanceName(e.target.value)}
-                  placeholder="Digite o nome da instância"
-                  disabled={isEditMode}
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber" className="text-sm font-medium text-foreground">
-                  Número do WhatsApp
-                </Label>
-                <Input
-                  id="phoneNumber"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="Ex: 5511999999999"
-                  type="tel"
-                  className="h-11"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Formato: 55 + DDD + número (será normalizado automaticamente)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="historyRecovery" className="text-sm font-medium text-foreground">
-                  Recuperar mensagens a partir de
-                </Label>
-                <Select value={historyRecovery} onValueChange={setHistoryRecovery} disabled={isEditMode}>
-                  <SelectTrigger className="h-11">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhuma</SelectItem>
-                    <SelectItem value="week">Uma semana</SelectItem>
-                    <SelectItem value="month">Um mês</SelectItem>
-                    <SelectItem value="quarter">Três meses</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Toggle Switches - Mockup */}
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium text-foreground">
-                      Desabilitar as mensagens de boas-vindas
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Não enviar mensagem automática de boas-vindas
-                    </p>
-                  </div>
-                  <Switch defaultChecked={false} />
+                <div className="space-y-2">
+                  <Label htmlFor="instanceName" className="text-sm font-medium text-foreground">
+                    Nome *
+                  </Label>
+                  <Input
+                    id="instanceName"
+                    value={instanceName}
+                    onChange={(e) => setInstanceName(e.target.value)}
+                    placeholder="Digite o nome da instância"
+                    disabled={isEditMode}
+                    className="h-11"
+                  />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium text-foreground">
-                      Habilitar Chats em Grupos
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Permitir conversas em grupos do WhatsApp
-                    </p>
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber" className="text-sm font-medium text-foreground">
+                    Número do WhatsApp
+                  </Label>
+                  <Input
+                    id="phoneNumber"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="Ex: 5511999999999"
+                    type="tel"
+                    className="h-11"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Formato: 55 + DDD + número (será normalizado automaticamente)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="historyRecovery" className="text-sm font-medium text-foreground">
+                    Recuperar mensagens a partir de
+                  </Label>
+                  <Select value={historyRecovery} onValueChange={setHistoryRecovery} disabled={isEditMode}>
+                    <SelectTrigger className="h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      <SelectItem value="week">Uma semana</SelectItem>
+                      <SelectItem value="month">Um mês</SelectItem>
+                      <SelectItem value="quarter">Três meses</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Segunda Coluna */}
+              <div className="flex-1 space-y-4">
+                {/* Toggle Switches */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium text-foreground">
+                        Criar card no CRM automaticamente
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Cria automaticamente um card no pipeline selecionado
+                      </p>
+                    </div>
+                    <Switch checked={createCrmCard} onCheckedChange={setCreateCrmCard} />
                   </div>
-                  <Switch defaultChecked={true} />
+
+                  {createCrmCard && (
+                    <div className="space-y-2">
+                      <Label htmlFor="pipeline" className="text-sm font-medium text-foreground">
+                        Selecionar Pipeline
+                      </Label>
+                      <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Selecionar Pipeline" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vendas">Vendas</SelectItem>
+                          <SelectItem value="perdidos">Perdidos</SelectItem>
+                          <SelectItem value="sucesso-cliente">Sucesso do Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium text-foreground">
+                        Habilitar Chats em Grupos
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Permitir conversas em grupos do WhatsApp
+                      </p>
+                    </div>
+                    <Switch defaultChecked={true} />
+                  </div>
                 </div>
               </div>
             </div>
