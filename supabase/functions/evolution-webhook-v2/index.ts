@@ -417,6 +417,42 @@ serve(async (req) => {
             })
             .eq('id', conversationId);
 
+          // Check if we need to auto-create a CRM card
+          try {
+            const { data: connectionData } = await supabase
+              .from('connections')
+              .select('metadata')
+              .eq('instance_name', instanceName)
+              .eq('workspace_id', workspaceId)
+              .maybeSingle();
+
+            if (connectionData?.metadata?.createCrmCard && connectionData?.metadata?.selectedPipelineId) {
+              console.log(`🎯 [${requestId}] Auto-creating CRM card for conversation ${conversationId}`);
+              
+              // Check if card already exists
+              const { data: existingCard } = await supabase
+                .from('pipeline_cards')
+                .select('id')
+                .eq('conversation_id', conversationId)
+                .maybeSingle();
+
+              if (!existingCard) {
+                await supabase.functions.invoke('auto-create-pipeline-card', {
+                  body: {
+                    conversationId,
+                    contactId,
+                    workspaceId,
+                    pipelineId: connectionData.metadata.selectedPipelineId
+                  }
+                });
+                console.log(`✅ [${requestId}] CRM card auto-creation triggered`);
+              }
+            }
+          } catch (cardError) {
+            console.error(`⚠️ [${requestId}] Error auto-creating CRM card:`, cardError);
+            // Don't fail the webhook for card creation errors
+          }
+
           processedData = {
             message_id: messageId,
             workspace_id: workspaceId,

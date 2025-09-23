@@ -221,3 +221,9 @@ verify_jwt = false
 
 [functions.test-evolution-api-key]
 verify_jwt = false
+
+[functions.auto-create-pipeline-card]
+verify_jwt = false
+
+[functions.pipeline-management]
+verify_jwt = false

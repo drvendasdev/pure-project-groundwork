@@ -231,7 +231,9 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       const connection = await evolutionProvider.createConnection({
         instanceName: instanceName.trim(),
         historyRecovery: historyRecovery as 'none' | 'week' | 'month' | 'quarter',
-        workspaceId
+        workspaceId,
+        createCrmCard,
+        selectedPipelineId: selectedPipeline || undefined
       });
 
       console.log('✅ Created connection successfully:', connection);
@@ -341,6 +343,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     setInstanceName('');
     setPhoneNumber('');
     setHistoryRecovery('none');
+    setCreateCrmCard(false);
+    setSelectedPipeline('');
     setIsEditMode(false);
     setEditingConnection(null);
     setIsCreateModalOpen(false);

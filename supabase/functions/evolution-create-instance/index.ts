@@ -139,8 +139,8 @@ serve(async (req) => {
     }
     
     console.log('📋 Parsed request body:', requestBody);
-    const { instanceName, historyRecovery = 'none', workspaceId } = requestBody;
-    console.log('📋 Request params:', { instanceName, historyRecovery, workspaceId })
+    const { instanceName, historyRecovery = 'none', workspaceId, metadata } = requestBody;
+    console.log('📋 Request params:', { instanceName, historyRecovery, workspaceId, metadata })
 
     if (!instanceName || !workspaceId) {
       console.error('❌ Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
@@ -245,7 +245,7 @@ serve(async (req) => {
         history_recovery: historyRecovery,
         workspace_id: workspaceId,
         status: 'creating',
-        metadata: {}
+        metadata: metadata || {}
       })
       .select()
       .single()
