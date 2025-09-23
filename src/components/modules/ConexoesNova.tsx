@@ -862,7 +862,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => navigate('/pipeline-configuracao')}
+                            onClick={() => navigate('/crm-negocios')}
                             className="gap-1"
                           >
                             Criar Pipeline
