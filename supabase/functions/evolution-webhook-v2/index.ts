@@ -459,83 +459,30 @@ serve(async (req) => {
           messageKeys: payload.data?.message ? Object.keys(payload.data.message) : []
         });
 
-        // Determine if this is a message event
-        const isMessageEvent = payload.event === 'messages.upsert' || payload.event === 'messages.update';
-        
-        // Create base payload structure
+        // Prepare N8N payload with ORIGINAL Evolution data structure + context
         const n8nPayload = {
-          event_type: payload.event,
-          instance_name: payload.instance || payload.instanceName,
-          workspace_id: workspaceId,
-          timestamp: new Date().toISOString()
-        };
-
-        // Add message-specific data only for message events
-        if (isMessageEvent && payload.data?.key) {
-          // Determine direction based on fromMe flag - false means message FROM contact (inbound)
-          const isInbound = payload.data.key.fromMe === false;
+          // Original Evolution API payload (preserving ALL data from Evolution)
+          ...payload,
           
-          // Extract message content with better fallbacks
-          let messageContent = null;
-          if (payload.data?.message) {
-            const msg = payload.data.message;
-            messageContent = msg.conversation ||
-                            msg.extendedTextMessage?.text ||
-                            msg.imageMessage?.caption ||
-                            msg.videoMessage?.caption ||
-                            msg.audioMessage?.ptt ? '[Audio message]' : msg.audioMessage?.caption ||
-                            msg.documentMessage?.title ||
-                            msg.stickerMessage ? '[Sticker]' :
-                            msg.locationMessage ? '[Location]' :
-                            msg.contactMessage ? '[Contact]' :
-                            msg.imageMessage ? '[Image]' :
-                            msg.videoMessage ? '[Video]' :
-                            msg.audioMessage ? '[Audio]' :
-                            msg.documentMessage ? '[Document]' :
-                            'Media message';
+          // Additional context fields for convenience
+          workspace_id: workspaceId,
+          processed_data: processedData,
+          timestamp: new Date().toISOString(),
+          request_id: requestId,
+          
+          // Computed fields for convenience (but original data is preserved above)
+          message_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
+          phone_number: payload.data?.key?.remoteJid ? extractPhoneFromRemoteJid(payload.data.key.remoteJid) : null,
+          
+          // Debug info
+          debug_info: {
+            original_payload_keys: Object.keys(payload),
+            data_keys: payload.data ? Object.keys(payload.data) : [],
+            message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
+            fromMe_value: payload.data?.key?.fromMe,
+            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound'
           }
-
-          n8nPayload.message_data = {
-            external_id: payload.data.key.id,
-            direction: isInbound ? 'inbound' : 'outbound',
-            phone_number: payload.data.key.remoteJid?.replace(/@.*$/, ''),
-            message_type: payload.data?.messageType || 'text',
-            content: messageContent,
-            media_url: payload.data?.message?.imageMessage?.url ||
-                      payload.data?.message?.videoMessage?.url ||
-                      payload.data?.message?.audioMessage?.url ||
-                      payload.data?.message?.documentMessage?.url,
-            quoted_message: payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage,
-            sender_name: payload.data?.pushName || null,
-            from_me: payload.data.key.fromMe
-          };
-
-          n8nPayload.debug_info = {
-            original_fromMe: payload.data.key.fromMe,
-            calculated_direction: isInbound ? 'inbound' : 'outbound',
-            message_keys: payload.data?.message ? Object.keys(payload.data.message) : []
-          };
-        } else {
-          // For non-message events (like contacts.update), include basic contact info
-          if (payload.data) {
-            n8nPayload.contact_data = {
-              remote_jid: Array.isArray(payload.data) ? payload.data[0]?.remoteJid : payload.data.remoteJid,
-              push_name: Array.isArray(payload.data) ? payload.data[0]?.pushName : payload.data.pushName,
-              profile_pic_url: Array.isArray(payload.data) ? payload.data[0]?.profilePicUrl : payload.data.profilePicUrl
-            };
-          }
-        }
-
-        // Add processed data if available (only for message events that were processed locally)
-        if (processedData && isMessageEvent) {
-          n8nPayload.processed_data = {
-            contact_id: processedData.contact_id,
-            conversation_id: processedData.conversation_id,
-            message_id: processedData.message_id,
-            contact_name: processedData.contact_name,
-            contact_phone: processedData.contact_phone
-          };
-        }
+        };
 
         console.log(`🚀 [${requestId}] Sending to N8N:`, {
           url: webhookUrl,
