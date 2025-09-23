@@ -26,18 +26,20 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   
-  // Log para debug
-  console.log('🟡 MediaViewer render:', { 
-    fileUrl, 
-    fileName, 
-    messageType,
-    detectionsAfterPriority: {
-      isAudioFile: messageType === 'audio' || /\.(mp3|wav|ogg|aac|flac|webm|m4a|opus)$/i.test(fileName || fileUrl || ''),
-      isPdfFile: messageType === 'document' || /\.pdf$/i.test(fileName || fileUrl || ''),
-      isImageFile: messageType === 'image',
-      isVideoFile: messageType === 'video'
-    }
-  });
+  // Log para debug (apenas em desenvolvimento)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🟡 MediaViewer render:', { 
+      fileUrl, 
+      fileName, 
+      messageType,
+      detectionsAfterPriority: {
+        isAudioFile: messageType === 'audio' || /\.(mp3|wav|ogg|aac|flac|webm|m4a|opus)$/i.test(fileName || fileUrl || ''),
+        isPdfFile: messageType === 'document' || /\.pdf$/i.test(fileName || fileUrl || ''),
+        isImageFile: messageType === 'image',
+        isVideoFile: messageType === 'video'
+      }
+    });
+  }
 
   // Detectar tipos de arquivos - PRIORIZAR messageType
   const isAudioFile = messageType === 'audio' ||
@@ -61,19 +63,21 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const isWordFile = /\.(docx|doc)$/i.test(fileName || '') || /\.(docx|doc)$/i.test(fileUrl);
   const isPowerPointFile = /\.(pptx|ppt)$/i.test(fileName || '') || /\.(pptx|ppt)$/i.test(fileUrl);
 
-  // Log específico para detecções
-  console.log('🔍 DETECÇÃO FINAL:', {
-    fileName,
-    fileUrl,
-    messageType,
-    finalDetections: {
-      isAudioFile,
-      isPdfFile,
-      isImageFile,
-      isVideoFile
-    },
-    priorityUsed: 'messageType tem prioridade sobre extensão'
-  });
+  // Log específico para detecções (apenas em desenvolvimento)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 DETECÇÃO FINAL:', {
+      fileName,
+      fileUrl,
+      messageType,
+      finalDetections: {
+        isAudioFile,
+        isPdfFile,
+        isImageFile,
+        isVideoFile
+      },
+      priorityUsed: 'messageType tem prioridade sobre extensão'
+    });
+  }
 
   const handleDownload = () => {
     const link = document.createElement('a');
@@ -93,7 +97,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
   // PRIMEIRA VERIFICAÇÃO: PDF
   if (isPdfFile) {
-    console.log('🔴 RENDERIZANDO PDF:', { fileName, fileUrl, messageType });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔴 RENDERIZANDO PDF:', { fileName, fileUrl, messageType });
+    }
     return (
       <div className={className}>
         <div className="relative group">
