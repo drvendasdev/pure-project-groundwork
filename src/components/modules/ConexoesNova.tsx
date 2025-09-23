@@ -52,11 +52,57 @@ interface ConexoesNovaProps {
 export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [workspacePipelines, setWorkspacePipelines] = useState<any[]>([]);
+  const [loadingPipelines, setLoadingPipelines] = useState(false);
   
   const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
   const { canCreateConnections } = useWorkspaceRole();
-  const { pipelines } = usePipelinesContext();
   const navigate = useNavigate();
+
+  // Função para carregar pipelines do workspace específico
+  const loadWorkspacePipelines = async () => {
+    if (!workspaceId) return;
+    
+    try {
+      setLoadingPipelines(true);
+      
+      const userData = localStorage.getItem('currentUser');
+      if (!userData) {
+        throw new Error('Usuário não encontrado');
+      }
+      
+      const user = JSON.parse(userData);
+      const headers = {
+        'x-system-user-id': user.id,
+        'x-system-user-email': user.email,
+        'x-workspace-id': workspaceId
+      };
+
+      const { data, error } = await supabase.functions.invoke('pipeline-management/pipelines', {
+        method: 'GET',
+        headers
+      });
+
+      if (error) {
+        console.error('❌ Pipeline fetch error:', error);
+        throw error;
+      }
+
+      setWorkspacePipelines(data || []);
+    } catch (error) {
+      console.error('❌ Error fetching workspace pipelines:', error);
+      setWorkspacePipelines([]);
+    } finally {
+      setLoadingPipelines(false);
+    }
+  };
+
+  // Carregar pipelines quando o modal for aberto
+  useEffect(() => {
+    if (isCreateModalOpen && workspaceId) {
+      loadWorkspacePipelines();
+    }
+  }, [isCreateModalOpen, workspaceId]);
   
   // Use the actual usage data from the backend
   const currentUsage = usage || {
@@ -788,13 +834,19 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                       <Label htmlFor="pipeline" className="text-sm font-medium text-foreground">
                         Selecionar Pipeline
                       </Label>
-                      {pipelines.length > 0 ? (
+                      {loadingPipelines ? (
+                        <div className="flex items-center gap-2 p-3 border border-border rounded-md bg-muted/30">
+                          <span className="text-sm text-muted-foreground">
+                            Carregando pipelines...
+                          </span>
+                        </div>
+                      ) : workspacePipelines.length > 0 ? (
                         <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
                           <SelectTrigger className="h-11">
                             <SelectValue placeholder="Selecionar Pipeline" />
                           </SelectTrigger>
                           <SelectContent>
-                            {pipelines.map((pipeline) => (
+                            {workspacePipelines.map((pipeline) => (
                               <SelectItem key={pipeline.id} value={pipeline.id}>
                                 {pipeline.name}
                               </SelectItem>
