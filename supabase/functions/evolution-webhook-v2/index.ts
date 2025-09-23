@@ -449,6 +449,38 @@ serve(async (req) => {
       }
 
       try {
+        // Debug log the payload structure
+        console.log(`🔍 [${requestId}] Debug payload structure:`, {
+          fromMe: payload.data?.key?.fromMe,
+          messageType: payload.data?.messageType,
+          conversation: payload.data?.message?.conversation,
+          hasMessage: !!payload.data?.message,
+          messageKeys: payload.data?.message ? Object.keys(payload.data.message) : []
+        });
+
+        // Determine direction based on fromMe flag - false means message FROM contact (inbound)
+        const isInbound = payload.data?.key?.fromMe === false;
+        
+        // Extract message content with better fallbacks
+        let messageContent = 'Unknown message';
+        if (payload.data?.message) {
+          const msg = payload.data.message;
+          messageContent = msg.conversation ||
+                          msg.extendedTextMessage?.text ||
+                          msg.imageMessage?.caption ||
+                          msg.videoMessage?.caption ||
+                          msg.audioMessage?.ptt ? '[Audio message]' : msg.audioMessage?.caption ||
+                          msg.documentMessage?.title ||
+                          msg.stickerMessage ? '[Sticker]' :
+                          msg.locationMessage ? '[Location]' :
+                          msg.contactMessage ? '[Contact]' :
+                          msg.imageMessage ? '[Image]' :
+                          msg.videoMessage ? '[Video]' :
+                          msg.audioMessage ? '[Audio]' :
+                          msg.documentMessage ? '[Document]' :
+                          'Media message';
+        }
+
         // Create a clean, structured payload for N8N
         const n8nPayload = {
           event_type: payload.event,
@@ -457,21 +489,17 @@ serve(async (req) => {
           timestamp: new Date().toISOString(),
           message_data: {
             external_id: payload.data?.key?.id,
-            direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound',
+            direction: isInbound ? 'inbound' : 'outbound',
             phone_number: payload.data?.key?.remoteJid?.replace(/@.*$/, ''),
             message_type: payload.data?.messageType || 'text',
-            content: payload.data?.message?.conversation || 
-                    payload.data?.message?.extendedTextMessage?.text ||
-                    payload.data?.message?.imageMessage?.caption ||
-                    payload.data?.message?.videoMessage?.caption ||
-                    payload.data?.message?.documentMessage?.title ||
-                    'Media message',
+            content: messageContent,
             media_url: payload.data?.message?.imageMessage?.url ||
                       payload.data?.message?.videoMessage?.url ||
                       payload.data?.message?.audioMessage?.url ||
                       payload.data?.message?.documentMessage?.url,
             quoted_message: payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage,
-            sender_name: payload.data?.pushName || null
+            sender_name: payload.data?.pushName || null,
+            from_me: payload.data?.key?.fromMe
           },
           processed_data: processedData && {
             contact_id: processedData.contact_id,
@@ -480,7 +508,11 @@ serve(async (req) => {
             contact_name: processedData.contact_name,
             contact_phone: processedData.contact_phone
           },
-          raw_data: payload.data
+          debug_info: {
+            original_fromMe: payload.data?.key?.fromMe,
+            calculated_direction: isInbound ? 'inbound' : 'outbound',
+            message_keys: payload.data?.message ? Object.keys(payload.data.message) : []
+          }
         };
 
         const response = await fetch(webhookUrl, {
