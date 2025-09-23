@@ -129,12 +129,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       group: "crm"
     },
     {
-      id: "crm-ligacoes",
-      label: "Ligações",
-      icon: <Phone className="w-5 h-5" />,
-      group: "crm"
-    },
-    {
       id: "crm-contatos",
       label: "Contatos",
       icon: <Users className="w-5 h-5" />,

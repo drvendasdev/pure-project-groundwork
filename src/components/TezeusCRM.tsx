@@ -7,7 +7,7 @@ import { Dashboard } from "./Dashboard";
 import { Conversas } from "./modules/Conversas";
 import { DSVoice } from "./modules/DSVoice";
 import { CRMNegocios } from "./modules/CRMNegocios";
-import { CRMLigacoes } from "./modules/CRMLigacoes";
+
 import { CRMContatos } from "./modules/CRMContatos";
 import { CRMTags } from "./modules/CRMTags";
 import { CRMProdutos } from "./modules/CRMProdutos";
@@ -32,7 +32,7 @@ export type ModuleType =
   | "conversas"
   | "ds-voice"
   | "crm-negocios"
-  | "crm-ligacoes"
+  
   | "crm-contatos"
   | "crm-tags"
   | "crm-produtos"
@@ -117,8 +117,6 @@ export function TezeusCRM() {
         return <DSVoice />;
       case "crm-negocios":
         return <CRMNegocios {...moduleProps} />;
-      case "crm-ligacoes":
-        return <CRMLigacoes />;
       case "crm-contatos":
         return <CRMContatos />;
       case "crm-tags":
