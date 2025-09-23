@@ -24,7 +24,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -168,15 +168,12 @@ function DraggableDeal({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Avatar className="w-4 h-4 rounded-full cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                    <AvatarImage src="https://i.pinimg.com/236x/a8/da/22/a8da222be70a71e7858bf752065d5cc3.jpg" alt={deal.responsible || 'Sem responsável'} />
-                    <AvatarFallback className="text-xs">{getInitials(deal.responsible || 'SR')}</AvatarFallback>
-                  </Avatar>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-blue-100 hover:text-blue-600" onClick={(e) => e.stopPropagation()}>
+                    <User className="w-3.5 h-3.5" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>
-                    {deal.responsible !== "Não atribuído" ? `Responsável: ${deal.responsible}` : "Não atribuído"}
-                  </p>
+                  <p>{deal.responsible || 'Sem responsável'}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -588,7 +585,7 @@ export function CRMNegocios({
                                 name: card.title,
                                 value: card.value || 0,
                                 stage: column.name,
-                                responsible: card.conversation?.assigned_user?.name || "Não atribuído",
+                                responsible: "Usuário", // Placeholder
                                 tags: Array.isArray(card.tags) ? card.tags : [],
                                 priority: 'medium',
                                 lastContact: "2h atrás" // Placeholder
@@ -627,7 +624,7 @@ export function CRMNegocios({
                 name: activeCard.title,
                 value: activeCard.value || 0,
                 stage: activeColumn?.name || "",
-                responsible: activeCard.conversation?.assigned_user?.name || "Não atribuído",
+                responsible: "Usuário",
                 tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
                 priority: 'medium'
               };

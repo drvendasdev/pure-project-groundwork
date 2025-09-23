@@ -278,10 +278,7 @@ serve(async (req) => {
             .select(`
               *,
               contact:contacts(*),
-              conversation:conversations(
-                *,
-                assigned_user:system_users!conversations_assigned_user_id_fkey(id, name, avatar)
-              )
+              conversation:conversations(*)
             `)
             .eq('pipeline_id', pipelineId)
             .order('created_at', { ascending: false });
