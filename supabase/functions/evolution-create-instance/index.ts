@@ -400,7 +400,10 @@ serve(async (req) => {
 
     // Update connection with Evolution API response
     const updateData: any = {
-      metadata: evolutionData
+      metadata: {
+        ...metadata, // Preserve original CRM metadata
+        evolutionData: evolutionData // Store Evolution API response separately
+      }
     }
 
     // Determine status and extract QR code
