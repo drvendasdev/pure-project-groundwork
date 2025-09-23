@@ -97,7 +97,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     }
   };
 
-  // Carregar pipelines quando o modal for aberto
+  // Carregar pipelines quando o modal for aberto (tanto para criar quanto para editar)
   useEffect(() => {
     if (isCreateModalOpen && workspaceId) {
       loadWorkspacePipelines();
@@ -302,15 +302,15 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   };
 
   const editConnection = async () => {
-    if (!selectedConnection || !editingConnection) return;
+    if (!editingConnection) return;
     
     setIsLoading(true);
     try {
       const updateData = {
-        connectionId: selectedConnection.id,
+        connectionId: editingConnection.id,
         phone_number: phoneNumber?.trim() || null,
-        auto_create_crm_card: editingConnection.auto_create_crm_card || false,
-        default_pipeline_id: editingConnection.default_pipeline_id || null,
+        auto_create_crm_card: createCrmCard,
+        default_pipeline_id: selectedPipeline || null,
       };
 
       console.log('Updating connection with data:', updateData);
@@ -325,11 +325,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       // Refresh connections list
       await loadConnections();
       
-      // Close modal
-      setIsEditMode(false);
-      setSelectedConnection(null);
-      setEditingConnection(null);
-      setPhoneNumber('');
+      // Reset form and close modal
+      resetModal();
       
     } catch (error) {
       console.error('Error updating connection:', error);
@@ -340,33 +337,6 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
       });
     } finally {
       setIsLoading(false);
-    }
-
-    try {
-      setIsCreating(true);
-      
-      // Note: We'll need to implement updateConnection in EvolutionProvider
-      // For now, just show success and reload
-      toast({
-        title: 'Sucesso',
-        description: 'Conexão atualizada com sucesso!',
-      });
-      
-      // Reset form and close modal
-      resetModal();
-      
-      // Reload connections (silently)
-      loadConnections();
-
-    } catch (error) {
-      console.error('Error editing connection:', error);
-      toast({
-        title: 'Erro',
-        description: `Erro ao editar conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -386,6 +356,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
     setInstanceName(connection.instance_name);
     setPhoneNumber(connection.phone_number || '');
     setHistoryRecovery(connection.history_recovery);
+    setCreateCrmCard(connection.auto_create_crm_card || false);
+    setSelectedPipeline(connection.default_pipeline_id || '');
     setIsEditMode(true);
     setIsCreateModalOpen(true);
   };
