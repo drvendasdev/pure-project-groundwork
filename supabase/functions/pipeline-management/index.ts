@@ -35,12 +35,17 @@ interface Database {
           color: string;
           order_position: number;
           created_at: string;
+          permissions: string[]; // Array de user_ids
         };
         Insert: {
           pipeline_id: string;
           name: string;
           color?: string;
           order_position?: number;
+          permissions?: string[];
+        };
+        Update: {
+          permissions?: string[];
         };
       };
       pipeline_cards: {
@@ -253,6 +258,31 @@ serve(async (req) => {
               color: body.color || '#808080',
               order_position: nextPosition,
             })
+            .select()
+            .single();
+
+          if (error) throw error;
+          return new Response(JSON.stringify(column), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (method === 'PUT') {
+          const columnId = url.searchParams.get('id');
+          if (!columnId) {
+            return new Response(
+              JSON.stringify({ error: 'Column ID required' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const body = await req.json();
+          const { data: column, error } = await supabaseClient
+            .from('pipeline_columns')
+            .update({
+              permissions: body.permissions || [],
+            })
+            .eq('id', columnId)
             .select()
             .single();
 

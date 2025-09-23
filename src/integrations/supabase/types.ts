@@ -1068,6 +1068,7 @@ export type Database = {
           id: string
           name: string
           order_position: number
+          permissions: Json | null
           pipeline_id: string
         }
         Insert: {
@@ -1076,6 +1077,7 @@ export type Database = {
           id?: string
           name: string
           order_position?: number
+          permissions?: Json | null
           pipeline_id: string
         }
         Update: {
@@ -1084,6 +1086,7 @@ export type Database = {
           id?: string
           name?: string
           order_position?: number
+          permissions?: Json | null
           pipeline_id?: string
         }
         Relationships: [

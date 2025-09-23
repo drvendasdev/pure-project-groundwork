@@ -1,6 +1,6 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PipelineConfiguracao } from "@/components/modules/PipelineConfiguracao";
+import PipelineConfiguracao from "@/components/modules/PipelineConfiguracao";
 
 interface PipelineConfigModalProps {
   open: boolean;

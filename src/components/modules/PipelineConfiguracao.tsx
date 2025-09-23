@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DndContext,
   DragEndEvent,
@@ -123,7 +125,15 @@ function SortableColumn({ column, isDarkMode, onDelete, onUpdatePermissions }: S
             <Button
               variant="ghost"
               size="sm"
+              className="h-6 w-6 p-0 mr-1.5"
+              onClick={() => onDelete(column.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+            <Button
               className="h-6 w-6 p-0"
+              variant="ghost"
+              size="sm"
               {...attributes}
               {...listeners}
             >
@@ -133,9 +143,9 @@ function SortableColumn({ column, isDarkMode, onDelete, onUpdatePermissions }: S
         </div>
 
         {/* Estatísticas */}
-        <div className="flex justify-between items-start mt-2">
+        <div className="flex justify-between items-center mb-3">
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">{columnCards.length} negócios</p>
+            <p className="text-xs text-gray-500">{columnCards.length} negócios</p>
             <p className="text-xs text-gray-500">{formattedTotal}</p>
           </div>
           <div></div>
@@ -209,41 +219,55 @@ function SortableColumn({ column, isDarkMode, onDelete, onUpdatePermissions }: S
             <Pencil className="h-3 w-3" />
           </Button>
         </div>
-
-        {/* Botão Excluir */}
-        <Button 
-          className="w-full font-bold mt-2"
-          style={{ 
-            backgroundColor: 'rgb(245, 208, 214)', 
-            color: 'rgb(211, 47, 47)',
-            border: 'none'
-          }}
-          onClick={() => onDelete(column.id)}
-        >
-          Excluir
-        </Button>
       </div>
     </div>
   );
 }
 
-export function PipelineConfiguracao({ 
-  isDarkMode = false, 
-  onColumnsReorder 
-}: PipelineConfigProps) {
-  const [activeTab, setActiveTab] = useState("configuracoes-gerais");
-  const [selectedColumn, setSelectedColumn] = useState("qualificar");
-  const [selectedAutomation, setSelectedAutomation] = useState("");
-  const { columns, selectedPipeline, getCardsByColumn } = usePipelinesContext();
+export default function PipelineConfiguracao({ isDarkMode, onColumnsReorder }: PipelineConfigProps) {
+  const [activeTab, setActiveTab] = useState('geral');
+  const [actions, setActions] = useState<Action[]>(initialActions);
+  const { columns, selectedPipeline } = usePipelinesContext();
+  const { user } = useAuth();
+  const { selectedWorkspace } = useWorkspace();
   
   const [pipelineName, setPipelineName] = useState(selectedPipeline?.name || "Vendas");
   const [pipelineType, setPipelineType] = useState(selectedPipeline?.type || "padrao");
   const [currency, setCurrency] = useState("brl");
-  const [actions, setActions] = useState<Action[]>([]);
+  const [selectedColumn, setSelectedColumn] = useState("qualificar");
+  const [selectedAutomation, setSelectedAutomation] = useState("");
+
+  const handleUpdateColumnPermissions = async (columnId: string, userIds: string[]) => {
+    try {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/columns?id=${columnId}`, {
+        method: 'PUT',
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        },
+        body: { permissions: userIds }
+      });
+
+      if (error) throw error;
+      
+      console.log('Column permissions updated successfully:', { columnId, userIds });
+      
+      // Atualizar o estado local das colunas se necessário
+      // (Pode ser implementado posteriormente se precisar)
+    } catch (error) {
+      console.error('Error updating column permissions:', error);
+    }
+  };
+
+  const deleteColumn = (columnId: string) => {
+    // TODO: Implementar exclusão de coluna via API
+    console.log('Delete column:', columnId);
+  };
 
   const addNewAction = () => {
     const newAction: Action = {
-      id: (actions.length + 1).toString(),
+      id: Date.now().toString(),
       actionName: "",
       nextPipeline: "",
       targetColumn: "",
@@ -256,17 +280,6 @@ export function PipelineConfiguracao({
     setActions(actions.map(action => 
       action.id === id ? { ...action, [field]: value } : action
     ));
-  };
-
-  const deleteColumn = (columnId: string) => {
-    // TODO: Implementar exclusão de coluna via API
-    console.log('Delete column:', columnId);
-  };
-
-  const handleUpdateColumnPermissions = (columnId: string, userIds: string[]) => {
-    // Aqui você pode implementar a lógica para salvar as permissões no banco de dados
-    console.log('Updating column permissions:', { columnId, userIds });
-    // TODO: Implementar call para API/supabase para salvar as permissões
   };
 
   const sensors = useSensors(
@@ -294,108 +307,69 @@ export function PipelineConfiguracao({
       "min-h-screen",
       isDarkMode ? "bg-[#1a1a1a]" : "bg-gray-50"
     )}>
-      {/* Header */}
-      <div className={cn(
-        "border-b p-6",
-        isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white border-gray-200"
-      )}>
-        <h1 className={cn(
-          "text-2xl font-semibold",
-          isDarkMode ? "text-white" : "text-gray-900"
-        )}>
-          Configurações do Pipeline
-        </h1>
-      </div>
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="p-6">
-        <TabsList className={cn(
-          "grid w-full grid-cols-4 mb-6",
-          isDarkMode ? "bg-[#2d2d2d]" : "bg-gray-100"
-        )}>
-          <TabsTrigger value="configuracoes-gerais" className={cn(
-            isDarkMode ? "data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white" : ""
-          )}>
-            Configurações Gerais
-          </TabsTrigger>
-          <TabsTrigger value="colunas" className={cn(
-            isDarkMode ? "data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white" : ""
-          )}>
-            Colunas
-          </TabsTrigger>
-          <TabsTrigger value="acoes" className={cn(
-            isDarkMode ? "data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white" : ""
-          )}>
-            Ações
-          </TabsTrigger>
-          <TabsTrigger value="execucoes-automacoes" className={cn(
-            isDarkMode ? "data-[state=active]:bg-[#1a1a1a] data-[state=active]:text-white" : ""
-          )}>
-            Execuções de Automações
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="geral">Configurações Gerais</TabsTrigger>
+          <TabsTrigger value="colunas">Colunas</TabsTrigger>
+          <TabsTrigger value="acoes">Ações</TabsTrigger>
+          <TabsTrigger value="execucoes">Execuções de Automações</TabsTrigger>
         </TabsList>
 
         {/* Configurações Gerais Tab */}
-        <TabsContent value="configuracoes-gerais" className="space-y-6">
+        <TabsContent value="geral" className="space-y-4">
           <Card className={cn(
-            isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white"
+            "border-gray-200",
+            isDarkMode && "bg-[#2a2a2a] border-gray-700"
           )}>
             <CardHeader>
               <CardTitle className={cn(
-                isDarkMode ? "text-white" : "text-gray-900"
+                "text-lg",
+                isDarkMode && "text-white"
               )}>
-                Configurações Básicas
+                Configurações Gerais do Pipeline
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
                 <label className={cn(
-                  "block text-sm font-medium mb-2",
+                  "text-sm font-medium",
                   isDarkMode ? "text-gray-300" : "text-gray-700"
                 )}>
                   Nome do Pipeline
                 </label>
-                <Input
+                <Input 
                   value={pipelineName}
                   onChange={(e) => setPipelineName(e.target.value)}
-                  className={cn(
-                    isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
-                  )}
+                  className={isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""}
                 />
               </div>
-
-              <div>
+              <div className="space-y-2">
                 <label className={cn(
-                  "block text-sm font-medium mb-2",
+                  "text-sm font-medium",
                   isDarkMode ? "text-gray-300" : "text-gray-700"
                 )}>
-                  Tipo do pipeline
+                  Tipo do Pipeline
                 </label>
                 <Select value={pipelineType} onValueChange={setPipelineType}>
-                  <SelectTrigger className={cn(
-                    isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
-                  )}>
+                  <SelectTrigger className={isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="padrao">Padrão</SelectItem>
-                    <SelectItem value="pre-venda">Pré-venda</SelectItem>
-                    <SelectItem value="pos-venda">Pós-venda</SelectItem>
+                    <SelectItem value="vendas">Vendas</SelectItem>
+                    <SelectItem value="suporte">Suporte</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              <div>
+              <div className="space-y-2">
                 <label className={cn(
-                  "block text-sm font-medium mb-2",
+                  "text-sm font-medium",
                   isDarkMode ? "text-gray-300" : "text-gray-700"
                 )}>
                   Moeda
                 </label>
                 <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger className={cn(
-                    isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
-                  )}>
+                  <SelectTrigger className={isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -437,9 +411,22 @@ export function PipelineConfiguracao({
         {/* Ações Tab */}
         <TabsContent value="acoes" className="space-y-4">
           <Card className={cn(
-            isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white"
+            "border-gray-200",
+            isDarkMode && "bg-[#2a2a2a] border-gray-700"
           )}>
-            <CardContent className="p-4">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={cn(
+                "text-lg",
+                isDarkMode && "text-white"
+              )}>
+                Ações do Pipeline
+              </CardTitle>
+              <Button onClick={addNewAction} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Ação
+              </Button>
+            </CardHeader>
+            <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -448,30 +435,29 @@ export function PipelineConfiguracao({
                       isDarkMode ? "border-gray-600" : "border-gray-200"
                     )}>
                       <th className={cn(
-                        "text-left py-3 px-2 font-medium",
+                        "text-left p-2 text-sm font-medium",
                         isDarkMode ? "text-gray-300" : "text-gray-700"
                       )}>
-                        Nome da ação
+                        Nome da Ação
                       </th>
                       <th className={cn(
-                        "text-left py-3 px-2 font-medium",
+                        "text-left p-2 text-sm font-medium",
                         isDarkMode ? "text-gray-300" : "text-gray-700"
                       )}>
-                        Próxima pipeline
+                        Próximo Pipeline
                       </th>
                       <th className={cn(
-                        "text-left py-3 px-2 font-medium",
+                        "text-left p-2 text-sm font-medium",
                         isDarkMode ? "text-gray-300" : "text-gray-700"
                       )}>
-                        Coluna destino
+                        Coluna de Destino
                       </th>
                       <th className={cn(
-                        "text-left py-3 px-2 font-medium",
+                        "text-left p-2 text-sm font-medium",
                         isDarkMode ? "text-gray-300" : "text-gray-700"
                       )}>
-                        Estado do negócio
+                        Estado do Negócio
                       </th>
-                      <th className="w-12"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -480,93 +466,56 @@ export function PipelineConfiguracao({
                         "border-b",
                         isDarkMode ? "border-gray-700" : "border-gray-100"
                       )}>
-                        <td className="py-3 px-2">
-                          <Select 
-                            value={action.actionName} 
-                            onValueChange={(value) => updateAction(action.id, 'actionName', value)}
-                          >
-                            <SelectTrigger className={cn(
-                              "w-full",
-                              isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
-                            )}>
-                              <SelectValue placeholder="Selecionar ação" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="nenhum">Nenhum</SelectItem>
-                              <SelectItem value="ligar-de-novo">Ligar de novo</SelectItem>
-                              <SelectItem value="qualificar">Qualificar</SelectItem>
-                              <SelectItem value="follow-up-pix">Fazer follow up de comprovante PIX</SelectItem>
-                              <SelectItem value="follow-up-reuniao">Fazer follow up após Reunião Realizada</SelectItem>
-                              <SelectItem value="ganho">Ganho</SelectItem>
-                              <SelectItem value="agendar-reuniao">Agendar a Reunião</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <td className="p-2">
+                          <Input
+                            value={action.actionName}
+                            onChange={(e) => updateAction(action.id, 'actionName', e.target.value)}
+                            placeholder="Nome da ação"
+                            className={cn(
+                              "text-sm",
+                              isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""
+                            )}
+                          />
                         </td>
-                        <td className="py-3 px-2">
-                          <Select 
-                            value={action.nextPipeline} 
-                            onValueChange={(value) => updateAction(action.id, 'nextPipeline', value)}
-                          >
-                            <SelectTrigger className={cn(
-                              "w-full",
-                              isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
-                            )}>
-                              <SelectValue placeholder="Selecionar pipeline" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="nenhum">Nenhum</SelectItem>
-                              <SelectItem value="vendas">Vendas</SelectItem>
-                              <SelectItem value="perdidos">Perdidos</SelectItem>
-                              <SelectItem value="sucesso-cliente">Sucesso do Cliente</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <td className="p-2">
+                          <Input
+                            value={action.nextPipeline}
+                            onChange={(e) => updateAction(action.id, 'nextPipeline', e.target.value)}
+                            placeholder="Pipeline destino"
+                            className={cn(
+                              "text-sm",
+                              isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""
+                            )}
+                          />
                         </td>
-                        <td className="py-3 px-2">
-                          <Select 
-                            value={action.targetColumn} 
-                            onValueChange={(value) => updateAction(action.id, 'targetColumn', value)}
-                          >
-                            <SelectTrigger className={cn(
-                              "w-full",
-                              isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
-                            )}>
-                              <SelectValue placeholder="Selecionar coluna" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ganho">Ganho</SelectItem>
-                              <SelectItem value="perdidos-outros">Perdidos - Outros</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <td className="p-2">
+                          <Input
+                            value={action.targetColumn}
+                            onChange={(e) => updateAction(action.id, 'targetColumn', e.target.value)}
+                            placeholder="Coluna destino"
+                            className={cn(
+                              "text-sm",
+                              isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""
+                            )}
+                          />
                         </td>
-                        <td className="py-3 px-2">
+                        <td className="p-2">
                           <Select 
                             value={action.dealState} 
                             onValueChange={(value) => updateAction(action.id, 'dealState', value)}
                           >
                             <SelectTrigger className={cn(
-                              "w-full",
-                              isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
+                              "text-sm",
+                              isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""
                             )}>
-                              <SelectValue placeholder="Selecionar estado" />
+                              <SelectValue placeholder="Estado" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="nenhum">Nenhum</SelectItem>
-                              <SelectItem value="aberto">Aberto</SelectItem>
-                              <SelectItem value="ganho">Ganho</SelectItem>
-                              <SelectItem value="perda">Perda</SelectItem>
-                              <SelectItem value="cancelado">Cancelado</SelectItem>
+                              <SelectItem value="Ganho">Ganho</SelectItem>
+                              <SelectItem value="Perda">Perda</SelectItem>
+                              <SelectItem value="Em andamento">Em andamento</SelectItem>
                             </SelectContent>
                           </Select>
-                        </td>
-                        <td className="py-3 px-2">
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            onClick={addNewAction}
-                            className="h-8 w-8"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -578,95 +527,66 @@ export function PipelineConfiguracao({
         </TabsContent>
 
         {/* Execuções de Automações Tab */}
-        <TabsContent value="execucoes-automacoes" className="space-y-4">
+        <TabsContent value="execucoes" className="space-y-4">
           <Card className={cn(
-            isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white"
+            "border-gray-200",
+            isDarkMode && "bg-[#2a2a2a] border-gray-700"
           )}>
             <CardHeader>
               <CardTitle className={cn(
-                isDarkMode ? "text-white" : "text-gray-900"
+                "text-lg",
+                isDarkMode && "text-white"
               )}>
-                Configurações de Automação
+                Execuções de Automações
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <label className={cn(
-                  "block text-sm font-medium mb-2",
-                  isDarkMode ? "text-gray-300" : "text-gray-700"
-                )}>
-                  Selecionar Coluna
-                </label>
-                <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                  <SelectTrigger className={cn(
-                    isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className={cn(
+                    "text-sm font-medium",
+                    isDarkMode ? "text-gray-300" : "text-gray-700"
                   )}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="qualificar">Qualificar</SelectItem>
-                    <SelectItem value="perdido-limitacao">Perdido - Limitação Financeira</SelectItem>
-                    <SelectItem value="operacao-venda">Operação Venda Máxima</SelectItem>
-                    <SelectItem value="ligar-de-novo">Ligar de novo</SelectItem>
-                    <SelectItem value="trazer">Trazer</SelectItem>
-                    <SelectItem value="perdidos-clientes">Perdidos - Clientes</SelectItem>
-                    <SelectItem value="trafego">Tráfego</SelectItem>
-                    <SelectItem value="pago-clientes">Pago clientes</SelectItem>
-                    <SelectItem value="agendar-reuniao">Agendar a Reunião</SelectItem>
-                    <SelectItem value="fazer-reuniao">Fazer a Reunião presencial / online</SelectItem>
-                    <SelectItem value="erp-bling">ERP Bling Clientes</SelectItem>
-                    <SelectItem value="mentorado-titans">Mentorado Titans Alpha</SelectItem>
-                    <SelectItem value="follow-up-reuniao">Fazer follow up após Reunião Realizada</SelectItem>
-                    <SelectItem value="follow-up-pix">Fazer follow up de comprovante PIX</SelectItem>
-                    <SelectItem value="treinamento-lojista">Treinamento Lojista Milionário</SelectItem>
-                    <SelectItem value="ganho">Ganho</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className={cn(
-                  "block text-sm font-medium mb-2",
-                  isDarkMode ? "text-gray-300" : "text-gray-700"
-                )}>
-                  Selecionar Automação
-                </label>
-                <Select value={selectedAutomation} onValueChange={setSelectedAutomation}>
-                  <SelectTrigger className={cn(
-                    isDarkMode ? "bg-[#1a1a1a] border-gray-600 text-white" : ""
+                    Selecionar Coluna
+                  </label>
+                  <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                    <SelectTrigger className={isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="qualificar">Qualificar</SelectItem>
+                      <SelectItem value="proposta">Proposta</SelectItem>
+                      <SelectItem value="fechado">Fechado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className={cn(
+                    "text-sm font-medium",
+                    isDarkMode ? "text-gray-300" : "text-gray-700"
                   )}>
-                    <SelectValue placeholder="Selecionar automação" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Automações serão carregadas dinamicamente */}
-                  </SelectContent>
-                </Select>
+                    Selecionar Automação
+                  </label>
+                  <Select value={selectedAutomation} onValueChange={setSelectedAutomation}>
+                    <SelectTrigger className={isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : ""}>
+                      <SelectValue placeholder="Selecione uma automação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto1">Envio de Email</SelectItem>
+                      <SelectItem value="auto2">Notificação Slack</SelectItem>
+                      <SelectItem value="auto3">Webhook</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className={cn(
-            isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white"
-          )}>
-            <CardHeader>
-              <CardTitle className={cn(
-                isDarkMode ? "text-white" : "text-gray-900"
-              )}>
-                Status de Execuções
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-center py-12">
-              <div className={cn(
-                "text-lg font-medium mb-2",
-                isDarkMode ? "text-gray-300" : "text-gray-600"
-              )}>
-                Nenhuma execução encontrada
-              </div>
-              <div className={cn(
-                "text-sm",
-                isDarkMode ? "text-gray-400" : "text-gray-500"
-              )}>
-                Não há registros de execução para esta automação.
+              
+              <div className="text-center py-8">
+                <div className={cn(
+                  "text-sm",
+                  isDarkMode ? "text-gray-400" : "text-gray-500"
+                )}>
+                  Não há registros de execução para esta automação.
+                </div>
               </div>
             </CardContent>
           </Card>
