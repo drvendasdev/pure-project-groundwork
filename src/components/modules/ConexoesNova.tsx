@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star, Bug } from 'lucide-react';
 import { TestWebhookReceptionModal } from "@/components/modals/TestWebhookReceptionModal";
-import { AdicionarDSAgenteTokenModal } from "@/components/modals/AdicionarDSAgenteTokenModal";
+
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -50,7 +50,7 @@ interface ConexoesNovaProps {
 export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  
   const { usage, refreshLimits } = useWorkspaceLimits(workspaceId);
   const { canCreateConnections } = useWorkspaceRole();
   
@@ -639,24 +639,6 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         
         <div className="flex gap-2">
           <TestWebhookReceptionModal />
-          <Button 
-            onClick={() => setIsTokenModalOpen(true)}
-            variant="outline"
-            disabled={
-              !canCreateConnections(workspaceId) || 
-              !currentUsage.canCreateMore
-            }
-            title={
-              !canCreateConnections(workspaceId) 
-                ? 'Você não tem permissão para criar conexões neste workspace' 
-                : !currentUsage.canCreateMore 
-                  ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` 
-                  : ''
-            }
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Adicionar DS Agente
-          </Button>
         </div>
         
         <Dialog open={isCreateModalOpen} onOpenChange={(open) => {
@@ -837,12 +819,12 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               Crie sua primeira conexão WhatsApp para começar a receber mensagens
             </p>
             <Button 
-              onClick={() => setIsTokenModalOpen(true)}
+              onClick={() => setIsCreateModalOpen(true)}
               disabled={!currentUsage.canCreateMore}
               title={!currentUsage.canCreateMore ? `Limite de conexões atingido (${currentUsage.current}/${currentUsage.limit})` : ''}
             >
               <Plus className="w-4 h-4 mr-2" />
-              Adicionar DS Agente ({currentUsage.current}/{currentUsage.limit})
+              Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </CardContent>
         </Card>
@@ -1083,15 +1065,6 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal DS Agente de Token */}
-      <AdicionarDSAgenteTokenModal
-        open={isTokenModalOpen}
-        onOpenChange={setIsTokenModalOpen}
-        onSuccess={() => {
-          // Pode adicionar lógica específica aqui no futuro
-          loadConnections();
-        }}
-      />
     </div>
   );
 }
