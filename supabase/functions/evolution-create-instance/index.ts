@@ -34,7 +34,39 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
       urlFromDb: configData?.evolution_url
     });
 
-    let url = null; // No default fallback - must come from workspace config
+    // If no config found, try to create one with default values
+    if (!configData) {
+      console.log('🔧 No config found, creating default configuration...');
+      
+      // Get default values from environment or another workspace
+      const defaultUrl = Deno.env.get('EVOLUTION_URL') || 'https://evolution-evolution.upvzfg.easypanel.host';
+      const defaultApiKey = Deno.env.get('EVOLUTION_API_KEY');
+      
+      if (!defaultApiKey) {
+        console.error('❌ No default Evolution API key available');
+        throw new Error('Evolution API não está configurado para este workspace. Configure URL e API key nas configurações da Evolution.');
+      }
+      
+      // Create default configuration
+      const { error: insertError } = await supabase
+        .from('evolution_instance_tokens')
+        .insert({
+          workspace_id: workspaceId,
+          instance_name: '_master_config',
+          evolution_url: defaultUrl,
+          token: defaultApiKey
+        });
+        
+      if (insertError) {
+        console.error('❌ Failed to create default config:', insertError);
+        throw new Error('Falha ao criar configuração padrão da Evolution API.');
+      }
+      
+      console.log('✅ Created default configuration for workspace');
+      return { url: defaultUrl, apiKey: defaultApiKey };
+    }
+
+    let url = null;
     let apiKey = null;
     
     if (configData?.evolution_url) {
@@ -42,7 +74,7 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
       console.log('✅ Using workspace-specific URL:', url);
     } else {
       console.error('❌ No workspace Evolution URL found in configuration');
-      throw new Error('Evolution URL not configured for workspace. Please configure it in the Evolution settings.');
+      throw new Error('Evolution URL não configurado para este workspace. Configure a URL nas configurações da Evolution.');
     }
     
     if (configData?.token && configData.token !== 'config_only') {
@@ -50,7 +82,7 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
       console.log('✅ Using workspace-specific API key');
     } else {
       console.error('❌ No valid workspace API key found in configuration');
-      throw new Error('Evolution API key not configured for workspace. Please configure it in the Evolution settings.');
+      throw new Error('Evolution API key não configurado para este workspace. Configure a chave da API nas configurações da Evolution.');
     }
     
     console.log('🔧 Final config:', {
@@ -64,7 +96,7 @@ async function getEvolutionConfig(workspaceId: string, supabase: any) {
     return { url, apiKey };
   } catch (error) {
     console.error('❌ Error getting workspace config:', error);
-    throw error; // Re-throw the error instead of using fallback
+    throw error;
   }
 }
 

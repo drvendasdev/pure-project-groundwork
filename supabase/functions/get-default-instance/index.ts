@@ -29,12 +29,14 @@ Deno.serve(async (req) => {
 
     console.log(`Getting default instance for workspace: ${workspaceId}`);
 
-    // Get the default instance setting
-    const { data, error } = await supabase
-      .from('workspace_messaging_settings')
-      .select('default_instance')
+    // Get the first available connection as default instance
+    const { data: connections, error } = await supabase
+      .from('connections')
+      .select('instance_name, status')
       .eq('workspace_id', workspaceId)
-      .maybeSingle();
+      .eq('status', 'connected')
+      .order('created_at', { ascending: true })
+      .limit(1);
 
     if (error) {
       console.error('Error getting default instance:', error);
@@ -44,10 +46,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Default instance retrieved:', data);
+    const defaultInstance = connections && connections.length > 0 ? connections[0].instance_name : null;
+    console.log('Default instance retrieved:', defaultInstance);
 
     return new Response(
-      JSON.stringify({ defaultInstance: data?.default_instance || null }),
+      JSON.stringify({ defaultInstance }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
