@@ -65,6 +65,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
   const [showCreateActivityModal, setShowCreateActivityModal] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
+  const [currentColumnId, setCurrentColumnId] = useState<string>("");
   const { toast } = useToast();
   const { selectedPipeline } = usePipelinesContext();
   const { columns, isLoading: isLoadingColumns } = usePipelineColumns(selectedPipeline?.id || null);
@@ -83,21 +84,34 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
     }
   }, [isOpen, contactNumber]);
 
-  // Converter colunas do pipeline em steps
+  // Converter colunas do pipeline em steps com progresso real
   useEffect(() => {
-    if (columns.length > 0) {
+    if (columns.length > 0 && currentColumnId) {
+      const sortedColumns = columns.sort((a, b) => a.order_position - b.order_position);
+      const currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
+      
+      const steps: PipelineStep[] = sortedColumns.map((column, index) => ({
+        id: column.id,
+        name: column.name,
+        color: column.color,
+        isActive: index === currentIndex,
+        isCompleted: index < currentIndex
+      }));
+      setPipelineSteps(steps);
+    } else if (columns.length > 0) {
+      // Fallback para primeira coluna se não encontrar o card
       const steps: PipelineStep[] = columns
         .sort((a, b) => a.order_position - b.order_position)
         .map((column, index) => ({
           id: column.id,
           name: column.name,
           color: column.color,
-          isActive: index === 0, // Primeira coluna ativa por padrão
+          isActive: index === 0,
           isCompleted: false
         }));
       setPipelineSteps(steps);
     }
-  }, [columns]);
+  }, [columns, currentColumnId]);
 
   const fetchContactData = async () => {
     setIsLoadingData(true);
@@ -115,6 +129,20 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
       }
 
       setContactId(contact.id);
+      
+      // Buscar card do pipeline para este contato
+      if (selectedPipeline?.id) {
+        const { data: card, error: cardError } = await supabase
+          .from('pipeline_cards')
+          .select('column_id')
+          .eq('contact_id', contact.id)
+          .eq('pipeline_id', selectedPipeline.id)
+          .single();
+
+        if (!cardError && card) {
+          setCurrentColumnId(card.column_id);
+        }
+      }
       
       // Buscar tags do contato
       await fetchContactTags(contact.id);
@@ -426,32 +454,34 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                       {pipelineSteps.map((step, index) => (
                         <div key={step.id} className="flex items-center flex-1">
                           <div className="flex flex-col items-center">
-                            <div 
+                             <div 
                               className={cn(
                                 "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2",
                                 step.isActive
                                   ? "text-black border-2"
-                                  : "bg-gray-300 text-gray-600 border-gray-300",
-                                isDarkMode && !step.isActive
+                                  : step.isCompleted
+                                    ? "text-white border-2"
+                                    : "bg-gray-300 text-gray-600 border-gray-300",
+                                isDarkMode && !step.isActive && !step.isCompleted
                                   ? "bg-gray-600 text-gray-300 border-gray-500"
                                   : ""
                               )}
-                              style={step.isActive ? { 
+                              style={step.isActive || step.isCompleted ? { 
                                 backgroundColor: step.color, 
                                 borderColor: step.color 
                               } : {}}
                             >
-                              {index + 1}
+                              {step.isCompleted ? <Check className="w-4 h-4" /> : index + 1}
                             </div>
                           </div>
-                          {index < pipelineSteps.length - 1 && (
+                           {index < pipelineSteps.length - 1 && (
                             <div 
                               className={cn(
                                 "flex-1 h-1 mx-2",
-                                !step.isActive && "bg-gray-300",
-                                isDarkMode && !step.isActive ? "bg-gray-600" : ""
+                                !(step.isActive || step.isCompleted) && "bg-gray-300",
+                                isDarkMode && !(step.isActive || step.isCompleted) ? "bg-gray-600" : ""
                               )}
-                              style={step.isActive ? { backgroundColor: step.color } : {}}
+                              style={(step.isActive || step.isCompleted) ? { backgroundColor: step.color } : {}}
                             />
                           )}
                         </div>
@@ -465,13 +495,13 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                           key={step.id}
                           className={cn(
                             "text-xs text-center flex-1 px-1",
-                            step.isActive
+                            step.isActive || step.isCompleted
                               ? "font-medium"
                               : isDarkMode
                                 ? "text-gray-400"
                                 : "text-gray-600"
                           )}
-                          style={step.isActive ? { color: step.color } : {}}
+                          style={(step.isActive || step.isCompleted) ? { color: step.color } : {}}
                         >
                           {step.name}
                         </div>
