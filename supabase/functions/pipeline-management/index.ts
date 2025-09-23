@@ -280,7 +280,7 @@ serve(async (req) => {
               contact:contacts(*),
               conversation:conversations(
                 *,
-                assigned_user:system_users!conversations_assigned_user_id_fkey(id, name, avatar)
+                assigned_user:system_users(id, name, avatar)
               )
             `)
             .eq('pipeline_id', pipelineId)
