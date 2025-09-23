@@ -86,9 +86,17 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
 
   // Converter colunas do pipeline em steps com progresso real
   useEffect(() => {
+    console.log('🔧 Processando pipeline steps...');
+    console.log('📊 Colunas disponíveis:', columns.length, columns);
+    console.log('🎯 Current Column ID:', currentColumnId);
+    console.log('⏳ Is Loading Columns:', isLoadingColumns);
+    
     if (columns.length > 0 && currentColumnId) {
       const sortedColumns = columns.sort((a, b) => a.order_position - b.order_position);
       const currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
+      
+      console.log('📍 Current column index:', currentIndex);
+      console.log('🗂️ Sorted columns:', sortedColumns);
       
       const steps: PipelineStep[] = sortedColumns.map((column, index) => ({
         id: column.id,
@@ -97,8 +105,11 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
         isActive: index === currentIndex,
         isCompleted: index < currentIndex
       }));
+      
+      console.log('✨ Generated steps:', steps);
       setPipelineSteps(steps);
     } else if (columns.length > 0) {
+      console.log('⚠️ Usando fallback - primeira coluna ativa');
       // Fallback para primeira coluna se não encontrar o card
       const steps: PipelineStep[] = columns
         .sort((a, b) => a.order_position - b.order_position)
@@ -110,12 +121,17 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
           isCompleted: false
         }));
       setPipelineSteps(steps);
+    } else {
+      console.log('⚠️ Não foi possível processar steps - colunas:', columns.length, 'currentColumnId:', currentColumnId);
     }
-  }, [columns, currentColumnId]);
+  }, [columns, currentColumnId, isLoadingColumns]);
 
   const fetchContactData = async () => {
     setIsLoadingData(true);
     try {
+      console.log('🔍 Buscando dados do contato para número:', contactNumber);
+      console.log('📊 Pipeline selecionado:', selectedPipeline);
+      
       // Buscar contato pelo número de telefone
       const { data: contact, error: contactError } = await supabase
         .from('contacts')
@@ -124,24 +140,33 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
         .single();
 
       if (contactError) {
-        console.error('Contato não encontrado:', contactError);
+        console.error('❌ Contato não encontrado:', contactError);
         return;
       }
 
+      console.log('✅ Contato encontrado:', contact);
       setContactId(contact.id);
       
       // Buscar card do pipeline para este contato
       if (selectedPipeline?.id) {
+        console.log('🔍 Buscando card do pipeline para contato:', contact.id, 'pipeline:', selectedPipeline.id);
+        
         const { data: card, error: cardError } = await supabase
           .from('pipeline_cards')
-          .select('column_id')
+          .select('column_id, id, title')
           .eq('contact_id', contact.id)
           .eq('pipeline_id', selectedPipeline.id)
+          .eq('status', 'aberto')
           .single();
 
         if (!cardError && card) {
+          console.log('✅ Card do pipeline encontrado:', card);
           setCurrentColumnId(card.column_id);
+        } else {
+          console.log('⚠️ Card do pipeline não encontrado:', cardError);
         }
+      } else {
+        console.log('⚠️ Nenhum pipeline selecionado');
       }
       
       // Buscar tags do contato
@@ -150,7 +175,7 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
       // Buscar atividades do contato
       await fetchActivities(contact.id);
     } catch (error) {
-      console.error('Erro ao buscar dados do contato:', error);
+      console.error('❌ Erro ao buscar dados do contato:', error);
     } finally {
       setIsLoadingData(false);
     }
