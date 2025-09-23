@@ -417,48 +417,65 @@ export function DealDetailsModal({
                 {isLoadingColumns ? <div className="flex justify-center py-8">
                     <div className="text-gray-500">Carregando colunas do pipeline...</div>
                   </div> : pipelineSteps.length > 0 ? <div className="w-full">
-                    {/* Timeline Container */}
-                    <div className="relative px-8 py-6">
+                    {/* Timeline Container - Estrutura baseada no HTML fornecido */}
+                    <div className="relative">
                       {/* Background Progress Line */}
-                      <div className={cn("absolute top-8 left-8 right-8 h-0.5", isDarkMode ? "bg-gray-600" : "bg-gray-300")} />
+                      <div className={cn("absolute top-6 left-0 right-0 h-0.5", isDarkMode ? "bg-gray-600" : "bg-gray-300")} />
                       
                       {/* Active Progress Line */}
                       <div 
-                        className="absolute top-8 left-8 h-0.5 bg-yellow-400 transition-all duration-300"
+                        className="absolute top-6 left-0 h-0.5 bg-yellow-400 transition-all duration-300"
                         style={{ 
-                          width: `${Math.max(0, (pipelineSteps.findIndex(step => step.isActive) + 1) / pipelineSteps.length * 100 - 100/pipelineSteps.length/2)}%` 
+                          width: `${Math.max(0, Math.min(100, ((pipelineSteps.findIndex(step => step.isActive)) / Math.max(1, pipelineSteps.length - 1)) * 100))}%`
                         }}
                       />
                       
-                      {/* Timeline Steps */}
-                      <div className="relative flex justify-between items-center">
+                      {/* Timeline Steps Container */}
+                      <div className="flex justify-between">
                         {pipelineSteps.map((step, index) => {
                           const currentStepIndex = pipelineSteps.findIndex(s => s.isActive);
                           const isCompleted = index < currentStepIndex;
                           const isActive = index === currentStepIndex;
-                          const isFuture = index > currentStepIndex;
                           
                           return (
-                            <div key={step.id} className="flex flex-col items-center">
-                              {/* Circle */}
-                              <div className={cn(
-                                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 relative z-10",
-                                isCompleted && "bg-green-500 border-green-500 text-white",
-                                isActive && "bg-yellow-400 border-yellow-400 text-black",
-                                isFuture && (isDarkMode ? "bg-gray-600 border-gray-600 text-gray-300" : "bg-gray-300 border-gray-300 text-gray-600")
-                              )}>
-                                {isCompleted ? <Check className="w-4 h-4" /> : index + 1}
+                            <div 
+                              key={step.id} 
+                              className="flex flex-col items-center cursor-pointer"
+                              style={{ width: '100%' }}
+                            >
+                              {/* Circle with number */}
+                              <div 
+                                className={cn(
+                                  "w-12 h-12 rounded-full flex items-center justify-center text-sm font-medium border-2 bg-background transition-all duration-300 relative z-10",
+                                  isCompleted && "bg-green-500 border-green-500 text-white",
+                                  isActive && "bg-yellow-400 border-yellow-400 text-black",
+                                  !isActive && !isCompleted && (isDarkMode ? "bg-gray-600 border-gray-600 text-gray-300" : "bg-gray-200 border-gray-300 text-gray-600")
+                                )}
+                                style={{ 
+                                  transform: isActive ? 'scale(1)' : 'scale(0.8)'
+                                }}
+                              >
+                                {isCompleted ? (
+                                  <Check className="w-4 h-4" />
+                                ) : (
+                                  <span className="text-xs font-medium">{index + 1}</span>
+                                )}
                               </div>
                               
-                              {/* Label */}
-                              <div className={cn(
-                                "text-xs text-center mt-3 max-w-[80px]",
-                                isActive && "font-medium text-yellow-600",
-                                isCompleted && "font-medium text-green-600",
-                                isFuture && (isDarkMode ? "text-gray-400" : "text-gray-500")
-                              )}>
+                              {/* Step Label */}
+                              <p 
+                                className="text-xs text-center mt-2"
+                                style={{ 
+                                  textAlign: 'center', 
+                                  width: '100%', 
+                                  fontWeight: isActive ? 'bold' : 'normal',
+                                  color: isActive ? (isDarkMode ? '#FCD34D' : '#D97706') : 
+                                        isCompleted ? (isDarkMode ? '#10B981' : '#059669') : 
+                                        (isDarkMode ? '#9CA3AF' : '#6B7280')
+                                }}
+                              >
                                 {step.name}
-                              </div>
+                              </p>
                             </div>
                           );
                         })}
