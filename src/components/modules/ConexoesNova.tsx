@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Trash2, Wifi, QrCode, Plus, MoreVertical, Edit3, RefreshCw, Webhook, Star, Bug } from 'lucide-react';
 import { TestWebhookReceptionModal } from "@/components/modals/TestWebhookReceptionModal";
 import { AdicionarDSAgenteTokenModal } from "@/components/modals/AdicionarDSAgenteTokenModal";
@@ -680,39 +681,78 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{isEditMode ? 'Editar Instância' : 'Criar Nova Instância'}</DialogTitle>
+          <DialogContent className="max-w-md p-0">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">
+                {isEditMode ? 'Editar Instância' : 'Adicionar Canal de Atendimento'}
+              </h2>
+            </div>
+
+            {/* Stepper */}
+            <div className="px-6 pt-6">
+              <div className="flex items-center justify-center mb-6">
+                <div className="flex items-center">
+                  {/* Step 1 */}
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
+                      1
+                    </div>
+                    <span className="ml-2 text-sm text-foreground">Configuração</span>
+                  </div>
+                  
+                  {/* Connector */}
+                  <div className="w-12 h-px bg-border mx-4"></div>
+                  
+                  {/* Step 2 */}
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full border-2 border-border text-muted-foreground flex items-center justify-center text-sm">
+                      2
+                    </div>
+                    <span className="ml-2 text-sm text-muted-foreground">Finalização</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form Content */}
+            <div className="px-6 space-y-4">
               {!isEditMode && (
-                <div className="text-sm text-muted-foreground">
-                  Conexões: {currentUsage.current}/{currentUsage.limit}
-                  {currentUsage.current >= currentUsage.limit && (
-                    <span className="text-destructive font-medium"> - Limite atingido</span>
-                  )}
+                <div className="p-3 bg-muted/50 rounded-lg border">
+                  <div className="text-sm text-muted-foreground">
+                    Conexões: {currentUsage.current}/{currentUsage.limit}
+                    {currentUsage.current >= currentUsage.limit && (
+                      <span className="text-destructive font-medium ml-1">- Limite atingido</span>
+                    )}
+                  </div>
                 </div>
               )}
-            </DialogHeader>
-            
-            <div className="space-y-4">
+
               <div className="space-y-2">
-                <Label htmlFor="instanceName">Nome da Instância</Label>
+                <Label htmlFor="instanceName" className="text-sm font-medium text-foreground">
+                  Nome *
+                </Label>
                 <Input
                   id="instanceName"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
-                  placeholder="Ex: minha-empresa"
+                  placeholder="Digite o nome da instância"
                   disabled={isEditMode}
+                  className="h-11"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phoneNumber">Número do WhatsApp (opcional)</Label>
+                <Label htmlFor="phoneNumber" className="text-sm font-medium text-foreground">
+                  Número do WhatsApp
+                </Label>
                 <Input
                   id="phoneNumber"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="Ex: 5511999999999"
                   type="tel"
+                  className="h-11"
                 />
                 <p className="text-xs text-muted-foreground">
                   Formato: 55 + DDD + número (será normalizado automaticamente)
@@ -720,9 +760,11 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="historyRecovery">Recuperação de Histórico</Label>
+                <Label htmlFor="historyRecovery" className="text-sm font-medium text-foreground">
+                  Recuperar mensagens a partir de
+                </Label>
                 <Select value={historyRecovery} onValueChange={setHistoryRecovery} disabled={isEditMode}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -734,9 +776,39 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                 </Select>
               </div>
 
+              {/* Toggle Switches - Mockup */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium text-foreground">
+                      Desabilitar as mensagens de boas-vindas
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Não enviar mensagem automática de boas-vindas
+                    </p>
+                  </div>
+                  <Switch defaultChecked={false} />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium text-foreground">
+                      Habilitar Chats em Grupos
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Permitir conversas em grupos do WhatsApp
+                    </p>
+                  </div>
+                  <Switch defaultChecked={true} />
+                </div>
+              </div>
             </div>
             
-            <DialogFooter>
+            {/* Footer */}
+            <div className="flex items-center justify-between p-6 border-t border-border mt-6">
+              <Button variant="outline" disabled={isCreating}>
+                Voltar
+              </Button>
               <Button 
                 onClick={isEditMode ? editConnection : () => createInstance()} 
                 disabled={
@@ -749,9 +821,9 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
                     : ''
                 }
               >
-                {isCreating ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Criar Instância')}
+                {isCreating ? (isEditMode ? 'Salvando...' : 'Criando...') : (isEditMode ? 'Salvar Alterações' : 'Adicionar')}
               </Button>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
