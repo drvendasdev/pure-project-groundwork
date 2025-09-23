@@ -665,7 +665,7 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
               Adicionar Instância ({currentUsage.current}/{currentUsage.limit})
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md p-0">
+          <DialogContent className="max-w-4xl p-0">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">
