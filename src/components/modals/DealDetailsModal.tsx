@@ -56,7 +56,7 @@ interface PipelineStep {
 
 export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isDarkMode = false }: DealDetailsModalProps) {
   const [activeTab, setActiveTab] = useState("negocios");
-  const [selectedNegocio, setSelectedNegocio] = useState("sucesso-cliente-operacao");
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
   const [contactId, setContactId] = useState<string>("");
   const [contactTags, setContactTags] = useState<Tag[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -66,9 +66,11 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
   const [currentColumnId, setCurrentColumnId] = useState<string>("");
+  const [contactPipelines, setContactPipelines] = useState<any[]>([]);
+  const [pipelineCardsCount, setPipelineCardsCount] = useState(0);
   const { toast } = useToast();
   const { selectedPipeline } = usePipelinesContext();
-  const { columns, isLoading: isLoadingColumns } = usePipelineColumns(selectedPipeline?.id || null);
+  const { columns, isLoading: isLoadingColumns } = usePipelineColumns(selectedPipelineId || null);
 
   const tabs = [
     { id: "negocios", label: "Negócios" },
@@ -83,6 +85,28 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
       fetchUsers();
     }
   }, [isOpen, contactNumber]);
+
+  // Atualizar coluna atual quando mudar de pipeline
+  useEffect(() => {
+    if (selectedPipelineId && contactId) {
+      // Buscar card do pipeline selecionado
+      const fetchCurrentCard = async () => {
+        const { data: card } = await supabase
+          .from('pipeline_cards')
+          .select('column_id')
+          .eq('contact_id', contactId)
+          .eq('pipeline_id', selectedPipelineId)
+          .eq('status', 'aberto')
+          .single();
+          
+        if (card) {
+          setCurrentColumnId(card.column_id);
+        }
+      };
+      
+      fetchCurrentCard();
+    }
+  }, [selectedPipelineId, contactId]);
 
   // Converter colunas do pipeline em steps com progresso real
   useEffect(() => {
@@ -131,19 +155,53 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
 
       setContactId(contact.id);
       
-      // Buscar card do pipeline para este contato
-      if (selectedPipeline?.id) {
-        const { data: card, error: cardError } = await supabase
-          .from('pipeline_cards')
-          .select('column_id, id, title')
-          .eq('contact_id', contact.id)
-          .eq('pipeline_id', selectedPipeline.id)
-          .eq('status', 'aberto')
-          .single();
+      // Buscar TODOS os cards do contato em diferentes pipelines
+      const { data: cards, error: cardsError } = await supabase
+        .from('pipeline_cards')
+        .select(`
+          column_id, 
+          id, 
+          title,
+          pipeline_id,
+          pipelines (
+            id,
+            name,
+            type
+          )
+        `)
+        .eq('contact_id', contact.id)
+        .eq('status', 'aberto');
 
-        if (!cardError && card) {
-          setCurrentColumnId(card.column_id);
+      if (!cardsError && cards && cards.length > 0) {
+        // Extrair pipelines únicos
+        const uniquePipelines = cards.reduce((acc, card) => {
+          const pipeline = card.pipelines;
+          if (pipeline && !acc.find(p => p.id === pipeline.id)) {
+            acc.push(pipeline);
+          }
+          return acc;
+        }, []);
+        
+        setContactPipelines(uniquePipelines);
+        setPipelineCardsCount(cards.length);
+        
+        // Definir pipeline inicial (primeiro pipeline ou pipeline selecionado)
+        const initialPipeline = selectedPipeline && uniquePipelines.find(p => p.id === selectedPipeline.id)
+          ? selectedPipeline.id
+          : uniquePipelines[0]?.id;
+          
+        if (initialPipeline) {
+          setSelectedPipelineId(initialPipeline);
+          
+          // Encontrar card do pipeline inicial
+          const initialCard = cards.find(card => card.pipeline_id === initialPipeline);
+          if (initialCard) {
+            setCurrentColumnId(initialCard.column_id);
+          }
         }
+      } else {
+        setContactPipelines([]);
+        setPipelineCardsCount(0);
       }
       
       // Buscar tags do contato
@@ -422,22 +480,21 @@ export function DealDetailsModal({ isOpen, onClose, dealName, contactNumber, isD
                     "text-sm",
                     isDarkMode ? "text-gray-400" : "text-gray-600"
                   )}>
-                    1 Negócios
+                    {pipelineCardsCount} {pipelineCardsCount === 1 ? 'Negócio' : 'Negócios'}
                   </span>
-                  <Select value={selectedNegocio} onValueChange={setSelectedNegocio}>
+                  <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
                     <SelectTrigger className={cn(
                       "w-full max-w-md",
                       isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white"
                     )}>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecione um pipeline" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sucesso-cliente-operacao">
-                        Sucesso do Cliente - Operação Venda Máxima
-                      </SelectItem>
-                      <SelectItem value="vendas-operacao">
-                        Vendas - Operação Venda Máxima
-                      </SelectItem>
+                      {contactPipelines.map((pipeline) => (
+                        <SelectItem key={pipeline.id} value={pipeline.id}>
+                          {pipeline.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
