@@ -417,30 +417,52 @@ export function DealDetailsModal({
                 {isLoadingColumns ? <div className="flex justify-center py-8">
                     <div className="text-gray-500">Carregando colunas do pipeline...</div>
                   </div> : pipelineSteps.length > 0 ? <div className="w-full">
-                    {/* Timeline Steps */}
-                    <div className="flex items-center justify-between mb-4">
-                      {pipelineSteps.map((step, index) => <div key={step.id} className="flex items-center flex-1">
-                          <div className="flex flex-col items-center">
-                             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2", step.isActive ? "text-black border-2" : step.isCompleted ? "text-white border-2" : "bg-gray-300 text-gray-600 border-gray-300", isDarkMode && !step.isActive && !step.isCompleted ? "bg-gray-600 text-gray-300 border-gray-500" : "")} style={step.isActive || step.isCompleted ? {
-                      backgroundColor: step.color,
-                      borderColor: step.color
-                    } : {}}>
-                              {step.isCompleted ? <Check className="w-4 h-4" /> : index + 1}
+                    {/* Timeline Container */}
+                    <div className="relative px-8 py-6">
+                      {/* Background Progress Line */}
+                      <div className={cn("absolute top-8 left-8 right-8 h-0.5", isDarkMode ? "bg-gray-600" : "bg-gray-300")} />
+                      
+                      {/* Active Progress Line */}
+                      <div 
+                        className="absolute top-8 left-8 h-0.5 bg-yellow-400 transition-all duration-300"
+                        style={{ 
+                          width: `${Math.max(0, (pipelineSteps.findIndex(step => step.isActive) + 1) / pipelineSteps.length * 100 - 100/pipelineSteps.length/2)}%` 
+                        }}
+                      />
+                      
+                      {/* Timeline Steps */}
+                      <div className="relative flex justify-between items-center">
+                        {pipelineSteps.map((step, index) => {
+                          const currentStepIndex = pipelineSteps.findIndex(s => s.isActive);
+                          const isCompleted = index < currentStepIndex;
+                          const isActive = index === currentStepIndex;
+                          const isFuture = index > currentStepIndex;
+                          
+                          return (
+                            <div key={step.id} className="flex flex-col items-center">
+                              {/* Circle */}
+                              <div className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 relative z-10",
+                                isCompleted && "bg-green-500 border-green-500 text-white",
+                                isActive && "bg-yellow-400 border-yellow-400 text-black",
+                                isFuture && (isDarkMode ? "bg-gray-600 border-gray-600 text-gray-300" : "bg-gray-300 border-gray-300 text-gray-600")
+                              )}>
+                                {isCompleted ? <Check className="w-4 h-4" /> : index + 1}
+                              </div>
+                              
+                              {/* Label */}
+                              <div className={cn(
+                                "text-xs text-center mt-3 max-w-[80px]",
+                                isActive && "font-medium text-yellow-600",
+                                isCompleted && "font-medium text-green-600",
+                                isFuture && (isDarkMode ? "text-gray-400" : "text-gray-500")
+                              )}>
+                                {step.name}
+                              </div>
                             </div>
-                          </div>
-                           {index < pipelineSteps.length - 1 && <div className={cn("flex-1 h-1 mx-2", !(step.isActive || step.isCompleted) && "bg-gray-300", isDarkMode && !(step.isActive || step.isCompleted) ? "bg-gray-600" : "")} style={step.isActive || step.isCompleted ? {
-                    backgroundColor: step.color
-                  } : {}} />}
-                        </div>)}
-                    </div>
-
-                    {/* Timeline Labels */}
-                    <div className="flex justify-between">
-                      {pipelineSteps.map(step => <div key={step.id} className={cn("text-xs text-center flex-1 px-1", step.isActive || step.isCompleted ? "font-medium" : isDarkMode ? "text-gray-400" : "text-gray-600")} style={step.isActive || step.isCompleted ? {
-                  color: step.color
-                } : {}}>
-                          {step.name}
-                        </div>)}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div> : <div className="text-center py-8">
                     <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
