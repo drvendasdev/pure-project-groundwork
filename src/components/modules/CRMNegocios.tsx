@@ -163,7 +163,7 @@ function DraggableDeal({
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
           <div className="flex items-center gap-1">
             <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600" onClick={(e) => e.stopPropagation()}>
-              <MessageSquare className="w-3.5 h-3.5" />
+              <MessageCircle className="w-3.5 h-3.5" />
             </Button>
             <TooltipProvider>
               <Tooltip>
@@ -177,15 +177,6 @@ function DraggableDeal({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-purple-100 hover:text-purple-600" onClick={(e) => e.stopPropagation()}>
-              <Calendar className="w-3.5 h-3.5" />
-            </Button>
-            <Button size="icon" variant="ghost" className="h-6 w-6 p-0" onClick={(e) => {
-              e.stopPropagation();
-              onClick();
-            }}>
-              <MoreHorizontal className="w-3.5 h-3.5" />
-            </Button>
           </div>
           
           <div className="flex items-center gap-2">
