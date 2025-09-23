@@ -500,129 +500,158 @@ serve(async (req) => {
           Object.entries(mediaFields).filter(([_, value]) => value !== undefined && value !== null)
         );
 
-        // Extract message content comprehensively 
-        const messageContent = payload.data?.message?.conversation || 
-                              payload.data?.message?.text || 
-                              payload.data?.message?.caption ||
-                              payload.data?.message?.body ||
-                              '';
+        // Check if this is a message event or other type of event
+        const isMessageEvent = payload.event === 'messages.upsert' && payload.data?.message;
+        
+        if (isMessageEvent) {
+          // ============ PROCESS MESSAGE EVENTS ============
+          
+          // Extract message content comprehensively 
+          const messageContent = payload.data?.message?.conversation || 
+                                payload.data?.message?.text || 
+                                payload.data?.message?.caption ||
+                                payload.data?.message?.body ||
+                                '';
 
-        // Extract and map message types from Evolution API to standardized types
-        const getMessageType = (evolutionData) => {
-          const messageType = evolutionData?.messageType?.toLowerCase();
-          const message = evolutionData?.message;
-          
-          if (messageType === 'conversation' || message?.conversation) return 'text';
-          if (messageType === 'imagemessage' || message?.imageMessage) return 'image';
-          if (messageType === 'videomessage' || message?.videoMessage) return 'video';
-          if (messageType === 'audiomessage' || message?.audioMessage) return 'audio';
-          if (messageType === 'documentmessage' || message?.documentMessage) return 'file';
-          if (messageType === 'pttmessage' || message?.pttMessage) return 'audio';
-          if (messageType === 'stickermessage' || message?.stickerMessage) return 'sticker';
-          
-          return messageType || 'text';
-        };
+          // Extract and map message types from Evolution API to standardized types
+          const getMessageType = (evolutionData) => {
+            const messageType = evolutionData?.messageType?.toLowerCase();
+            const message = evolutionData?.message;
+            
+            if (messageType === 'conversation' || message?.conversation) return 'text';
+            if (messageType === 'imagemessage' || message?.imageMessage) return 'image';
+            if (messageType === 'videomessage' || message?.videoMessage) return 'video';
+            if (messageType === 'audiomessage' || message?.audioMessage) return 'audio';
+            if (messageType === 'documentmessage' || message?.documentMessage) return 'file';
+            if (messageType === 'pttmessage' || message?.pttMessage) return 'audio';
+            if (messageType === 'stickermessage' || message?.stickerMessage) return 'sticker';
+            
+            return messageType || 'text';
+          };
 
-        // Extract file information for media messages
-        const getFileInfo = (evolutionData, mediaFields) => {
-          const message = evolutionData?.message;
-          const messageType = getMessageType(evolutionData);
-          
-          // Extract file URL from various possible locations
-          let fileUrl = mediaFields.url || 
-                       message?.imageMessage?.url ||
-                       message?.videoMessage?.url ||
-                       message?.audioMessage?.url ||
-                       message?.documentMessage?.url ||
-                       message?.stickerMessage?.url;
-          
-          // Extract file name
-          let fileName = mediaFields.fileName ||
-                        message?.documentMessage?.fileName ||
-                        message?.imageMessage?.fileName ||
-                        message?.videoMessage?.fileName ||
-                        message?.audioMessage?.fileName;
-          
-          // Extract MIME type
-          let mimeType = mediaFields.mimetype ||
-                        message?.imageMessage?.mimetype ||
-                        message?.videoMessage?.mimetype ||
-                        message?.audioMessage?.mimetype ||
-                        message?.documentMessage?.mimetype;
+          // Extract file information for media messages
+          const getFileInfo = (evolutionData, mediaFields) => {
+            const message = evolutionData?.message;
+            
+            // Extract file URL from various possible locations
+            let fileUrl = mediaFields.url || 
+                         message?.imageMessage?.url ||
+                         message?.videoMessage?.url ||
+                         message?.audioMessage?.url ||
+                         message?.documentMessage?.url ||
+                         message?.stickerMessage?.url;
+            
+            // Extract file name
+            let fileName = mediaFields.fileName ||
+                          message?.documentMessage?.fileName ||
+                          message?.imageMessage?.fileName ||
+                          message?.videoMessage?.fileName ||
+                          message?.audioMessage?.fileName;
+            
+            // Extract MIME type
+            let mimeType = mediaFields.mimetype ||
+                          message?.imageMessage?.mimetype ||
+                          message?.videoMessage?.mimetype ||
+                          message?.audioMessage?.mimetype ||
+                          message?.documentMessage?.mimetype;
 
-          return { fileUrl, fileName, mimeType };
-        };
+            return { fileUrl, fileName, mimeType };
+          };
 
-        const fileInfo = getFileInfo(payload.data, cleanMediaFields);
-        const messageType = getMessageType(payload.data);
-        const conversationId = payload.data?.key?.remoteJid || payload.data?.remoteJid;
-        const externalId = payload.data?.key?.id;
-        const senderType = payload.data?.key?.fromMe === true ? 'agent' : 'contact';
+          const fileInfo = getFileInfo(payload.data, cleanMediaFields);
+          const messageType = getMessageType(payload.data);
+          const conversationId = payload.data?.key?.remoteJid || payload.data?.remoteJid;
+          const externalId = payload.data?.key?.id;
+          const senderType = payload.data?.key?.fromMe === true ? 'agent' : 'contact';
 
-        // Create simplified N8N payload structure following user's example
-        const n8nPayload = {
-          // ============ ROOT LEVEL FIELDS (as per user example) ============
-          conversation_id: conversationId,
-          sender_type: senderType,
-          content: messageContent || null,
-          message_type: messageType,
-          file_url: fileInfo.fileUrl || null,
-          file_name: fileInfo.fileName || null,
-          mime_type: fileInfo.mimeType || null,
-          external_id: externalId,
-          created_at: new Date().toISOString(),
-          delivered_at: payload.data?.messageTimestamp ? new Date(payload.data.messageTimestamp * 1000).toISOString() : null,
-          status: payload.data?.status || 'delivered',
-          workspace_id: workspaceId,
-          metadata: {
-            instance: payload.instance,
-            origem_resposta: 'evolution',
-            ptt: payload.data?.message?.ptt || cleanMediaFields.ptt || false,
-            request_id: requestId,
-            event_type: payload.event
-          },
-          
-          // ============ PRESERVE ORIGINAL EVOLUTION DATA FOR DEBUGGING ============
-          evolution_original: {
-            ...payload,
-            processed_data: processedData
-          },
-          
-          // ============ ENHANCED DEBUG INFO ============
-          debug_info: {
-            original_payload_keys: Object.keys(payload),
-            data_keys: payload.data ? Object.keys(payload.data) : [],
-            message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
-            message_content_extraction: {
-              conversation: payload.data?.message?.conversation,
-              text: payload.data?.message?.text,
-              caption: payload.data?.message?.caption,
-              body: payload.data?.message?.body,
-              extracted: messageContent
+          // Create simplified N8N payload structure for MESSAGE events
+          var n8nPayload = {
+            // ============ ROOT LEVEL FIELDS (as per user example) ============
+            conversation_id: conversationId,
+            sender_type: senderType,
+            content: messageContent || null,
+            message_type: messageType,
+            file_url: fileInfo.fileUrl || null,
+            file_name: fileInfo.fileName || null,
+            mime_type: fileInfo.mimeType || null,
+            external_id: externalId,
+            created_at: new Date().toISOString(),
+            delivered_at: payload.data?.messageTimestamp ? new Date(payload.data.messageTimestamp * 1000).toISOString() : null,
+            status: payload.data?.status || 'delivered',
+            workspace_id: workspaceId,
+            metadata: {
+              instance: payload.instance,
+              origem_resposta: 'evolution',
+              ptt: payload.data?.message?.ptt || cleanMediaFields.ptt || false,
+              request_id: requestId,
+              event_type: payload.event
             },
-            file_extraction: {
-              extracted_url: fileInfo.fileUrl,
-              extracted_name: fileInfo.fileName,
-              extracted_mime: fileInfo.mimeType,
-              media_fields_found: Object.keys(cleanMediaFields)
+            
+            // ============ PRESERVE ORIGINAL EVOLUTION DATA FOR DEBUGGING ============
+            evolution_original: {
+              ...payload,
+              processed_data: processedData
             },
-            type_mapping: {
-              original_type: payload.data?.messageType,
-              mapped_type: messageType
+            
+            // ============ ENHANCED DEBUG INFO ============
+            debug_info: {
+              event_type: 'message',
+              original_payload_keys: Object.keys(payload),
+              data_keys: payload.data ? Object.keys(payload.data) : [],
+              message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
+              message_content_extraction: {
+                conversation: payload.data?.message?.conversation,
+                text: payload.data?.message?.text,
+                caption: payload.data?.message?.caption,
+                body: payload.data?.message?.body,
+                extracted: messageContent
+              },
+              file_extraction: {
+                extracted_url: fileInfo.fileUrl,
+                extracted_name: fileInfo.fileName,
+                extracted_mime: fileInfo.mimeType,
+                media_fields_found: Object.keys(cleanMediaFields)
+              },
+              type_mapping: {
+                original_type: payload.data?.messageType,
+                mapped_type: messageType
+              }
             }
-          }
-        };
+          };
+          
+        } else {
+          // ============ PROCESS NON-MESSAGE EVENTS (contacts.update, etc.) ============
+          
+          // For non-message events, preserve original structure and add minimal metadata
+          var n8nPayload = {
+            // ============ PRESERVE ORIGINAL EVOLUTION DATA COMPLETELY ============
+            ...payload,
+            
+            // ============ ADD MINIMAL CONTEXT ============
+            workspace_id: workspaceId,
+            processed_data: processedData,
+            timestamp: new Date().toISOString(),
+            request_id: requestId,
+            
+            // ============ DEBUG INFO FOR NON-MESSAGE EVENTS ============
+            debug_info: {
+              event_type: 'non_message',
+              original_event: payload.event,
+              original_payload_keys: Object.keys(payload),
+              data_keys: payload.data ? Object.keys(payload.data) : [],
+              is_array_data: Array.isArray(payload.data),
+              data_length: Array.isArray(payload.data) ? payload.data.length : 'not_array'
+            }
+          };
+        }
 
-        console.log(`🚀 [${requestId}] Sending to N8N (NEW STRUCTURE):`, {
+        console.log(`🚀 [${requestId}] Sending to N8N (${isMessageEvent ? 'MESSAGE EVENT' : 'NON-MESSAGE EVENT'}):`, {
           url: webhookUrl,
           event_type: payload.event,
-          conversation_id: n8nPayload.conversation_id,
-          sender_type: n8nPayload.sender_type,
-          content: n8nPayload.content?.substring(0, 50) + (n8nPayload.content?.length > 50 ? '...' : '') || 'no content',
-          message_type: n8nPayload.message_type,
-          has_file: !!n8nPayload.file_url,
-          file_url: n8nPayload.file_url,
-          external_id: n8nPayload.external_id
+          is_message_event: isMessageEvent,
+          conversation_id: isMessageEvent ? n8nPayload.conversation_id : 'N/A',
+          content_present: isMessageEvent ? !!n8nPayload.content : 'N/A',
+          content_preview: isMessageEvent && n8nPayload.content ? n8nPayload.content.substring(0, 50) + '...' : 'N/A'
         });
 
         // Additional debug log for media data
