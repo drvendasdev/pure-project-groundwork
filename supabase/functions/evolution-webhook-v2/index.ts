@@ -449,237 +449,47 @@ serve(async (req) => {
       }
 
       try {
-        // Debug log the payload structure and media data
+        // Debug log the payload structure
         console.log(`🔍 [${requestId}] Debug payload structure:`, {
           event: payload.event,
           fromMe: payload.data?.key?.fromMe,
           messageType: payload.data?.messageType,
           conversation: payload.data?.message?.conversation,
           hasMessage: !!payload.data?.message,
-          messageKeys: payload.data?.message ? Object.keys(payload.data.message) : [],
-          // Media specific debugging
-          mediaData: {
-            base64: payload.data?.message?.base64 ? 'presente' : 'ausente',
-            url: payload.data?.message?.url || 'ausente',
-            mimetype: payload.data?.message?.mimetype || 'ausente',
-            fileName: payload.data?.message?.fileName || 'ausente',
-            caption: payload.data?.message?.caption || 'ausente'
-          }
+          messageKeys: payload.data?.message ? Object.keys(payload.data.message) : []
         });
 
-        // Extract and preserve ALL media-related fields from Evolution
-        const mediaFields = {
-          // Standard media fields
-          base64: payload.data?.message?.base64 || payload.data?.base64,
-          url: payload.data?.message?.url || payload.data?.url,
-          mimetype: payload.data?.message?.mimetype || payload.data?.mimetype,
-          fileName: payload.data?.message?.fileName || payload.data?.fileName,
-          caption: payload.data?.message?.caption || payload.data?.caption,
+        // Prepare N8N payload with ORIGINAL Evolution data structure + context
+        const n8nPayload = {
+          // Original Evolution API payload (preserving ALL data from Evolution)
+          ...payload,
           
-          // Additional media fields that might exist
-          media: payload.data?.message?.media || payload.data?.media,
-          fileLength: payload.data?.message?.fileLength || payload.data?.fileLength,
-          seconds: payload.data?.message?.seconds || payload.data?.seconds,
-          ptt: payload.data?.message?.ptt || payload.data?.ptt,
+          // Additional context fields for convenience
+          workspace_id: workspaceId,
+          processed_data: processedData,
+          timestamp: new Date().toISOString(),
+          request_id: requestId,
           
-          // Document specific
-          title: payload.data?.message?.title || payload.data?.title,
-          pageCount: payload.data?.message?.pageCount || payload.data?.pageCount,
+          // Computed fields for convenience (but original data is preserved above)
+          message_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
+          phone_number: payload.data?.key?.remoteJid ? extractPhoneFromRemoteJid(payload.data.key.remoteJid) : null,
           
-          // Image/Video specific  
-          width: payload.data?.message?.width || payload.data?.width,
-          height: payload.data?.message?.height || payload.data?.height,
-          
-          // Thumbnails
-          jpegThumbnail: payload.data?.message?.jpegThumbnail || payload.data?.jpegThumbnail,
-          thumbnail: payload.data?.message?.thumbnail || payload.data?.thumbnail
+          // Debug info
+          debug_info: {
+            original_payload_keys: Object.keys(payload),
+            data_keys: payload.data ? Object.keys(payload.data) : [],
+            message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
+            fromMe_value: payload.data?.key?.fromMe,
+            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound'
+          }
         };
 
-        // Remove undefined values from mediaFields
-        const cleanMediaFields = Object.fromEntries(
-          Object.entries(mediaFields).filter(([_, value]) => value !== undefined && value !== null)
-        );
-
-        // Check if this is a message event or other type of event
-        const isMessageEvent = payload.event === 'messages.upsert';
-        
-        // Extract message content with multiple fallback paths (needed for both logs and processing)
-        const messageContent = isMessageEvent ? (
-          payload.data?.message?.conversation || 
-          payload.data?.message?.text || 
-          payload.data?.message?.caption ||
-          payload.data?.message?.body ||
-          payload.data?.conversation ||
-          payload.data?.text ||
-          payload.data?.caption ||
-          payload.data?.body ||
-          ''
-        ) : '';
-        
-        // Initialize n8nPayload variable outside the if blocks
-        let n8nPayload: any = {};
-          if (isMessageEvent) {
-          console.log(`💬 [${requestId}] Message content found: "${messageContent}" (${messageContent.length} chars)`);
-
-          // Extract and map message types from Evolution API to standardized types
-          const getMessageType = (evolutionData) => {
-            const messageType = evolutionData?.messageType?.toLowerCase();
-            const message = evolutionData?.message;
-            
-            if (messageType === 'conversation' || message?.conversation) return 'text';
-            if (messageType === 'imagemessage' || message?.imageMessage) return 'image';
-            if (messageType === 'videomessage' || message?.videoMessage) return 'video';
-            if (messageType === 'audiomessage' || message?.audioMessage) return 'audio';
-            if (messageType === 'documentmessage' || message?.documentMessage) return 'file';
-            if (messageType === 'pttmessage' || message?.pttMessage) return 'audio';
-            if (messageType === 'stickermessage' || message?.stickerMessage) return 'sticker';
-            
-            return messageType || 'text';
-          };
-
-          // Extract file information for media messages
-          const getFileInfo = (evolutionData, mediaFields) => {
-            const message = evolutionData?.message;
-            
-            // Extract file URL from various possible locations
-            let fileUrl = mediaFields.url || 
-                         message?.imageMessage?.url ||
-                         message?.videoMessage?.url ||
-                         message?.audioMessage?.url ||
-                         message?.documentMessage?.url ||
-                         message?.stickerMessage?.url;
-            
-            // Extract file name
-            let fileName = mediaFields.fileName ||
-                          message?.documentMessage?.fileName ||
-                          message?.imageMessage?.fileName ||
-                          message?.videoMessage?.fileName ||
-                          message?.audioMessage?.fileName;
-            
-            // Extract MIME type
-            let mimeType = mediaFields.mimetype ||
-                          message?.imageMessage?.mimetype ||
-                          message?.videoMessage?.mimetype ||
-                          message?.audioMessage?.mimetype ||
-                          message?.documentMessage?.mimetype;
-
-            return { fileUrl, fileName, mimeType };
-          };
-
-          const fileInfo = getFileInfo(payload.data, cleanMediaFields);
-          const messageType = getMessageType(payload.data);
-          const conversationId = payload.data?.key?.remoteJid || payload.data?.remoteJid;
-          const externalId = payload.data?.key?.id;
-          const senderType = payload.data?.key?.fromMe === true ? 'agent' : 'contact';
-
-          // Create simplified N8N payload structure for MESSAGE events
-          n8nPayload = {
-            // ============ ROOT LEVEL FIELDS (as per user example) ============
-            conversation_id: conversationId,
-            sender_type: senderType,
-            content: messageContent || null,
-            message_type: messageType,
-            file_url: fileInfo.fileUrl || null,
-            file_name: fileInfo.fileName || null,
-            mime_type: fileInfo.mimeType || null,
-            external_id: externalId,
-            created_at: new Date().toISOString(),
-            delivered_at: payload.data?.messageTimestamp ? new Date(payload.data.messageTimestamp * 1000).toISOString() : null,
-            status: payload.data?.status || 'delivered',
-            workspace_id: workspaceId,
-            metadata: {
-              instance: payload.instance,
-              origem_resposta: 'evolution',
-              ptt: payload.data?.message?.ptt || cleanMediaFields.ptt || false,
-              request_id: requestId,
-              event_type: payload.event
-            },
-            
-            // ============ PRESERVE ORIGINAL EVOLUTION DATA FOR DEBUGGING ============
-            evolution_original: {
-              ...payload,
-              processed_data: processedData
-            },
-            
-            // ============ ENHANCED DEBUG INFO ============
-            debug_info: {
-              event_type: 'message',
-              original_payload_keys: Object.keys(payload),
-              data_keys: payload.data ? Object.keys(payload.data) : [],
-              message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
-              message_content_extraction: {
-                conversation: payload.data?.message?.conversation,
-                text: payload.data?.message?.text,
-                caption: payload.data?.message?.caption,
-                body: payload.data?.message?.body,
-                extracted: messageContent
-              },
-              file_extraction: {
-                extracted_url: fileInfo.fileUrl,
-                extracted_name: fileInfo.fileName,
-                extracted_mime: fileInfo.mimeType,
-                media_fields_found: Object.keys(cleanMediaFields)
-              },
-              type_mapping: {
-                original_type: payload.data?.messageType,
-                mapped_type: messageType
-              }
-            }
-          };
-          
-        } else {
-          // ============ PROCESS NON-MESSAGE EVENTS (contacts.update, etc.) ============
-          
-          // For non-message events, preserve original structure and add minimal metadata
-          n8nPayload = {
-            // ============ PRESERVE ORIGINAL EVOLUTION DATA COMPLETELY ============
-            ...payload,
-            
-            // ============ ADD MINIMAL CONTEXT ============
-            workspace_id: workspaceId,
-            processed_data: processedData,
-            timestamp: new Date().toISOString(),
-            request_id: requestId,
-            
-            // ============ DEBUG INFO FOR NON-MESSAGE EVENTS ============
-            debug_info: {
-              event_type: 'non_message',
-              original_event: payload.event,
-              original_payload_keys: Object.keys(payload),
-              data_keys: payload.data ? Object.keys(payload.data) : [],
-              is_array_data: Array.isArray(payload.data),
-              data_length: Array.isArray(payload.data) ? payload.data.length : 'not_array'
-            }
-          };
-        }
-
-        console.log(`🚀 [${requestId}] Sending to N8N (${isMessageEvent ? 'MESSAGE EVENT' : 'NON-MESSAGE EVENT'}):`, {
+        console.log(`🚀 [${requestId}] Sending to N8N:`, {
           url: webhookUrl,
           event_type: payload.event,
-          is_message_event: isMessageEvent,
-          conversation_id: isMessageEvent ? n8nPayload.conversation_id : 'N/A',
-          content_present: isMessageEvent ? !!n8nPayload.content : 'N/A',
-          content_preview: isMessageEvent && n8nPayload.content ? n8nPayload.content.substring(0, 50) + '...' : 'N/A'
+          has_message_data: !!n8nPayload.message_data,
+          has_contact_data: !!n8nPayload.contact_data
         });
-
-        // Additional debug log for media data
-        if (Object.keys(cleanMediaFields).length > 0) {
-          console.log(`📎 [${requestId}] Media data found:`, cleanMediaFields);
-        }
-
-        // Debug log for message content (only for message events)
-        if (isMessageEvent) {
-          if (messageContent) {
-            console.log(`💬 [${requestId}] Message content extracted: "${messageContent}" (${messageContent.length} chars)`);
-          } else {
-            console.log(`⚠️ [${requestId}] No message content found in:`, {
-              conversation: payload.data?.message?.conversation,
-              text: payload.data?.message?.text,
-              caption: payload.data?.message?.caption,
-              body: payload.data?.message?.body,
-              message_object: payload.data?.message ? Object.keys(payload.data.message) : 'no message object'
-            });
-          }
 
         const response = await fetch(webhookUrl, {
           method: 'POST',
