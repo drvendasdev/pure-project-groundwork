@@ -675,10 +675,10 @@ serve(async (req) => {
               conversation: payload.data?.message?.conversation,
               text: payload.data?.message?.text,
               caption: payload.data?.message?.caption,
-            body: payload.data?.message?.body,
-            message_object: payload.data?.message ? Object.keys(payload.data.message) : 'no message object'
-          });
-        }
+              body: payload.data?.message?.body,
+              message_object: payload.data?.message ? Object.keys(payload.data.message) : 'no message object'
+            });
+          }
 
         const response = await fetch(webhookUrl, {
           method: 'POST',
