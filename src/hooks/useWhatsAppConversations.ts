@@ -89,12 +89,7 @@ export const useWhatsAppConversations = () => {
       if (selectedWorkspace?.workspace_id) {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
       } else {
-        console.error('❌ Workspace não selecionado - obrigatório para carregar conversas');
-        toast({
-          title: "Erro",
-          description: "Selecione um workspace para ver as conversas.",
-          variant: "destructive",
-        });
+        console.log('❌ Workspace não selecionado - aguardando seleção automática...');
         return;
       }
 
@@ -479,7 +474,7 @@ export const useWhatsAppConversations = () => {
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    if (currentUserData?.id) {
+    if (currentUserData?.id && selectedWorkspace?.workspace_id) {
       console.log('🏢 Workspace mudou para:', selectedWorkspace?.workspace_id, '- Recarregando conversas');
       
       // Forçar limpeza completa das conversas quando workspace muda
@@ -489,7 +484,10 @@ export const useWhatsAppConversations = () => {
       // Aguardar um pouco para garantir que o estado foi limpo antes de recarregar
       setTimeout(() => {
         fetchConversations();
-      }, 100);
+      }, 200);
+    } else if (currentUserData?.id && !selectedWorkspace?.workspace_id) {
+      console.log('🏢 Aguardando seleção de workspace...');
+      setLoading(true);
     }
   }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
 
