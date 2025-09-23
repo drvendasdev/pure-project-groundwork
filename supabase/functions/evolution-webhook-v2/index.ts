@@ -449,19 +449,38 @@ serve(async (req) => {
       }
 
       try {
-        // Create a properly formatted payload for N8N
+        // Create a clean, structured payload for N8N
         const n8nPayload = {
-          event: payload.event,
-          instance: payload.instance || payload.instanceName,
-          data: payload.data,
+          event_type: payload.event,
+          instance_name: payload.instance || payload.instanceName,
           workspace_id: workspaceId,
-          source: 'evolution-api',
-          forwarded_by: 'evolution-webhook-v2',
-          request_id: requestId,
-          processed_data: processedData,
-          external_id: payload.data?.key?.id,
-          direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          message_data: {
+            external_id: payload.data?.key?.id,
+            direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound',
+            phone_number: payload.data?.key?.remoteJid?.replace(/@.*$/, ''),
+            message_type: payload.data?.messageType || 'text',
+            content: payload.data?.message?.conversation || 
+                    payload.data?.message?.extendedTextMessage?.text ||
+                    payload.data?.message?.imageMessage?.caption ||
+                    payload.data?.message?.videoMessage?.caption ||
+                    payload.data?.message?.documentMessage?.title ||
+                    'Media message',
+            media_url: payload.data?.message?.imageMessage?.url ||
+                      payload.data?.message?.videoMessage?.url ||
+                      payload.data?.message?.audioMessage?.url ||
+                      payload.data?.message?.documentMessage?.url,
+            quoted_message: payload.data?.message?.extendedTextMessage?.contextInfo?.quotedMessage,
+            sender_name: payload.data?.pushName || null
+          },
+          processed_data: processedData && {
+            contact_id: processedData.contact_id,
+            conversation_id: processedData.conversation_id,
+            message_id: processedData.message_id,
+            contact_name: processedData.contact_name,
+            contact_phone: processedData.contact_phone
+          },
+          raw_data: payload.data
         };
 
         const response = await fetch(webhookUrl, {
