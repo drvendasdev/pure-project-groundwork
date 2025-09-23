@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface Pipeline {
   id: string;
@@ -20,6 +21,7 @@ export interface PipelineColumn {
   color: string;
   order_position: number;
   created_at: string;
+  permissions?: string[]; // Array de user_ids que podem ver esta coluna
 }
 
 export interface PipelineCard {
@@ -65,6 +67,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true); // Start as loading
   const { selectedWorkspace } = useWorkspace();
   const { toast } = useToast();
+  const { user, userRole } = useAuth();
 
   // Estabilizar a função getHeaders para evitar re-renders desnecessários
   const getHeaders = useMemo(() => {
@@ -305,8 +308,29 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   }, [updateCard]);
 
   const getCardsByColumn = useCallback((columnId: string) => {
-    return cards.filter(card => card.column_id === columnId);
-  }, [cards]);
+    const allColumnCards = cards.filter(card => card.column_id === columnId);
+    
+    // Se é master/admin, pode ver todos os cards
+    if (userRole === 'master' || userRole === 'admin') {
+      return allColumnCards;
+    }
+    
+    // Buscar a coluna para verificar as permissões
+    const column = columns.find(col => col.id === columnId);
+    
+    // Se a coluna não tem permissões definidas (array vazio ou undefined), todos podem ver
+    if (!column?.permissions || column.permissions.length === 0) {
+      return allColumnCards;
+    }
+    
+    // Se o usuário está na lista de permissões da coluna, pode ver os cards
+    if (user?.id && column.permissions.includes(user.id)) {
+      return allColumnCards;
+    }
+    
+    // Senão, não pode ver nenhum card desta coluna
+    return [];
+  }, [cards, columns, userRole, user?.id]);
 
   // Buscar pipelines quando o workspace mudar
   useEffect(() => {
