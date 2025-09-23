@@ -449,21 +449,25 @@ serve(async (req) => {
       }
 
       try {
+        // Create a properly formatted payload for N8N
+        const n8nPayload = {
+          event: payload.event,
+          instance: payload.instance || payload.instanceName,
+          data: payload.data,
+          workspace_id: workspaceId,
+          source: 'evolution-api',
+          forwarded_by: 'evolution-webhook-v2',
+          request_id: requestId,
+          processed_data: processedData,
+          external_id: payload.data?.key?.id,
+          direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound',
+          timestamp: new Date().toISOString()
+        };
+
         const response = await fetch(webhookUrl, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            ...payload,
-            workspace_id: workspaceId,
-            source: 'evolution-api',
-            forwarded_by: 'evolution-webhook-v2',
-            request_id: requestId,
-            processed_data: processedData,
-            // Include external_id for media processing
-            external_id: payload.data?.key?.id,
-            // Include direction for message processing
-            direction: payload.data?.key?.fromMe === false ? 'inbound' : 'outbound'
-          })
+          body: JSON.stringify(n8nPayload)
         });
 
         console.log(`✅ [${requestId}] N8N webhook called successfully, status: ${response.status}`);
