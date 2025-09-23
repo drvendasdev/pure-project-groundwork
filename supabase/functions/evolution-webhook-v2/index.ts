@@ -449,20 +449,64 @@ serve(async (req) => {
       }
 
       try {
-        // Debug log the payload structure
+        // Debug log the payload structure and media data
         console.log(`🔍 [${requestId}] Debug payload structure:`, {
           event: payload.event,
           fromMe: payload.data?.key?.fromMe,
           messageType: payload.data?.messageType,
           conversation: payload.data?.message?.conversation,
           hasMessage: !!payload.data?.message,
-          messageKeys: payload.data?.message ? Object.keys(payload.data.message) : []
+          messageKeys: payload.data?.message ? Object.keys(payload.data.message) : [],
+          // Media specific debugging
+          mediaData: {
+            base64: payload.data?.message?.base64 ? 'presente' : 'ausente',
+            url: payload.data?.message?.url || 'ausente',
+            mimetype: payload.data?.message?.mimetype || 'ausente',
+            fileName: payload.data?.message?.fileName || 'ausente',
+            caption: payload.data?.message?.caption || 'ausente'
+          }
         });
 
-        // Prepare N8N payload with ORIGINAL Evolution data structure + context
+        // Extract and preserve ALL media-related fields from Evolution
+        const mediaFields = {
+          // Standard media fields
+          base64: payload.data?.message?.base64 || payload.data?.base64,
+          url: payload.data?.message?.url || payload.data?.url,
+          mimetype: payload.data?.message?.mimetype || payload.data?.mimetype,
+          fileName: payload.data?.message?.fileName || payload.data?.fileName,
+          caption: payload.data?.message?.caption || payload.data?.caption,
+          
+          // Additional media fields that might exist
+          media: payload.data?.message?.media || payload.data?.media,
+          fileLength: payload.data?.message?.fileLength || payload.data?.fileLength,
+          seconds: payload.data?.message?.seconds || payload.data?.seconds,
+          ptt: payload.data?.message?.ptt || payload.data?.ptt,
+          
+          // Document specific
+          title: payload.data?.message?.title || payload.data?.title,
+          pageCount: payload.data?.message?.pageCount || payload.data?.pageCount,
+          
+          // Image/Video specific  
+          width: payload.data?.message?.width || payload.data?.width,
+          height: payload.data?.message?.height || payload.data?.height,
+          
+          // Thumbnails
+          jpegThumbnail: payload.data?.message?.jpegThumbnail || payload.data?.jpegThumbnail,
+          thumbnail: payload.data?.message?.thumbnail || payload.data?.thumbnail
+        };
+
+        // Remove undefined values from mediaFields
+        const cleanMediaFields = Object.fromEntries(
+          Object.entries(mediaFields).filter(([_, value]) => value !== undefined && value !== null)
+        );
+
+        // Prepare N8N payload with ORIGINAL Evolution data structure + enhanced media data
         const n8nPayload = {
           // Original Evolution API payload (preserving ALL data from Evolution)
           ...payload,
+          
+          // Enhanced media fields (extracted and consolidated)
+          media_data: cleanMediaFields,
           
           // Additional context fields for convenience
           workspace_id: workspaceId,
@@ -474,13 +518,20 @@ serve(async (req) => {
           message_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
           phone_number: payload.data?.key?.remoteJid ? extractPhoneFromRemoteJid(payload.data.key.remoteJid) : null,
           
+          // Enhanced message content extraction
+          message_content: payload.data?.message?.conversation || 
+                          payload.data?.message?.text || 
+                          payload.data?.message?.caption ||
+                          '',
+          
           // Debug info
           debug_info: {
             original_payload_keys: Object.keys(payload),
             data_keys: payload.data ? Object.keys(payload.data) : [],
             message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
             fromMe_value: payload.data?.key?.fromMe,
-            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound'
+            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
+            media_fields_found: Object.keys(cleanMediaFields)
           }
         };
 
@@ -488,8 +539,15 @@ serve(async (req) => {
           url: webhookUrl,
           event_type: payload.event,
           has_message_data: !!n8nPayload.message_data,
-          has_contact_data: !!n8nPayload.contact_data
+          has_contact_data: !!n8nPayload.contact_data,
+          has_media_data: Object.keys(cleanMediaFields).length > 0,
+          media_fields_count: Object.keys(cleanMediaFields).length
         });
+
+        // Additional debug log for media data
+        if (Object.keys(cleanMediaFields).length > 0) {
+          console.log(`📎 [${requestId}] Media data found:`, cleanMediaFields);
+        }
 
         const response = await fetch(webhookUrl, {
           method: 'POST',
