@@ -125,7 +125,85 @@ serve(async (req) => {
         if (response.ok || response.status === 404) {
           console.log('✅ Evolution API deletion successful, removing from database')
           
-          // Remove from our database regardless of Evolution API response
+          // First, delete all related data in the correct order
+          
+          // 1. Delete messages related to conversations from this connection
+          const { error: messagesError } = await supabase
+            .from('messages')
+            .delete()
+            .in('conversation_id', supabase
+              .from('conversations')
+              .select('id')
+              .eq('connection_id', connection.id)
+            )
+          
+          if (messagesError) {
+            console.error('⚠️ Error deleting messages:', messagesError)
+          } else {
+            console.log('✅ Messages deleted')
+          }
+
+          // 2. Delete conversation assignments
+          const { error: assignmentsError } = await supabase
+            .from('conversation_assignments')
+            .delete()
+            .in('conversation_id', supabase
+              .from('conversations')
+              .select('id')
+              .eq('connection_id', connection.id)
+            )
+          
+          if (assignmentsError) {
+            console.error('⚠️ Error deleting conversation assignments:', assignmentsError)
+          } else {
+            console.log('✅ Conversation assignments deleted')
+          }
+
+          // 3. Delete conversation tags
+          const { error: tagsError } = await supabase
+            .from('conversation_tags')
+            .delete()
+            .in('conversation_id', supabase
+              .from('conversations')
+              .select('id')
+              .eq('connection_id', connection.id)
+            )
+          
+          if (tagsError) {
+            console.error('⚠️ Error deleting conversation tags:', tagsError)
+          } else {
+            console.log('✅ Conversation tags deleted')
+          }
+
+          // 4. Delete pipeline cards related to conversations from this connection
+          const { error: cardsError } = await supabase
+            .from('pipeline_cards')
+            .delete()
+            .in('conversation_id', supabase
+              .from('conversations')
+              .select('id')
+              .eq('connection_id', connection.id)
+            )
+          
+          if (cardsError) {
+            console.error('⚠️ Error deleting pipeline cards:', cardsError)
+          } else {
+            console.log('✅ Pipeline cards deleted')
+          }
+
+          // 5. Delete conversations
+          const { error: conversationsError } = await supabase
+            .from('conversations')
+            .delete()
+            .eq('connection_id', connection.id)
+          
+          if (conversationsError) {
+            console.error('⚠️ Error deleting conversations:', conversationsError)
+          } else {
+            console.log('✅ Conversations deleted')
+          }
+
+          // 6. Delete connection secrets
           const { error: secretsError } = await supabase
             .from('connection_secrets')
             .delete()
@@ -137,6 +215,7 @@ serve(async (req) => {
             console.log('✅ Connection secrets deleted')
           }
 
+          // 7. Finally, delete the connection
           const { error: connectionError } = await supabase
             .from('connections')
             .delete()
