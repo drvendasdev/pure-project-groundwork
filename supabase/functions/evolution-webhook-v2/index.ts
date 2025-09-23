@@ -421,12 +421,12 @@ serve(async (req) => {
           try {
             const { data: connectionData } = await supabase
               .from('connections')
-              .select('metadata')
+              .select('auto_create_crm_card, default_pipeline_id')
               .eq('instance_name', instanceName)
               .eq('workspace_id', workspaceId)
               .maybeSingle();
 
-            if (connectionData?.metadata?.createCrmCard && connectionData?.metadata?.selectedPipelineId) {
+            if (connectionData?.auto_create_crm_card && connectionData?.default_pipeline_id) {
               console.log(`🎯 [${requestId}] Auto-creating CRM card for conversation ${conversationId}`);
               
               // Check if card already exists
@@ -442,7 +442,7 @@ serve(async (req) => {
                     conversationId,
                     contactId,
                     workspaceId,
-                    pipelineId: connectionData.metadata.selectedPipelineId
+                    pipelineId: connectionData.default_pipeline_id
                   }
                 });
                 console.log(`✅ [${requestId}] CRM card auto-creation triggered`);

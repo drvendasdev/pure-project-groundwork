@@ -321,7 +321,9 @@ export type Database = {
       }
       connections: {
         Row: {
+          auto_create_crm_card: boolean | null
           created_at: string | null
+          default_pipeline_id: string | null
           history_recovery: string | null
           history_status: string | null
           id: string
@@ -336,7 +338,9 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          auto_create_crm_card?: boolean | null
           created_at?: string | null
+          default_pipeline_id?: string | null
           history_recovery?: string | null
           history_status?: string | null
           id?: string
@@ -351,7 +355,9 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          auto_create_crm_card?: boolean | null
           created_at?: string | null
+          default_pipeline_id?: string | null
           history_recovery?: string | null
           history_status?: string | null
           id?: string
@@ -366,6 +372,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "connections_default_pipeline_id_fkey"
+            columns: ["default_pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "pipelines"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "connections_workspace_fk"
             columns: ["workspace_id"]

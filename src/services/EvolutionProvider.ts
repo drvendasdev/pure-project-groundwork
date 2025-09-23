@@ -5,8 +5,8 @@ interface ConnectionCreateRequest {
   instanceName: string;
   historyRecovery: 'none' | 'week' | 'month' | 'quarter';
   workspaceId: string;
-  createCrmCard?: boolean;
-  selectedPipelineId?: string;
+  autoCreateCrmCard?: boolean;
+  defaultPipelineId?: string;
 }
 
 interface ConnectionResponse {
@@ -134,13 +134,7 @@ class EvolutionProvider {
         console.log('🔗 Function URL will be: https://zldeaozqxjwvzgrblyrh.supabase.co/functions/v1/evolution-create-instance');
         
         const response = await supabase.functions.invoke('evolution-create-instance', {
-          body: {
-            ...request,
-            metadata: {
-              createCrmCard: request.createCrmCard || false,
-              selectedPipelineId: request.selectedPipelineId || null
-            }
-          },
+          body: request,
           headers
         });
 

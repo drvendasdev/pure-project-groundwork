@@ -139,8 +139,8 @@ serve(async (req) => {
     }
     
     console.log('📋 Parsed request body:', requestBody);
-    const { instanceName, historyRecovery = 'none', workspaceId, metadata } = requestBody;
-    console.log('📋 Request params:', { instanceName, historyRecovery, workspaceId, metadata })
+    const { instanceName, historyRecovery = 'none', workspaceId, autoCreateCrmCard, defaultPipelineId } = requestBody;
+    console.log('📋 Request params:', { instanceName, historyRecovery, workspaceId, autoCreateCrmCard, defaultPipelineId })
 
     if (!instanceName || !workspaceId) {
       console.error('❌ Missing required fields:', { instanceName: !!instanceName, workspaceId: !!workspaceId })
@@ -245,7 +245,8 @@ serve(async (req) => {
         history_recovery: historyRecovery,
         workspace_id: workspaceId,
         status: 'creating',
-        metadata: metadata || {}
+        auto_create_crm_card: autoCreateCrmCard || false,
+        default_pipeline_id: defaultPipelineId || null
       })
       .select()
       .single()
@@ -400,10 +401,7 @@ serve(async (req) => {
 
     // Update connection with Evolution API response
     const updateData: any = {
-      metadata: {
-        ...metadata, // Preserve original CRM metadata
-        evolutionData: evolutionData // Store Evolution API response separately
-      }
+      metadata: evolutionData // Store Evolution API response only
     }
 
     // Determine status and extract QR code

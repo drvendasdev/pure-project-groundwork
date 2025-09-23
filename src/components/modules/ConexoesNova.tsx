@@ -232,8 +232,8 @@ export function ConexoesNova({ workspaceId }: ConexoesNovaProps) {
         instanceName: instanceName.trim(),
         historyRecovery: historyRecovery as 'none' | 'week' | 'month' | 'quarter',
         workspaceId,
-        createCrmCard,
-        selectedPipelineId: selectedPipeline || undefined
+        autoCreateCrmCard: createCrmCard,
+        defaultPipelineId: selectedPipeline || undefined
       });
 
       console.log('✅ Created connection successfully:', connection);

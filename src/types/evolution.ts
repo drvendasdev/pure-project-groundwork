@@ -8,6 +8,8 @@ export interface Connection {
   created_at: string;
   last_activity_at?: string;
   workspace_id: string;
+  auto_create_crm_card?: boolean;
+  default_pipeline_id?: string;
   metadata?: {
     remote_id?: string;
     device?: string;
@@ -24,6 +26,8 @@ export interface CreateConnectionRequest {
   instanceName: string;
   historyRecovery: 'none' | 'week' | 'month' | 'quarter';
   workspaceId: string;
+  autoCreateCrmCard?: boolean;
+  defaultPipelineId?: string;
 }
 
 export interface ProvisionerLog {
