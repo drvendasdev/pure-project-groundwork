@@ -698,6 +698,63 @@ serve(async (req) => {
       console.log(`✅ [${requestId}] Created new contact: ${contactId}`);
     }
 
+    // Process contact profile image from N8N payload if available
+    const profilePictureUrl = payload.profilePictureUrl || payload.data?.profilePictureUrl;
+    
+    if (profilePictureUrl && phone_number) {
+      console.log(`🖼️ [${requestId}] Profile image URL received from N8N: ${profilePictureUrl}`);
+      
+      try {
+        // Use profilePictureUrl directly from N8N
+        const profileSaveResult = await supabase.functions.invoke('fetch-whatsapp-profile', {
+          body: {
+            phone: sanitizedPhone,
+            profileImageUrl: profilePictureUrl,
+            contactId: contactId
+          }
+        });
+
+        if (profileSaveResult.error) {
+          console.error(`⚠️ [${requestId}] Error saving profile image from N8N:`, profileSaveResult.error);
+        } else {
+          console.log(`✅ [${requestId}] Profile image saved from N8N payload for`, sanitizedPhone);
+        }
+      } catch (error) {
+        console.error(`⚠️ [${requestId}] Error saving profile image from N8N:`, error);
+      }
+    } else if (phone_number && contact_name) {
+      console.log(`🔍 [${requestId}] No profile image URL in N8N payload, checking if fetch is needed for ${sanitizedPhone}`);
+      
+      try {
+        // Check if contact already has a recent profile image
+        const { data: contactData } = await supabase
+          .from('contacts')
+          .select('profile_image_updated_at, profile_fetch_last_attempt')
+          .eq('id', contactId)
+          .maybeSingle();
+
+        const now = new Date();
+        const lastUpdate = contactData?.profile_image_updated_at ? new Date(contactData.profile_image_updated_at) : null;
+        const lastAttempt = contactData?.profile_fetch_last_attempt ? new Date(contactData.profile_fetch_last_attempt) : null;
+        
+        // Skip if image was updated in the last 24 hours
+        const shouldSkipRecent = lastUpdate && (now.getTime() - lastUpdate.getTime()) < 24 * 60 * 60 * 1000;
+        // Skip if attempt was made in the last hour
+        const shouldSkipAttempt = lastAttempt && (now.getTime() - lastAttempt.getTime()) < 60 * 60 * 1000;
+        
+        if (shouldSkipRecent) {
+          console.log(`⏭️ [${requestId}] Skipping profile image fetch - updated recently for ${sanitizedPhone}`);
+        } else if (shouldSkipAttempt) {
+          console.log(`⏭️ [${requestId}] Skipping profile image fetch - attempted recently for ${sanitizedPhone}`);
+        } else {
+          console.log(`🔄 [${requestId}] May need to fetch profile image from Evolution API for ${sanitizedPhone}`);
+          // Note: Evolution API fetch would happen via separate background process
+        }
+      } catch (error) {
+        console.error(`⚠️ [${requestId}] Error checking profile image status:`, error);
+      }
+    }
+
     // Find existing conversation for this contact and workspace (prioritize reusing any existing conversation)
     let conversationId: string;
     const { data: existingConversation, error: conversationFindError } = await supabase

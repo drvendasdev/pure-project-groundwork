@@ -250,76 +250,100 @@ serve(async (req) => {
             contactId = newContact?.id;
           }
 
-          // 🖼️ Fetch profile image from Evolution API
-          console.log(`🖼️ [${requestId}] Attempting to fetch profile image for ${sanitizedPhone}`);
+          // 🖼️ Fetch profile image with throttling
+          console.log(`🖼️ [${requestId}] Checking if profile image needs update for ${sanitizedPhone}`);
           
           try {
-            // Get connection secrets for this instance
-            const { data: connectionData } = await supabase
-              .from('connections')
-              .select(`
-                id,
-                instance_name,
-                connection_secrets (
-                  token,
-                  evolution_url
-                )
-              `)
-              .eq('instance_name', instanceName)
-              .eq('workspace_id', workspaceId)
+            // Check if contact already has a recent profile image
+            const { data: contactData } = await supabase
+              .from('contacts')
+              .select('profile_image_updated_at, profile_fetch_last_attempt')
+              .eq('id', contactId)
               .single();
 
-            if (connectionData?.connection_secrets?.[0]) {
-              const { token, evolution_url } = connectionData.connection_secrets[0];
+            const now = new Date();
+            const lastUpdate = contactData?.profile_image_updated_at ? new Date(contactData.profile_image_updated_at) : null;
+            const lastAttempt = contactData?.profile_fetch_last_attempt ? new Date(contactData.profile_fetch_last_attempt) : null;
+            
+            // Skip if image was updated in the last 24 hours
+            const shouldSkipRecent = lastUpdate && (now.getTime() - lastUpdate.getTime()) < 24 * 60 * 60 * 1000;
+            // Skip if attempt was made in the last hour
+            const shouldSkipAttempt = lastAttempt && (now.getTime() - lastAttempt.getTime()) < 60 * 60 * 1000;
+            
+            if (shouldSkipRecent) {
+              console.log(`⏭️ [${requestId}] Skipping profile image fetch - updated recently for ${sanitizedPhone}`);
+            } else if (shouldSkipAttempt) {
+              console.log(`⏭️ [${requestId}] Skipping profile image fetch - attempted recently for ${sanitizedPhone}`);
+            } else {
+              console.log(`🔄 [${requestId}] Fetching profile image for ${sanitizedPhone}`);
               
-              // Fetch profile image from Evolution API
-              console.log(`🔗 [${requestId}] Fetching profile from: ${evolution_url}/chat/findProfile/${instanceName}`);
-              
-              const profileResponse = await fetch(`${evolution_url}/chat/findProfile/${instanceName}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'apikey': token
-                },
-                body: JSON.stringify({
-                  number: sanitizedPhone
-                })
-              });
+              // Get connection secrets for this instance
+              const { data: connectionData } = await supabase
+                .from('connections')
+                .select(`
+                  id,
+                  instance_name,
+                  connection_secrets (
+                    token,
+                    evolution_url
+                  )
+                `)
+                .eq('instance_name', instanceName)
+                .eq('workspace_id', workspaceId)
+                .single();
 
-              if (profileResponse.ok) {
-                const profileData = await profileResponse.json();
-                console.log(`✅ [${requestId}] Profile data received:`, JSON.stringify(profileData, null, 2));
+              if (connectionData?.connection_secrets?.[0]) {
+                const { token, evolution_url } = connectionData.connection_secrets[0];
                 
-                const profileImageUrl = profileData?.profilePictureUrl || profileData?.picture;
+                // Fetch profile image from Evolution API
+                console.log(`🔗 [${requestId}] Fetching profile from: ${evolution_url}/chat/findProfile/${instanceName}`);
                 
-                if (profileImageUrl && contactId) {
-                  console.log(`🖼️ [${requestId}] Found profile image URL: ${profileImageUrl}`);
+                const profileResponse = await fetch(`${evolution_url}/chat/findProfile/${instanceName}`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': token
+                  },
+                  body: JSON.stringify({
+                    number: sanitizedPhone
+                  })
+                });
+
+                if (profileResponse.ok) {
+                  const profileData = await profileResponse.json();
+                  console.log(`✅ [${requestId}] Profile data received:`, JSON.stringify(profileData, null, 2));
                   
-                  // Call the fetch-whatsapp-profile function
-                  const { error: profileError } = await supabase.functions.invoke('fetch-whatsapp-profile', {
-                    body: {
-                      phone: sanitizedPhone,
-                      profileImageUrl: profileImageUrl,
-                      contactId: contactId
-                    }
-                  });
+                  const profileImageUrl = profileData?.profilePictureUrl || profileData?.picture;
+                  
+                  if (profileImageUrl && contactId) {
+                    console.log(`🖼️ [${requestId}] Found profile image URL: ${profileImageUrl}`);
+                    
+                    // Call the fetch-whatsapp-profile function
+                    const { error: profileError } = await supabase.functions.invoke('fetch-whatsapp-profile', {
+                      body: {
+                        phone: sanitizedPhone,
+                        profileImageUrl: profileImageUrl,
+                        contactId: contactId
+                      }
+                    });
 
-                  if (profileError) {
-                    console.error(`❌ [${requestId}] Failed to update profile image:`, profileError);
+                    if (profileError) {
+                      console.error(`❌ [${requestId}] Failed to update profile image:`, profileError);
+                    } else {
+                      console.log(`✅ [${requestId}] Profile image update requested for ${sanitizedPhone}`);
+                    }
                   } else {
-                    console.log(`✅ [${requestId}] Profile image update requested for ${sanitizedPhone}`);
+                    console.log(`ℹ️ [${requestId}] No profile image URL found in Evolution API response or no contactId`);
                   }
                 } else {
-                  console.log(`ℹ️ [${requestId}] No profile image URL found in Evolution API response or no contactId`);
+                  console.error(`❌ [${requestId}] Failed to fetch profile from Evolution API:`, profileResponse.status, await profileResponse.text());
                 }
               } else {
-                console.error(`❌ [${requestId}] Failed to fetch profile from Evolution API:`, profileResponse.status, await profileResponse.text());
+                console.log(`⚠️ [${requestId}] No connection secrets found for instance ${instanceName}`);
               }
-            } else {
-              console.log(`⚠️ [${requestId}] No connection secrets found for instance ${instanceName}`);
             }
           } catch (error) {
-            console.error(`❌ [${requestId}] Error fetching profile image:`, error);
+            console.error(`❌ [${requestId}] Error with profile image processing:`, error);
           }
 
           // Get connection_id for proper conversation association
