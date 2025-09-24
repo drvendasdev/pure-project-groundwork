@@ -316,24 +316,6 @@ serve(async (req) => {
             .eq('pipeline_id', pipelineId)
             .order('created_at', { ascending: false });
 
-          // Se não conseguir trazer dados do responsible_user devido a RLS, 
-          // tentar buscar apenas dados básicos
-          if (cards && cards.length > 0) {
-            for (const card of cards) {
-              if (card.responsible_user_id && !card.responsible_user) {
-                const { data: user } = await supabaseClient
-                  .from('system_users')
-                  .select('id, name')
-                  .eq('id', card.responsible_user_id)
-                  .single();
-                
-                if (user) {
-                  card.responsible_user = user;
-                }
-              }
-            }
-          }
-
           if (error) throw error;
           return new Response(JSON.stringify(cards), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
