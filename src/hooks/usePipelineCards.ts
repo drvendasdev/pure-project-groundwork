@@ -48,6 +48,7 @@ export function usePipelineCards(pipelineId: string | null) {
     value?: number;
     status?: string;
     tags?: any[];
+    responsible_user_id?: string;
   }) => {
     if (!pipelineId) return;
 

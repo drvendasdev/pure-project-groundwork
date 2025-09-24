@@ -585,7 +585,7 @@ export function CRMNegocios({
                                 name: card.title,
                                 value: card.value || 0,
                                 stage: column.name,
-                                responsible: "Usuário", // Placeholder
+                                responsible: card.responsible_user?.name || "Não atribuído",
                                 tags: Array.isArray(card.tags) ? card.tags : [],
                                 priority: 'medium',
                                 lastContact: "2h atrás" // Placeholder
@@ -624,7 +624,7 @@ export function CRMNegocios({
                 name: activeCard.title,
                 value: activeCard.value || 0,
                 stage: activeColumn?.name || "",
-                responsible: "Usuário",
+                responsible: activeCard.responsible_user?.name || "Não atribuído",
                 tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
                 priority: 'medium'
               };

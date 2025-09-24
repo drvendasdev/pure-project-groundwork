@@ -62,6 +62,7 @@ interface Database {
           tags: any;
           created_at: string;
           updated_at: string;
+          responsible_user_id: string | null;
         };
         Insert: {
           pipeline_id: string;
@@ -73,6 +74,7 @@ interface Database {
           value?: number;
           status?: string;
           tags?: any;
+          responsible_user_id?: string;
         };
       };
     };
@@ -308,7 +310,8 @@ serve(async (req) => {
             .select(`
               *,
               contact:contacts(*),
-              conversation:conversations(*)
+              conversation:conversations(*),
+              responsible_user:system_users!responsible_user_id(id, name)
             `)
             .eq('pipeline_id', pipelineId)
             .order('created_at', { ascending: false });
@@ -333,6 +336,7 @@ serve(async (req) => {
               value: body.value || 0,
               status: body.status || 'aberto',
               tags: body.tags || [],
+              responsible_user_id: body.responsible_user_id,
             })
             .select()
             .single();
@@ -362,6 +366,7 @@ serve(async (req) => {
               value: body.value,
               status: body.status,
               tags: body.tags,
+              responsible_user_id: body.responsible_user_id,
             })
             .eq('id', cardId)
             .select()

@@ -35,6 +35,11 @@ export interface PipelineCard {
   tags: any[];
   created_at: string;
   updated_at: string;
+  responsible_user_id?: string;
+  responsible_user?: {
+    id: string;
+    name: string;
+  };
   contact?: any;
   conversation?: any;
 }

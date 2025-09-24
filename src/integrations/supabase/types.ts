@@ -996,6 +996,7 @@ export type Database = {
           description: string | null
           id: string
           pipeline_id: string
+          responsible_user_id: string | null
           status: string
           tags: Json | null
           title: string
@@ -1010,6 +1011,7 @@ export type Database = {
           description?: string | null
           id?: string
           pipeline_id: string
+          responsible_user_id?: string | null
           status?: string
           tags?: Json | null
           title: string
@@ -1024,6 +1026,7 @@ export type Database = {
           description?: string | null
           id?: string
           pipeline_id?: string
+          responsible_user_id?: string | null
           status?: string
           tags?: Json | null
           title?: string
@@ -1057,6 +1060,20 @@ export type Database = {
             columns: ["pipeline_id"]
             isOneToOne: false
             referencedRelation: "pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_cards_responsible_user_id_fkey"
+            columns: ["responsible_user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_cards_responsible_user_id_fkey"
+            columns: ["responsible_user_id"]
+            isOneToOne: false
+            referencedRelation: "system_users_view"
             referencedColumns: ["id"]
           },
         ]

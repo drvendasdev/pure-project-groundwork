@@ -37,6 +37,11 @@ export interface PipelineCard {
   tags: any[];
   created_at: string;
   updated_at: string;
+  responsible_user_id?: string;
+  responsible_user?: {
+    id: string;
+    name: string;
+  };
   contact?: any;
   conversation?: any;
 }
@@ -308,29 +313,33 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   }, [updateCard]);
 
   const getCardsByColumn = useCallback((columnId: string) => {
-    const allColumnCards = cards.filter(card => card.column_id === columnId);
+    if (!selectedPipeline) return [];
     
-    // Se é master/admin, pode ver todos os cards
-    if (userRole === 'master' || userRole === 'admin') {
-      return allColumnCards;
-    }
-    
-    // Buscar a coluna para verificar as permissões
-    const column = columns.find(col => col.id === columnId);
-    
-    // Se a coluna não tem permissões definidas (array vazio ou undefined), todos podem ver
-    if (!column?.permissions || column.permissions.length === 0) {
-      return allColumnCards;
-    }
-    
-    // Se o usuário está na lista de permissões da coluna, pode ver os cards
-    if (user?.id && column.permissions.includes(user.id)) {
-      return allColumnCards;
-    }
-    
-    // Senão, não pode ver nenhum card desta coluna
-    return [];
-  }, [cards, columns, userRole, user?.id]);
+    return cards.filter(card => {
+      // Filtro básico por coluna
+      if (card.column_id !== columnId) return false;
+      
+      // Buscar informações do usuário atual
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      const currentUserId = currentUserData?.id;
+      
+      // Se é um usuário comum (não master/admin), aplicar filtros de responsabilidade
+      if (userRole === 'user') {
+        // Usuários só podem ver:
+        // 1. Cards não atribuídos (responsible_user_id é null/undefined)
+        // 2. Cards atribuídos a eles mesmos
+        const isUnassigned = !card.responsible_user_id;
+        const isAssignedToCurrentUser = card.responsible_user_id === currentUserId;
+        
+        if (!isUnassigned && !isAssignedToCurrentUser) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [cards, userRole, selectedPipeline]);
 
   // Buscar pipelines quando o workspace mudar
   useEffect(() => {
