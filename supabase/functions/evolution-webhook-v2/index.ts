@@ -87,8 +87,10 @@ serve(async (req) => {
     console.log(`📊 [${requestId}] Instance: ${instanceName}, Event: ${payload.event}`);
     
     // HANDLE MESSAGE ACKNOWLEDGMENT (read receipts) - Evolution API v2
+    let isMessageUpdate = false;
     if (payload.event === 'MESSAGES_UPDATE' && payload.data?.ack !== undefined) {
       console.log(`📬 [${requestId}] Processing message update acknowledgment: ack=${payload.data.ack}`);
+      isMessageUpdate = true;
       
       const messageKey = payload.data.key;
       const ackLevel = payload.data.ack;
@@ -113,50 +115,37 @@ serve(async (req) => {
             break;
           default:
             console.log(`⚠️ [${requestId}] Unknown ACK level: ${ackLevel}`);
-            return new Response(JSON.stringify({
-              success: true,
-              action: 'ack_ignored_unknown_level',
-              ack_level: ackLevel,
-              requestId
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+            // Even for unknown ACK levels, continue to forward to N8N
+            break;
         }
         
-        // Update message status in database
-        const updateData: any = { status: newStatus };
-        if (timestampField) {
-          updateData[timestampField] = new Date().toISOString();
-        }
-        
-        const { data: updatedMessage, error: updateError } = await supabase
-          .from('messages')
-          .update(updateData)
-          .eq('external_id', evolutionMessageId)
-          .select('id, conversation_id, workspace_id')
-          .maybeSingle();
+        if (newStatus) {
+          // Update message status in database
+          const updateData: any = { status: newStatus };
+          if (timestampField) {
+            updateData[timestampField] = new Date().toISOString();
+          }
           
-        if (updateError) {
-          console.error(`❌ [${requestId}] Error updating message status:`, updateError);
-        } else if (updatedMessage) {
-          console.log(`✅ [${requestId}] Message ${evolutionMessageId} status updated to: ${newStatus}`);
-          console.log(`📊 [${requestId}] Updated message data:`, updatedMessage);
-          
-          // Return early for ACK processing - no need to forward to N8N
-          return new Response(JSON.stringify({
-            success: true,
-            action: 'message_ack_processed',
-            message_id: updatedMessage.id,
-            status: newStatus,
-            external_id: evolutionMessageId,
-            requestId
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        } else {
-          console.log(`⚠️ [${requestId}] Message not found for ACK update: ${evolutionMessageId}`);
+          const { data: updatedMessage, error: updateError } = await supabase
+            .from('messages')
+            .update(updateData)
+            .eq('external_id', evolutionMessageId)
+            .select('id, conversation_id, workspace_id')
+            .maybeSingle();
+            
+          if (updateError) {
+            console.error(`❌ [${requestId}] Error updating message status:`, updateError);
+          } else if (updatedMessage) {
+            console.log(`✅ [${requestId}] Message ${evolutionMessageId} status updated to: ${newStatus}`);
+            console.log(`📊 [${requestId}] Updated message data:`, updatedMessage);
+          } else {
+            console.log(`⚠️ [${requestId}] Message not found for ACK update: ${evolutionMessageId}`);
+          }
         }
       }
+      
+      // Continue processing to forward UPDATE events to N8N as well
+      console.log(`🚀 [${requestId}] Continuing to forward MESSAGES_UPDATE to N8N`);
     }
     
     // Get workspace_id and webhook details from database
@@ -506,6 +495,10 @@ serve(async (req) => {
           timestamp: new Date().toISOString(),
           request_id: requestId,
           
+          // Event type identification for N8N processing
+          event_type: isMessageUpdate ? 'update' : 'upsert',
+          processed_locally: !!processedData,
+          
           // Computed fields for convenience (but original data is preserved above)
           message_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
           phone_number: payload.data?.key?.remoteJid ? extractPhoneFromRemoteJid(payload.data.key.remoteJid) : null,
@@ -516,15 +509,17 @@ serve(async (req) => {
             data_keys: payload.data ? Object.keys(payload.data) : [],
             message_keys: payload.data?.message ? Object.keys(payload.data.message) : [],
             fromMe_value: payload.data?.key?.fromMe,
-            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound'
+            calculated_direction: payload.data?.key?.fromMe === true ? 'outbound' : 'inbound',
+            is_message_update: isMessageUpdate
           }
         };
 
         console.log(`🚀 [${requestId}] Sending to N8N:`, {
           url: webhookUrl,
-          event_type: payload.event,
-          has_message_data: !!n8nPayload.message_data,
-          has_contact_data: !!n8nPayload.contact_data
+          original_event: payload.event,
+          event_type: n8nPayload.event_type,
+          processed_locally: n8nPayload.processed_locally,
+          has_processed_data: !!n8nPayload.processed_data
         });
 
         const response = await fetch(webhookUrl, {
