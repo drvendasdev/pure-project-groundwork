@@ -43,6 +43,7 @@ interface Deal {
     id: string;
     name: string;
     profile_image_url?: string;
+    tags?: string[];
   };
 }
 
@@ -162,24 +163,24 @@ function DraggableDeal({
           </div>
         </div>
         
-        {/* Área central para tags */}
+        {/* Área central para tags do contato */}
         <div className="mb-3 min-h-[28px] flex items-center">
-          {deal.tags && deal.tags.length > 0 ? (
+          {deal.contact?.tags && deal.contact.tags.length > 0 ? (
             <div className="flex flex-wrap gap-1">
-              {deal.tags.slice(0, 3).map((tag, index) => (
+              {deal.contact.tags.slice(0, 3).map((tag, index) => (
                 <Badge key={index} variant="secondary" className={cn("text-xs px-2 py-0.5 h-auto", "bg-secondary/50 text-secondary-foreground border border-border/50")}>
                   {tag}
                 </Badge>
               ))}
-              {deal.tags.length > 3 && (
+              {deal.contact.tags.length > 3 && (
                 <Badge variant="outline" className="text-xs px-2 py-0.5 h-auto">
-                  +{deal.tags.length - 3}
+                  +{deal.contact.tags.length - 3}
                 </Badge>
               )}
             </div>
           ) : (
             <span className="text-xs text-muted-foreground italic">
-              Sem tags
+              Sem tags do contato
             </span>
           )}
         </div>
