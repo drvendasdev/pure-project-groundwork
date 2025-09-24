@@ -743,20 +743,27 @@ export const useWhatsAppConversations = () => {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'conversations' },
         (payload) => {
-          console.log('🔄 Realtime: Conversa atualizada (REPLICA IDENTITY FULL):', {
-            id: payload.new?.id,
-            workspace_id: payload.new?.workspace_id,
-            unread_count: payload.new?.unread_count,
-            status: payload.new?.status,
-            agente_ativo: payload.new?.agente_ativo,
-            last_activity_at: payload.new?.last_activity_at,
-            assigned_user_id: payload.new?.assigned_user_id,
-            current_workspace: selectedWorkspace?.workspace_id,
-            old_last_activity: payload.old?.last_activity_at,
-            new_last_activity: payload.new?.last_activity_at
-          });
-          const updatedConv = payload.new as any;
-          const oldConv = payload.old as any;
+          try {
+            console.log('🔄 Realtime: Conversa atualizada (REPLICA IDENTITY FULL):', {
+              id: payload.new?.id,
+              workspace_id: payload.new?.workspace_id,
+              unread_count: payload.new?.unread_count,
+              status: payload.new?.status,
+              agente_ativo: payload.new?.agente_ativo,
+              last_activity_at: payload.new?.last_activity_at,
+              assigned_user_id: payload.new?.assigned_user_id,
+              current_workspace: selectedWorkspace?.workspace_id,
+              old_last_activity: payload.old?.last_activity_at,
+              new_last_activity: payload.new?.last_activity_at
+            });
+            
+            const updatedConv = payload.new as any;
+            const oldConv = payload.old as any;
+            
+            if (!updatedConv) {
+              console.log('⚠️ Payload.new é null - ignorando evento');
+              return;
+            }
           
           // ✅ Filtrar por workspace_id para garantir que apenas conversas do workspace atual sejam processadas
           if (updatedConv.workspace_id !== selectedWorkspace?.workspace_id) {
@@ -836,6 +843,9 @@ export const useWhatsAppConversations = () => {
             
             return sorted;
           });
+          } catch (error) {
+            console.error('❌ Erro no processamento de update em conversation:', error);
+          }
         }
       )
       .subscribe((status) => {
