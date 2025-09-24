@@ -635,7 +635,8 @@ export function CRMNegocios({
                                 tags: Array.isArray(card.tags) ? card.tags : [],
                                 priority: 'medium',
                                 lastContact: "2h atrás", // Placeholder
-                                contact: card.contact
+                                contact: card.contact,
+                                conversation: card.conversation || (card.conversation_id ? { id: card.conversation_id } : undefined)
                               };
                               return (
                                 <DraggableDeal 
@@ -645,6 +646,10 @@ export function CRMNegocios({
                                   onClick={() => openCardDetails(card)} 
                                   columnColor={column.color}
                                   onChatClick={(dealData) => {
+                                    console.log('🎯 CRM: Abrindo chat para deal:', dealData);
+                                    console.log('🆔 CRM: Deal ID:', dealData.id);
+                                    console.log('🗣️ CRM: Deal conversation:', dealData.conversation);
+                                    console.log('👤 CRM: Deal contact:', dealData.contact);
                                     setSelectedChatCard(dealData);
                                     setIsChatModalOpen(true);
                                   }}
@@ -679,7 +684,8 @@ export function CRMNegocios({
                            (activeCard.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
                 tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
                 priority: 'medium',
-                contact: activeCard.contact
+                contact: activeCard.contact,
+                conversation: activeCard.conversation || (activeCard.conversation_id ? { id: activeCard.conversation_id } : undefined)
               };
               return (
                 <DraggableDeal 
@@ -688,6 +694,7 @@ export function CRMNegocios({
                   onClick={() => {}} 
                   columnColor={activeColumn?.color}
                   onChatClick={(dealData) => {
+                    console.log('🎯 CRM DragOverlay: Abrindo chat para deal:', dealData);
                     setSelectedChatCard(dealData);
                     setIsChatModalOpen(true);
                   }}
