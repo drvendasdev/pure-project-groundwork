@@ -34,24 +34,14 @@ interface Action {
   targetColumn: string;
   dealState: string;
 }
+
+// Inicializar apenas com uma ação vazia
 const initialActions: Action[] = [{
   id: "1",
-  actionName: "Ganho",
-  nextPipeline: "Vendas",
-  targetColumn: "Ganho",
-  dealState: "Ganho"
-}, {
-  id: "2",
-  actionName: "Limitação Financeira",
-  nextPipeline: "Perdidos",
-  targetColumn: "Perdidos - Outros",
-  dealState: "Perda"
-}, {
-  id: "3",
-  actionName: "Perdido - Outros",
-  nextPipeline: "Perdidos",
-  targetColumn: "Perdidos - Outros",
-  dealState: "Perda"
+  actionName: "",
+  nextPipeline: "",
+  targetColumn: "",
+  dealState: ""
 }];
 function SortableColumn({
   column,
@@ -188,10 +178,12 @@ export default function PipelineConfiguracao({
 }: PipelineConfigProps) {
   const [activeTab, setActiveTab] = useState('geral');
   const [actions, setActions] = useState<Action[]>(initialActions);
+  const [actionColumns, setActionColumns] = useState<{[key: string]: any[]}>({});
   const {
     columns,
     selectedPipeline,
-    reorderColumns
+    reorderColumns,
+    pipelines
   } = usePipelinesContext();
   const {
     user
@@ -251,6 +243,41 @@ export default function PipelineConfiguracao({
       ...action,
       [field]: value
     } : action));
+  };
+
+  // Buscar colunas do pipeline selecionado
+  const fetchPipelineColumns = async (pipelineId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/columns`, {
+        method: 'GET',
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        },
+        body: {
+          pipeline_id: pipelineId
+        }
+      });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching pipeline columns:', error);
+      return [];
+    }
+  };
+
+  // Quando um pipeline for selecionado, buscar suas colunas
+  const handlePipelineChange = async (actionId: string, pipelineId: string) => {
+    updateAction(actionId, 'nextPipeline', pipelineId);
+    updateAction(actionId, 'targetColumn', ''); // Reset coluna selecionada
+    
+    const columns = await fetchPipelineColumns(pipelineId);
+    setActionColumns(prev => ({
+      ...prev,
+      [actionId]: columns
+    }));
   };
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, {
     coordinateGetter: sortableKeyboardCoordinates
@@ -398,10 +425,36 @@ export default function PipelineConfiguracao({
                           <Input value={action.actionName} onChange={e => updateAction(action.id, 'actionName', e.target.value)} placeholder="Nome da ação" className={cn("text-sm", isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : "")} />
                         </td>
                         <td className="p-2">
-                          <Input value={action.nextPipeline} onChange={e => updateAction(action.id, 'nextPipeline', e.target.value)} placeholder="Pipeline destino" className={cn("text-sm", isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : "")} />
+                          <Select value={action.nextPipeline} onValueChange={(value) => handlePipelineChange(action.id, value)}>
+                            <SelectTrigger className={cn("text-sm", isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : "")}>
+                              <SelectValue placeholder="Selecione o pipeline" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {pipelines?.map(pipeline => (
+                                <SelectItem key={pipeline.id} value={pipeline.id}>
+                                  {pipeline.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="p-2">
-                          <Input value={action.targetColumn} onChange={e => updateAction(action.id, 'targetColumn', e.target.value)} placeholder="Coluna destino" className={cn("text-sm", isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : "")} />
+                          <Select 
+                            value={action.targetColumn} 
+                            onValueChange={(value) => updateAction(action.id, 'targetColumn', value)}
+                            disabled={!action.nextPipeline}
+                          >
+                            <SelectTrigger className={cn("text-sm", isDarkMode ? "bg-[#3a3a3a] border-gray-600 text-white" : "")}>
+                              <SelectValue placeholder="Selecione a coluna" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(actionColumns[action.id] || []).map((column: any) => (
+                                <SelectItem key={column.id} value={column.id}>
+                                  {column.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="p-2">
                           <Select value={action.dealState} onValueChange={value => updateAction(action.id, 'dealState', value)}>
