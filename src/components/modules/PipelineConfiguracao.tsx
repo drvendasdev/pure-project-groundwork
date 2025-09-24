@@ -256,12 +256,13 @@ export default function PipelineConfiguracao({
     coordinateGetter: sortableKeyboardCoordinates
   }));
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    
+    const {
+      active,
+      over
+    } = event;
     if (active.id !== over?.id) {
       const oldIndex = columns.findIndex(col => col.id === active.id);
       const newIndex = columns.findIndex(col => col.id === over?.id);
-      
       if (oldIndex !== -1 && newIndex !== -1) {
         // Reorganizar as colunas localmente
         const newColumns = [...columns];
@@ -273,7 +274,6 @@ export default function PipelineConfiguracao({
           id: col.id,
           order_position: index
         }));
-
         try {
           for (const update of updates) {
             await supabase.functions.invoke('pipeline-management/columns', {
@@ -289,14 +289,13 @@ export default function PipelineConfiguracao({
               }
             });
           }
-
           console.log('✅ Colunas reordenadas com sucesso');
-          
+
           // Usar a função do contexto para sincronizar
           if (reorderColumns) {
             await reorderColumns(newColumns);
           }
-          
+
           // Notificar o componente pai sobre a mudança
           if (onColumnsReorder) {
             onColumnsReorder(newColumns);
@@ -313,7 +312,7 @@ export default function PipelineConfiguracao({
           <TabsTrigger value="geral">Configurações Gerais</TabsTrigger>
           <TabsTrigger value="colunas">Colunas</TabsTrigger>
           <TabsTrigger value="acoes">Ações</TabsTrigger>
-          <TabsTrigger value="execucoes">Execuções de Automações</TabsTrigger>
+          
         </TabsList>
 
         {/* Configurações Gerais Tab */}
