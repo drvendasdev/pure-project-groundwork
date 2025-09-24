@@ -309,7 +309,12 @@ serve(async (req) => {
             .from('pipeline_cards')
             .select(`
               *,
-              contact:contacts(*),
+              contact:contacts(
+                *,
+                contact_tags(
+                  tags(id, name, color)
+                )
+              ),
               conversation:conversations(*),
               responsible_user:system_users!responsible_user_id(id, name)
             `)

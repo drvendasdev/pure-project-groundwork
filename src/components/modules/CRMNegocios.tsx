@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ContactTagsDisplay } from "@/components/crm/ContactTagsDisplay";
+
 
 // Interface compatível com o componente existente
 interface Deal {
@@ -172,8 +172,16 @@ function DraggableDeal({
         </div>
         
         {/* Área central para tags do contato */}
-        <div className="mb-3 min-h-[28px] flex items-center">
-          <ContactTagsDisplay contactId={deal.contact?.id} />
+        <div className="mb-3 min-h-[28px] flex items-center flex-wrap gap-1">
+          {deal.contact?.contact_tags?.map((contactTag, index) => (
+            <span
+              key={index}
+              className="px-2 py-1 text-xs rounded-full font-medium text-white"
+              style={{ backgroundColor: contactTag.tags.color }}
+            >
+              {contactTag.tags.name}
+            </span>
+          ))}
         </div>
         
         {/* Footer com ícones de ação e prioridade */}
