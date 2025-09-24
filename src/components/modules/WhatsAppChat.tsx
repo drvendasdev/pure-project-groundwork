@@ -481,6 +481,29 @@ export function WhatsAppChat({
     return null;
   };
 
+  // Mapear status do Evolution para o componente MessageStatusIndicator
+  const mapEvolutionStatusToComponent = (evolutionStatus?: string): 'sending' | 'sent' | 'delivered' | 'read' | 'failed' => {
+    switch (evolutionStatus) {
+      case 'PENDING':
+      case 'sending':
+        return 'sending';
+      case 'SENT':
+      case 'sent':
+        return 'sent';
+      case 'DELIVERY_ACK':
+      case 'delivered':
+        return 'delivered';
+      case 'READ_ACK':
+      case 'read':
+        return 'read';
+      case 'FAILED':
+      case 'failed':
+        return 'failed';
+      default:
+        return 'sent'; // fallback
+    }
+  };
+
   // Obter iniciais do nome
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -1196,7 +1219,12 @@ export function WhatsAppChat({
                       minute: '2-digit'
                     })}
                         </span>
-                        {message.sender_type !== 'contact' && <MessageStatusIndicator status={message.status} />}
+                        {message.sender_type !== 'contact' && (
+                          <MessageStatusIndicator 
+                            status={mapEvolutionStatusToComponent(message.status)} 
+                            className="ml-1"
+                          />
+                        )}
                       </div>
                     </div>
                   </div>)}

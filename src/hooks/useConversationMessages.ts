@@ -15,7 +15,7 @@ interface WhatsAppMessage {
   file_name?: string;
   mime_type?: string;
   created_at: string;
-  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  status?: string; // Status pode vir do Evolution como 'DELIVERY_ACK', 'READ_ACK', etc.
   external_id?: string;
   metadata?: any;
   workspace_id?: string;
@@ -340,6 +340,11 @@ export function useConversationMessages(): UseConversationMessagesReturn {
           
           // Verificar se é do workspace atual
           if (updatedMessage.workspace_id === selectedWorkspace.workspace_id) {
+            console.log('📊 Status da mensagem atualizado:', {
+              id: updatedMessage.id,
+              status: updatedMessage.status,
+              external_id: updatedMessage.external_id
+            });
             updateMessage(updatedMessage.id, updatedMessage);
           }
         }
