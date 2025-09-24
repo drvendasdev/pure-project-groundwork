@@ -22,15 +22,21 @@ interface ChatModalProps {
   contactAvatar?: string;
 }
 
-interface Message {
+interface WhatsAppMessage {
   id: string;
+  conversation_id: string;
   content: string;
-  message_type: 'text' | 'audio' | 'image' | 'video' | 'document';
+  message_type: 'text' | 'image' | 'video' | 'audio' | 'document';
   sender_type: 'contact' | 'agent';
-  created_at: string;
+  sender_id?: string;
   file_url?: string;
   file_name?: string;
   mime_type?: string;
+  created_at: string;
+  status?: string;
+  external_id?: string;
+  metadata?: any;
+  workspace_id?: string;
 }
 
 export function ChatModal({ 
@@ -41,46 +47,28 @@ export function ChatModal({
   contactPhone, 
   contactAvatar 
 }: ChatModalProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  
+  // Usar o hook existente para buscar mensagens
+  const { messages, loading, loadInitial } = useConversationMessages();
 
-  // Buscar mensagens da conversa
-  const fetchMessages = async () => {
-    if (!conversationId) return;
-    
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setMessages(data as Message[] || []);
-    } catch (error) {
-      console.error('Erro ao carregar mensagens:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as mensagens",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
+  // Carregar mensagens quando abrir o modal
+  useEffect(() => {
+    if (isOpen && conversationId) {
+      loadInitial(conversationId);
     }
-  };
+  }, [isOpen, conversationId, loadInitial]);
 
-  // Enviar mensagem
+  // Enviar mensagem através da função send-message
   const sendMessage = async () => {
-    if (!newMessage.trim() || isSending) return;
+    if (!newMessage.trim() || isSending || !conversationId) return;
 
     setIsSending(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-message', {
+      const { error } = await supabase.functions.invoke('send-message', {
         body: {
           conversationId,
           message: newMessage.trim(),
@@ -90,17 +78,10 @@ export function ChatModal({
 
       if (error) throw error;
 
-      // Adicionar mensagem à lista local
-      const newMsg: Message = {
-        id: Date.now().toString(),
-        content: newMessage.trim(),
-        message_type: 'text',
-        sender_type: 'agent',
-        created_at: new Date().toISOString()
-      };
-      
-      setMessages(prev => [...prev, newMsg]);
       setNewMessage('');
+      
+      // Recarregar mensagens para mostrar a nova mensagem
+      loadInitial(conversationId);
       
       toast({
         title: "Mensagem enviada",
@@ -122,12 +103,6 @@ export function ChatModal({
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  useEffect(() => {
-    if (isOpen && conversationId) {
-      fetchMessages();
-    }
-  }, [isOpen, conversationId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -184,7 +159,7 @@ export function ChatModal({
 
         {/* Lista de Mensagens */}
         <ScrollArea className="flex-1 p-4">
-          {isLoading ? (
+          {loading ? (
             <div className="flex items-center justify-center h-32">
               <p className="text-muted-foreground">Carregando mensagens...</p>
             </div>
