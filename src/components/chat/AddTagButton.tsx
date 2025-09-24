@@ -19,13 +19,14 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
   const [isHovered, setIsHovered] = useState(false);
 
   const { 
-    getFilteredTags, 
+    availableTags,
+    conversationTags,
     addTagToConversation, 
     isLoading 
   } = useConversationTags(conversationId);
 
-  // Buscar todas as tags disponíveis (não filtradas)
-  const availableTags = getFilteredTags("");
+  // Verificar quais tags já estão atribuídas à conversa
+  const assignedTagIds = conversationTags.map(ct => ct.tag_id);
 
   const handleAddTag = async () => {
     if (!selectedTagId) return;
@@ -90,24 +91,36 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
           {/* Lista de tags disponíveis */}
           <ScrollArea className="max-h-40">
             <div className="space-y-2">
-              {availableTags.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant="outline"
-                  style={{ 
-                    backgroundColor: tag.color, 
-                    borderColor: tag.color,
-                    color: 'white'
-                  }}
-                  className={cn(
-                    "cursor-pointer hover:opacity-80 transition-opacity text-xs px-2 py-1 w-full justify-start",
-                    selectedTagId === tag.id && "ring-2 ring-offset-2 ring-blue-500"
-                  )}
-                  onClick={() => handleTagSelect(tag.id)}
-                >
-                  {tag.name}
-                </Badge>
-              ))}
+              {availableTags.map((tag) => {
+                const isAssigned = assignedTagIds.includes(tag.id);
+                return (
+                  <div 
+                    key={tag.id} 
+                    className={cn(
+                      "relative",
+                      isAssigned && "opacity-50"
+                    )}
+                  >
+                    <Badge
+                      variant="outline"
+                      style={{ 
+                        backgroundColor: tag.color, 
+                        borderColor: tag.color,
+                        color: 'white'
+                      }}
+                      className={cn(
+                        "cursor-pointer hover:opacity-80 transition-opacity text-xs px-2 py-1 w-full justify-start",
+                        selectedTagId === tag.id && "ring-2 ring-offset-2 ring-blue-500",
+                        isAssigned && "cursor-not-allowed"
+                      )}
+                      onClick={() => !isAssigned && handleTagSelect(tag.id)}
+                    >
+                      {tag.name}
+                      {isAssigned && <span className="ml-2 text-xs">(já atribuída)</span>}
+                    </Badge>
+                  </div>
+                );
+              })}
               {availableTags.length === 0 && (
                 <p className="text-sm text-gray-500">Nenhuma tag disponível</p>
               )}
