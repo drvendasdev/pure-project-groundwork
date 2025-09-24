@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,10 +15,8 @@ interface AddTagButtonProps {
 
 export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }: AddTagButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedTagId, setSelectedTagId] = useState<string>("");
   const [isHovered, setIsHovered] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const { 
     getFilteredTags, 
@@ -27,14 +24,8 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
     isLoading 
   } = useConversationTags(conversationId);
 
-  const filteredTags = getFilteredTags(searchTerm);
-
-  // Auto focus input when popover opens
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isOpen]);
+  // Buscar todas as tags disponíveis (não filtradas)
+  const availableTags = getFilteredTags("");
 
   const handleAddTag = async () => {
     if (!selectedTagId) return;
@@ -42,7 +33,6 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
     const success = await addTagToConversation(selectedTagId);
     if (success) {
       setIsOpen(false);
-      setSearchTerm("");
       setSelectedTagId("");
       onTagAdded?.();
     }
@@ -54,7 +44,6 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
 
   const handleCancel = () => {
     setIsOpen(false);
-    setSearchTerm("");
     setSelectedTagId("");
   };
 
@@ -96,43 +85,34 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
         onKeyDown={handleKeyDown}
       >
         <div className="space-y-4">
-          {/* Input - Imagem 3 */}
-          <Input
-            ref={inputRef}
-            placeholder="Digite o nome da tag"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border-gray-300"
-          />
+          <p className="text-sm font-medium text-gray-700">Selecione uma tag:</p>
           
-          {/* Lista de tags - Imagem 4 */}
-          {searchTerm && (
-            <ScrollArea className="max-h-40">
-              <div className="space-y-2">
-                {filteredTags.map((tag) => (
-                  <Badge
-                    key={tag.id}
-                    variant="outline"
-                    style={{ 
-                      backgroundColor: tag.color, 
-                      borderColor: tag.color,
-                      color: 'white'
-                    }}
-                    className={cn(
-                      "cursor-pointer hover:opacity-80 transition-opacity text-xs px-2 py-1",
-                      selectedTagId === tag.id && "ring-2 ring-offset-2 ring-blue-500"
-                    )}
-                    onClick={() => handleTagSelect(tag.id)}
-                  >
-                    {tag.name}
-                  </Badge>
-                ))}
-                {filteredTags.length === 0 && (
-                  <p className="text-sm text-gray-500">Nenhuma tag encontrada</p>
-                )}
-              </div>
-            </ScrollArea>
-          )}
+          {/* Lista de tags disponíveis */}
+          <ScrollArea className="max-h-40">
+            <div className="space-y-2">
+              {availableTags.map((tag) => (
+                <Badge
+                  key={tag.id}
+                  variant="outline"
+                  style={{ 
+                    backgroundColor: tag.color, 
+                    borderColor: tag.color,
+                    color: 'white'
+                  }}
+                  className={cn(
+                    "cursor-pointer hover:opacity-80 transition-opacity text-xs px-2 py-1 w-full justify-start",
+                    selectedTagId === tag.id && "ring-2 ring-offset-2 ring-blue-500"
+                  )}
+                  onClick={() => handleTagSelect(tag.id)}
+                >
+                  {tag.name}
+                </Badge>
+              ))}
+              {availableTags.length === 0 && (
+                <p className="text-sm text-gray-500">Nenhuma tag disponível</p>
+              )}
+            </div>
+          </ScrollArea>
           
           {/* Botões - Imagem 3 */}
           <div className="flex gap-2">
