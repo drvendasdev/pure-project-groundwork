@@ -10,7 +10,7 @@ import { CRMNegocios } from "./modules/CRMNegocios";
 
 import { CRMContatos } from "./modules/CRMContatos";
 import { CRMTags } from "./modules/CRMTags";
-import { CRMProdutos } from "./modules/CRMProdutos";
+
 import { DSAgente } from "./modules/DSAgente";
 import { EditarAgente } from "./modules/EditarAgente";
 import { AutomacoesBot } from "./modules/AutomacoesBot";
@@ -35,7 +35,7 @@ export type ModuleType =
   
   | "crm-contatos"
   | "crm-tags"
-  | "crm-produtos"
+  
   | "automacoes-agente"
   | "automacoes-bot"
   | "automacoes-integracoes"
@@ -158,8 +158,6 @@ export function TezeusCRM() {
         return <CRMContatos />;
       case "crm-tags":
         return <CRMTags />;
-      case "crm-produtos":
-        return <CRMProdutos />;
       case "automacoes-agente":
         return <DSAgente />;
       case "automacoes-bot":

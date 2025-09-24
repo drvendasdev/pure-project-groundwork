@@ -141,12 +141,6 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       group: "crm"
     },
     {
-      id: "crm-produtos",
-      label: "Produtos Comerciais",
-      icon: <FolderOpen className="w-5 h-5" />,
-      group: "crm"
-    },
-    {
       id: "automacoes-agente",
       label: "DS Agente",
       icon: <BrainCircuit className="w-5 h-5" />,
