@@ -524,7 +524,7 @@ export const useWhatsAppConversations = () => {
           }
           
           setConversations(prev => {
-            return prev.map(conv => {
+            const updated = prev.map(conv => {
               if (conv.id === newMessage.conversation_id) {
                 // Verificar se mensagem já existe para evitar duplicatas
                 const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
@@ -547,15 +547,29 @@ export const useWhatsAppConversations = () => {
                   last_activity_at: newMessage.created_at
                 };
 
-                // Se é mensagem de contato, incrementar unread_count localmente (triggers do DB fazem isso também)
-                if (newMessage.sender_type === 'contact') {
-                  updatedConv.unread_count = conv.unread_count + 1;
-                }
+                // O unread_count será atualizado automaticamente pelo trigger no banco
+                // e será refletido via evento UPDATE da conversa que virá em seguida
 
                 return updatedConv;
               }
               return conv;
-            }).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
+            });
+
+            // Reordenar por atividade para mover conversas com novas mensagens para o topo
+            const sorted = updated.sort((a, b) => 
+              new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
+            );
+            
+            console.log('📨➡️ Lista reordenada após nova mensagem:', {
+              message_conversation_id: newMessage.conversation_id,
+              sender_type: newMessage.sender_type,
+              new_order: sorted.slice(0, 3).map(c => ({ 
+                id: c.id, 
+                last_activity: c.last_activity_at
+              }))
+            });
+            
+            return sorted;
           });
         }
       )
