@@ -23,6 +23,9 @@ export function useNotifications() {
   const [lastToastTime, setLastToastTime] = useState(0);
   const conversationsRef = useRef(conversations);
   
+  // Debug log
+  console.log('🔔 useNotifications - conversations:', conversations.length, 'total unread:', totalUnread);
+  
   // Debounce para evitar re-renders excessivos
   const debounceTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -74,6 +77,28 @@ export function useNotifications() {
       const newNotifications: NotificationMessage[] = [];
       
       conversations.forEach((conv) => {
+        console.log('🔔 Processing conv:', conv.contact.name, 'messages:', conv.messages?.length || 0, 'unread_count:', conv.unread_count);
+        
+        // Se não há mensagens carregadas, usar o unread_count da conversa
+        if (!conv.messages || conv.messages.length === 0) {
+          unreadCount += conv.unread_count || 0;
+          
+          // Criar notificação baseada nos dados básicos da conversa
+          if (conv.unread_count > 0) {
+            newNotifications.push({
+              id: `${conv.id}-unread`,
+              conversationId: conv.id,
+              contactName: conv.contact.name,
+              contactPhone: conv.contact.phone,
+              content: conv.last_message?.[0]?.content || 'Nova mensagem',
+              messageType: conv.last_message?.[0]?.message_type || 'text',
+              timestamp: new Date(conv.last_activity_at || new Date()),
+              isMedia: ['image', 'video', 'audio', 'document'].includes(conv.last_message?.[0]?.message_type || '')
+            });
+          }
+          return;
+        }
+        
         // Filtrar mensagens não lidas do contato (sender_type = 'contact' e read_at = null)
         const unreadContactMessages = conv.messages.filter(msg => 
           msg.sender_type === 'contact' && (!msg.read_at || msg.read_at === null)
