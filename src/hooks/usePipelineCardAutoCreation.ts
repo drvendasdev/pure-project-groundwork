@@ -55,7 +55,7 @@ export function usePipelineCardAutoCreation() {
 
       const firstColumn = columns[0];
 
-      // Buscar informações do contato
+      // Buscar informações do contato e da conversa
       const { data: contact } = await supabase
         .from('contacts')
         .select('name, phone')
@@ -67,6 +67,13 @@ export function usePipelineCardAutoCreation() {
         return null;
       }
 
+      // Buscar informações da conversa para obter o usuário responsável
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('assigned_user_id')
+        .eq('id', conversationId)
+        .single();
+
       // Criar o card automaticamente
       const { data: newCard } = await supabase.functions.invoke('pipeline-management/cards', {
         method: 'POST',
@@ -76,6 +83,7 @@ export function usePipelineCardAutoCreation() {
           column_id: firstColumn.id,
           conversation_id: conversationId,
           contact_id: contactId,
+          responsible_user_id: conversation?.assigned_user_id || null,
           title: contact.name || contact.phone || 'Contato sem nome',
           description: 'Card criado automaticamente',
           value: 0,
