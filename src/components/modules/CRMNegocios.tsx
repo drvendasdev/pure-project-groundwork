@@ -14,6 +14,7 @@ import { FilterModal } from "@/components/modals/FilterModal";
 import { CriarPipelineModal } from "@/components/modals/CriarPipelineModal";
 import { CriarNegocioModal } from "@/components/modals/CriarNegocioModal";
 import { DealDetailsModal } from "@/components/modals/DealDetailsModal";
+import { ChatModal } from "@/components/modals/ChatModal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { usePipelineActiveUsers } from "@/hooks/usePipelineActiveUsers";
@@ -82,13 +83,15 @@ interface DraggableDealProps {
   isDarkMode?: boolean;
   onClick: () => void;
   columnColor?: string;
+  onChatClick?: (deal: Deal) => void;
 }
 
 function DraggableDeal({
   deal,
   isDarkMode = false,
   onClick,
-  columnColor = '#6b7280'
+  columnColor = '#6b7280',
+  onChatClick
 }: DraggableDealProps) {
   const {
     attributes,
@@ -190,7 +193,15 @@ function DraggableDeal({
         {/* Footer com ícones de ação e prioridade */}
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
           <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600" onClick={(e) => e.stopPropagation()}>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600" 
+              onClick={(e) => {
+                e.stopPropagation();
+                onChatClick?.(deal);
+              }}
+            >
               <MessageCircle className="w-3.5 h-3.5" />
             </Button>
             <TooltipProvider>
@@ -249,12 +260,14 @@ export function CRMNegocios({
   
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [selectedChatCard, setSelectedChatCard] = useState<any>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isCriarPipelineModalOpen, setIsCriarPipelineModalOpen] = useState(false);
   const [isCriarNegocioModalOpen, setIsCriarNegocioModalOpen] = useState(false);
   const [isDealDetailsModalOpen, setIsDealDetailsModalOpen] = useState(false);
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   
@@ -626,7 +639,11 @@ export function CRMNegocios({
                                   deal={deal} 
                                   isDarkMode={isDarkMode} 
                                   onClick={() => openCardDetails(card)} 
-                                  columnColor={column.color} 
+                                  columnColor={column.color}
+                                  onChatClick={(dealData) => {
+                                    setSelectedChatCard(dealData);
+                                    setIsChatModalOpen(true);
+                                  }}
                                 />
                               );
                             })}
@@ -665,7 +682,11 @@ export function CRMNegocios({
                   deal={deal} 
                   isDarkMode={isDarkMode} 
                   onClick={() => {}} 
-                  columnColor={activeColumn?.color} 
+                  columnColor={activeColumn?.color}
+                  onChatClick={(dealData) => {
+                    setSelectedChatCard(dealData);
+                    setIsChatModalOpen(true);
+                  }}
                 />
               );
             }
@@ -717,6 +738,15 @@ export function CRMNegocios({
         dealName={selectedCard?.title || ""} 
         contactNumber={selectedCard?.contact?.phone || ""} 
         isDarkMode={isDarkMode} 
+      />
+
+      <ChatModal
+        isOpen={isChatModalOpen}
+        onClose={() => setIsChatModalOpen(false)}
+        conversationId={selectedChatCard?.conversation?.id || ""}
+        contactName={selectedChatCard?.contact?.name || ""}
+        contactPhone={selectedChatCard?.contact?.phone || ""}
+        contactAvatar={selectedChatCard?.contact?.profile_image_url || ""}
       />
     </DndContext>
   );
