@@ -44,6 +44,13 @@ interface Deal {
     name: string;
     profile_image_url?: string;
     tags?: string[];
+    contact_tags?: Array<{
+      tags: {
+        id: string;
+        name: string;
+        color: string;
+      };
+    }>;
   };
 }
 
@@ -165,24 +172,40 @@ function DraggableDeal({
         
         {/* Área central para tags do contato */}
         <div className="mb-3 min-h-[28px] flex items-center">
-          {deal.contact?.tags && deal.contact.tags.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {deal.contact.tags.slice(0, 3).map((tag, index) => (
-                <Badge key={index} variant="secondary" className={cn("text-xs px-2 py-0.5 h-auto", "bg-secondary/50 text-secondary-foreground border border-border/50")}>
-                  {tag}
-                </Badge>
-              ))}
-              {deal.contact.tags.length > 3 && (
-                <Badge variant="outline" className="text-xs px-2 py-0.5 h-auto">
-                  +{deal.contact.tags.length - 3}
-                </Badge>
-              )}
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground italic">
-              Sem tags do contato
-            </span>
-          )}
+          {(() => {
+            // Processar tags do formato aninhado do Supabase
+            const contactTags = deal.contact?.contact_tags
+              ?.map(ct => ct.tags)
+              .filter(Boolean) || [];
+            
+            return contactTags.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {contactTags.slice(0, 3).map((tag, index) => (
+                  <Badge 
+                    key={tag.id || index} 
+                    variant="outline" 
+                    className="text-xs px-2 py-0.5 h-auto"
+                    style={{ 
+                      backgroundColor: tag.color || '#808080', 
+                      borderColor: tag.color || '#808080',
+                      color: 'white'
+                    }}
+                  >
+                    {tag.name}
+                  </Badge>
+                ))}
+                {contactTags.length > 3 && (
+                  <Badge variant="outline" className="text-xs px-2 py-0.5 h-auto">
+                    +{contactTags.length - 3}
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">
+                Sem tags do contato
+              </span>
+            );
+          })()}
         </div>
         
         {/* Footer com ícones de ação e prioridade */}
