@@ -39,6 +39,11 @@ interface Deal {
   priority: 'low' | 'medium' | 'high';
   product?: string;
   lastContact?: string;
+  contact?: {
+    id: string;
+    name: string;
+    profile_image_url?: string;
+  };
 }
 
 interface DroppableColumnProps {
@@ -115,10 +120,30 @@ function DraggableDeal({
       <CardContent className="p-3">
         {/* Header com avatar, nome e valor */}
         <div className="flex items-start gap-3 mb-3">
-          {/* Avatar do responsável */}
+          {/* Avatar do contato */}
           <div className="flex-shrink-0">
-            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium", "bg-gradient-to-br from-primary/20 to-primary/10 text-primary border border-primary/20")}>
-              {getInitials(deal.responsible)}
+            {deal.contact?.profile_image_url ? (
+              <img 
+                src={deal.contact.profile_image_url} 
+                alt={deal.contact.name || deal.name}
+                className="w-10 h-10 rounded-full object-cover border border-primary/20"
+                onError={(e) => {
+                  // Fallback para iniciais se a imagem falhar
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            <div 
+              className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium",
+                "bg-gradient-to-br from-primary/20 to-primary/10 text-primary border border-primary/20",
+                deal.contact?.profile_image_url ? "hidden" : ""
+              )}
+            >
+              {getInitials(deal.contact?.name || deal.name)}
             </div>
           </div>
           
@@ -589,7 +614,8 @@ export function CRMNegocios({
                                            (card.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
                                 tags: Array.isArray(card.tags) ? card.tags : [],
                                 priority: 'medium',
-                                lastContact: "2h atrás" // Placeholder
+                                lastContact: "2h atrás", // Placeholder
+                                contact: card.contact
                               };
                               return (
                                 <DraggableDeal 
@@ -628,7 +654,8 @@ export function CRMNegocios({
                 responsible: activeCard.responsible_user?.name || 
                            (activeCard.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
                 tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
-                priority: 'medium'
+                priority: 'medium',
+                contact: activeCard.contact
               };
               return (
                 <DraggableDeal 
