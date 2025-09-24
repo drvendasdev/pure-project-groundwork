@@ -457,30 +457,7 @@ export const useWhatsAppConversations = () => {
           : conv
       ));
 
-      // ✅ CORREÇÃO 8: Enviar webhook para N8N (opcional)
-      if (currentUserData?.id && selectedWorkspace?.workspace_id) {
-        try {
-          const headers: Record<string, string> = {
-            'x-system-user-id': currentUserData.id,
-            'x-system-user-email': currentUserData.email || '',
-            'x-workspace-id': selectedWorkspace.workspace_id
-          };
-
-          await supabase.functions.invoke('n8n-message-read-webhook', {
-            body: {
-              conversationId,
-              userId: currentUserData.id,
-              workspaceId: selectedWorkspace.workspace_id
-            },
-            headers
-          });
-          
-          console.log('✅ Webhook N8N enviado para leitura da mensagem');
-        } catch (webhookError) {
-          console.log('⚠️ Erro opcional no webhook N8N:', webhookError);
-          // Não propagar erro do webhook - é opcional
-        }
-      }
+      console.log('✅ Conversa marcada como lida - notificações atualizadas');
       
       console.log('✅ Conversa marcada como lida com sucesso');
     } catch (error) {
