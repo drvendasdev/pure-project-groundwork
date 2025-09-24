@@ -44,6 +44,7 @@ interface Deal {
   contact?: {
     id: string;
     name: string;
+    phone?: string;
     profile_image_url?: string;
     contact_tags?: Array<{
       tag_id: string;
@@ -53,6 +54,9 @@ interface Deal {
         color: string;
       };
     }>;
+  };
+  conversation?: {
+    id: string;
   };
 }
 
@@ -742,9 +746,12 @@ export function CRMNegocios({
 
       <ChatModal
         isOpen={isChatModalOpen}
-        onClose={() => setIsChatModalOpen(false)}
-        conversationId={selectedChatCard?.conversation?.id || ""}
-        contactName={selectedChatCard?.contact?.name || ""}
+        onClose={() => {
+          console.log('🔽 Fechando ChatModal');
+          setIsChatModalOpen(false);
+        }}
+        conversationId={selectedChatCard?.conversation?.id || selectedChatCard?.id || ""}
+        contactName={selectedChatCard?.contact?.name || selectedChatCard?.name || ""}
         contactPhone={selectedChatCard?.contact?.phone || ""}
         contactAvatar={selectedChatCard?.contact?.profile_image_url || ""}
       />

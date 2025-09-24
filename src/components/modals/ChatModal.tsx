@@ -52,15 +52,34 @@ export function ChatModal({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
+  // Debug quando o modal abre
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🚀 ChatModal aberto com dados:', {
+        conversationId,
+        contactName,
+        contactPhone,
+        contactAvatar
+      });
+    }
+  }, [isOpen, conversationId, contactName, contactPhone, contactAvatar]);
+  
   // Usar o hook existente para buscar mensagens
   const { messages, loading, loadInitial } = useConversationMessages();
 
   // Carregar mensagens quando abrir o modal
   useEffect(() => {
     if (isOpen && conversationId) {
+      console.log('🔄 ChatModal: Carregando mensagens para conversationId:', conversationId);
+      console.log('📋 ChatModal: Contato:', { contactName, contactPhone });
       loadInitial(conversationId);
     }
   }, [isOpen, conversationId, loadInitial]);
+
+  // Debug das mensagens carregadas
+  useEffect(() => {
+    console.log('📨 ChatModal: Mensagens carregadas:', messages?.length || 0, messages);
+  }, [messages]);
 
   // Enviar mensagem através da função send-message
   const sendMessage = async () => {
@@ -138,7 +157,7 @@ export function ChatModal({
                 <DialogTitle className="text-base font-medium">{contactName}</DialogTitle>
                 {contactPhone && (
                   <p className="text-sm text-muted-foreground">
-                    📱 CDE OFICIAL {contactPhone}
+                    📱 {contactPhone}
                   </p>
                 )}
               </div>
@@ -166,6 +185,9 @@ export function ChatModal({
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-32">
               <p className="text-muted-foreground">Nenhuma mensagem ainda</p>
+              <div className="text-xs text-muted-foreground mt-2">
+                Conversation ID: {conversationId}
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

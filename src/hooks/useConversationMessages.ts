@@ -57,12 +57,19 @@ export function useConversationMessages(): UseConversationMessagesReturn {
   }, []);
 
   const loadInitial = useCallback(async (conversationId: string) => {
-    if (!selectedWorkspace?.workspace_id) return;
+    console.log('🔄 loadInitial chamado para conversationId:', conversationId);
+    console.log('🏢 Workspace selecionado:', selectedWorkspace?.workspace_id);
+    
+    if (!selectedWorkspace?.workspace_id) {
+      console.error('❌ Nenhum workspace selecionado!');
+      return;
+    }
 
     // Verificar cache
     const cacheKey = `${selectedWorkspace.workspace_id}:${conversationId}`;
     const cached = cacheRef.current.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log('📋 Usando cache, mensagens:', cached.messages.length);
       setMessages(cached.messages);
       setCurrentConversationId(conversationId);
       // Assumir que pode ter mais se tiver 5 ou mais mensagens
@@ -82,6 +89,7 @@ export function useConversationMessages(): UseConversationMessagesReturn {
 
     try {
       const headers = getHeaders();
+      console.log('📤 Chamando whatsapp-get-messages com headers:', headers);
 
       const { data, error } = await supabase.functions.invoke('whatsapp-get-messages', {
         body: { 
@@ -90,6 +98,8 @@ export function useConversationMessages(): UseConversationMessagesReturn {
         },
         headers
       });
+
+      console.log('📥 Resposta do whatsapp-get-messages:', { data, error });
 
       if (error) {
         console.error('Error loading initial messages:', error);
