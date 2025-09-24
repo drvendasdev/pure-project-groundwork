@@ -699,18 +699,25 @@ serve(async (req) => {
     }
 
     // Process contact profile image from N8N payload if available
-    const profilePictureUrl = payload.profilePictureUrl || payload.data?.profilePictureUrl;
+    const profilePictureUrl = payload.profilePictureUrl || 
+                              payload.data?.profilePictureUrl ||
+                              payload.data?.message?.profilePictureUrl ||
+                              payload.contact?.profilePicture ||
+                              payload.sender?.profilePicture ||
+                              payload.message?.profilePictureUrl;
     
-    if (profilePictureUrl && phone_number) {
+    if (profilePictureUrl && phone_number && workspace_id) {
       console.log(`🖼️ [${requestId}] Profile image URL received from N8N: ${profilePictureUrl}`);
       
       try {
-        // Use profilePictureUrl directly from N8N
-        const profileSaveResult = await supabase.functions.invoke('fetch-whatsapp-profile', {
+        // Use the new process-profile-image function
+        const profileSaveResult = await supabase.functions.invoke('process-profile-image', {
           body: {
             phone: sanitizedPhone,
             profileImageUrl: profilePictureUrl,
-            contactId: contactId
+            contactId: contactId,
+            workspaceId: workspace_id,
+            instanceName: payload.instance || 'n8n'
           }
         });
 
