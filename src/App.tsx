@@ -11,6 +11,7 @@ import { PipelinesProvider } from "./contexts/PipelinesContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { RoleProtectedRoute } from "./components/RoleProtectedRoute";
 import { Login } from "./pages/Login";
+import { RealtimeNotificationProvider } from "./components/RealtimeNotificationProvider";
 
 const queryClient = new QueryClient();
 
@@ -22,7 +23,8 @@ const App = () => (
       <AuthProvider>
         <WorkspaceProvider>
           <PipelinesProvider>
-            <BrowserRouter>
+            <RealtimeNotificationProvider>
+              <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -53,7 +55,8 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-            </BrowserRouter>
+              </BrowserRouter>
+            </RealtimeNotificationProvider>
           </PipelinesProvider>
         </WorkspaceProvider>
       </AuthProvider>

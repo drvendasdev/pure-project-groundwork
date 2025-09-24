@@ -68,6 +68,7 @@ export function TezeusCRM() {
   });
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [canNavigateFreely, setCanNavigateFreely] = useState(true);
 
   // Handle dark mode changes
   useEffect(() => {
@@ -100,10 +101,32 @@ export function TezeusCRM() {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const conversationId = searchParams.get('id');
-    if (conversationId) {
+    if (conversationId && conversationId !== selectedConversationId) {
       setSelectedConversationId(conversationId);
+      setCanNavigateFreely(false); // Temporariamente bloquear navegação livre
+      
+      // Permitir navegação livre após 2 segundos
+      const timer = setTimeout(() => {
+        setCanNavigateFreely(true);
+      }, 2000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [location.search]);
+  }, [location.search, selectedConversationId]);
+
+  // Listener para navegação via toast
+  useEffect(() => {
+    const handleNavigateToConversation = (event: CustomEvent) => {
+      const conversationId = event.detail;
+      setSelectedConversationId(conversationId);
+      navigate(`/conversas?id=${conversationId}`);
+    };
+
+    window.addEventListener('navigate-to-conversation', handleNavigateToConversation as EventListener);
+    return () => {
+      window.removeEventListener('navigate-to-conversation', handleNavigateToConversation as EventListener);
+    };
+  }, [navigate]);
 
   const renderModule = () => {
     const moduleProps = { isDarkMode };
@@ -174,8 +197,10 @@ export function TezeusCRM() {
         isCollapsed={isCollapsed}
         onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         onNavigateToConversation={(conversationId) => {
-          setSelectedConversationId(conversationId);
-          navigate(`/conversas?id=${conversationId}`);
+          if (canNavigateFreely) {
+            setSelectedConversationId(conversationId);
+            navigate(`/conversas?id=${conversationId}`);
+          }
         }}
       />
       <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'p-4' : ''}`}>
