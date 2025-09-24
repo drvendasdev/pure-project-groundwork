@@ -5,9 +5,12 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Send, Paperclip, Mic, Plus, Bot, X } from 'lucide-react';
+import { Send, Paperclip, Mic, Plus, Bot, X, Square } from 'lucide-react';
 import { AudioPlayer } from '@/components/chat/AudioPlayer';
 import { MediaViewer } from '@/components/chat/MediaViewer';
+import { AddTagButton } from '@/components/chat/AddTagButton';
+import { ContactTags } from '@/components/chat/ContactTags';
+import { MediaUpload } from '@/components/chat/MediaUpload';
 import { useConversationMessages } from '@/hooks/useConversationMessages';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -50,6 +53,8 @@ export function ChatModal({
 }: ChatModalProps) {
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   
@@ -82,17 +87,18 @@ export function ChatModal({
     console.log('📨 ChatModal: Mensagens carregadas:', messages?.length || 0, messages);
   }, [messages]);
 
-  // Enviar mensagem através da função send-message
+  // Enviar mensagem através da função test-send-msg  
   const sendMessage = async () => {
     if (!newMessage.trim() || isSending || !conversationId) return;
 
     setIsSending(true);
     try {
-      const { error } = await supabase.functions.invoke('send-message', {
+      const { data, error } = await supabase.functions.invoke('test-send-msg', {
         body: {
-          conversationId,
-          message: newMessage.trim(),
-          messageType: 'text'
+          conversation_id: conversationId,
+          content: newMessage.trim(),
+          message_type: 'text',
+          sender_type: 'agent'
         }
       });
 
@@ -116,6 +122,91 @@ export function ChatModal({
       });
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Gravação de áudio
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const file = new File([blob], `audio-${Date.now()}.webm`, { type: 'audio/webm' });
+        await uploadAndSendAudio(file);
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Erro ao iniciar gravação:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível acessar o microfone",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+      setMediaRecorder(null);
+    }
+  };
+
+  const uploadAndSendAudio = async (file: File) => {
+    try {
+      // Upload para storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `messages/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('whatsapp-media')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('whatsapp-media')
+        .getPublicUrl(filePath);
+
+      // Enviar áudio via test-send-msg
+      const { data, error } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: conversationId,
+          content: '[ÁUDIO]',
+          message_type: 'audio',
+          sender_type: 'agent',
+          file_url: publicUrl,
+          file_name: file.name
+        }
+      });
+
+      if (error) throw error;
+
+      // Recarregar mensagens
+      loadInitial(conversationId);
+
+      toast({
+        title: "Áudio enviado",
+        description: "Sua mensagem de áudio foi enviada com sucesso"
+      });
+    } catch (error) {
+      console.error('Erro ao enviar áudio:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível enviar o áudio",
+        variant: "destructive"
+      });
     }
   };
 
@@ -158,19 +249,22 @@ export function ChatModal({
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium text-gray-900 text-base">{contactName}</h3>
                   <div className="flex items-center">
-                    {/* Botão Add Tag */}
-                    <div className="relative flex items-center">
-                      <Button className="h-6 w-6 rounded-full border border-gray-300 hover:bg-gray-50">
-                        <Plus className="w-3 h-3" />
-                      </Button>
-                    </div>
-                    {/* Tags do contato */}
-                    <div className="flex items-center gap-1 ml-2">
-                      {/* Aqui podem ser adicionadas as tags do contato */}
-                      <Badge className="text-xs px-2 py-0.5 h-auto cursor-pointer hover:opacity-80 group relative max-w-20 truncate">
-                        <span className="truncate">Contato</span>
-                      </Badge>
-                    </div>
+                    {/* Botão Add Tag funcional */}
+                    <AddTagButton 
+                      conversationId={conversationId} 
+                      onTagAdded={() => {
+                        // Refresh na conversa após adicionar tag
+                        loadInitial(conversationId);
+                      }} 
+                    />
+                    {/* Tags do contato funcionais */}
+                    <ContactTags 
+                      contactId={conversationId} // Usando conversationId como fallback
+                      onTagRemoved={() => {
+                        // Refresh na conversa após remover tag
+                        loadInitial(conversationId);
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -257,16 +351,45 @@ export function ChatModal({
             )}
           </ScrollArea>
 
-          {/* Input area igual ao WhatsAppChat */}
+          {/* Input area funcional */}
           <div className="p-4 border-t border-border">
             <div className="flex items-end gap-2">
-              {/* Botão upload de mídia */}
-              <Button variant="ghost" className="h-9 rounded-md px-3">
-                <Paperclip className="h-4 w-4" />
-              </Button>
+              {/* Upload de mídia funcional */}
+              <MediaUpload onFileSelect={async (file, mediaType, fileUrl) => {
+                if (!conversationId) return;
+                
+                try {
+                  const { data, error } = await supabase.functions.invoke('test-send-msg', {
+                    body: {
+                      conversation_id: conversationId,
+                      content: `[${mediaType.toUpperCase()}]`,
+                      message_type: mediaType,
+                      sender_type: 'agent',
+                      file_url: fileUrl,
+                      file_name: file.name
+                    }
+                  });
+
+                  if (error) throw error;
+
+                  loadInitial(conversationId);
+                  
+                  toast({
+                    title: "Arquivo enviado",
+                    description: "Seu arquivo foi enviado com sucesso"
+                  });
+                } catch (error) {
+                  console.error('Erro ao enviar arquivo:', error);
+                  toast({
+                    title: "Erro",
+                    description: "Não foi possível enviar o arquivo",
+                    variant: "destructive"
+                  });
+                }
+              }} />
               
               {/* Botão mensagens rápidas */}
-              <Button variant="ghost" className="h-9 rounded-md px-3" title="Mensagens Rápidas">
+              <Button variant="ghost" size="sm" title="Mensagens Rápidas">
                 <svg className="w-4 h-4" focusable="false" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
                   <circle cx="9" cy="9" r="4" />
                   <path d="M9 15c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm7.76-9.64l-1.68 1.69c.84 1.18.84 2.71 0 3.89l1.68 1.69c2.02-2.02 2.02-5.07 0-7.27zM20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z" />
@@ -289,20 +412,21 @@ export function ChatModal({
                 />
               </div>
               
-              {/* Botão áudio */}
+              {/* Botão gravação de áudio funcional */}
               <Button 
-                variant="secondary" 
-                className="h-10 w-10" 
-                title="Gravar áudio"
+                onClick={isRecording ? stopRecording : startRecording}
+                size="icon"
+                variant={isRecording ? 'destructive' : 'secondary'} 
+                title={isRecording ? 'Parar gravação' : 'Gravar áudio'}
               >
-                <Mic className="w-4 h-4" />
+                {isRecording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </Button>
               
               {/* Botão enviar */}
               <Button 
                 onClick={sendMessage}
                 disabled={!newMessage.trim() || isSending}
-                className="h-10 w-10"
+                size="icon"
               >
                 <Send className="w-4 h-4" />
               </Button>
