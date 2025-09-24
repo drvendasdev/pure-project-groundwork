@@ -60,6 +60,7 @@ interface PipelinesContextType {
   updateCard: (cardId: string, updates: Partial<PipelineCard>) => Promise<void>;
   moveCard: (cardId: string, newColumnId: string) => Promise<void>;
   getCardsByColumn: (columnId: string) => PipelineCard[];
+  reorderColumns: (newColumns: PipelineColumn[]) => Promise<void>;
 }
 
 const PipelinesContext = createContext<PipelinesContextType | undefined>(undefined);
@@ -376,6 +377,54 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     updateCard,
     moveCard,
     getCardsByColumn,
+    reorderColumns: async (newColumns: PipelineColumn[]) => {
+      try {
+        console.log('🔄 Reordering columns from context');
+        
+        // Atualizar estado local primeiro  
+        setColumns(newColumns);
+        
+        // Atualizar no backend
+        const updates = newColumns.map((col, index) => ({
+          id: col.id,
+          order_position: index
+        }));
+
+        for (const update of updates) {
+          await supabase.functions.invoke('pipeline-management/columns', {
+            method: 'PUT',
+            headers: getHeaders,
+            body: {
+              id: update.id,
+              order_position: update.order_position
+            }
+          });
+        }
+
+        // Re-fetch para garantir sincronização
+        if (selectedPipeline?.id) {
+          await fetchColumns(selectedPipeline.id);
+          await fetchCards(selectedPipeline.id);
+        }
+        
+        console.log('✅ Colunas reordenadas com sucesso');
+        toast({
+          title: "Sucesso",
+          description: "Ordem das colunas atualizada",
+        });
+      } catch (error) {
+        console.error('❌ Erro ao reordenar colunas:', error);
+        toast({
+          title: "Erro", 
+          description: "Erro ao reordenar colunas",
+          variant: "destructive",
+        });
+        // Reverter para o estado anterior em caso de erro
+        if (selectedPipeline?.id) {
+          await fetchColumns(selectedPipeline.id);
+        }
+      }
+    },
   }), [
     pipelines,
     selectedPipeline,

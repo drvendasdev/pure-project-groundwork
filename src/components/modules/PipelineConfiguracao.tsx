@@ -190,7 +190,8 @@ export default function PipelineConfiguracao({
   const [actions, setActions] = useState<Action[]>(initialActions);
   const {
     columns,
-    selectedPipeline
+    selectedPipeline,
+    reorderColumns
   } = usePipelinesContext();
   const {
     user
@@ -254,16 +255,55 @@ export default function PipelineConfiguracao({
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, {
     coordinateGetter: sortableKeyboardCoordinates
   }));
-  const handleDragEnd = (event: DragEndEvent) => {
-    const {
-      active,
-      over
-    } = event;
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
     if (active.id !== over?.id) {
-      // TODO: Implementar reordenação de colunas via API
-      console.log('Reorder columns:', active.id, over?.id);
-      if (onColumnsReorder) {
-        onColumnsReorder(columns);
+      const oldIndex = columns.findIndex(col => col.id === active.id);
+      const newIndex = columns.findIndex(col => col.id === over?.id);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Reorganizar as colunas localmente
+        const newColumns = [...columns];
+        const [reorderedColumn] = newColumns.splice(oldIndex, 1);
+        newColumns.splice(newIndex, 0, reorderedColumn);
+
+        // Atualizar as posições no backend
+        const updates = newColumns.map((col, index) => ({
+          id: col.id,
+          order_position: index
+        }));
+
+        try {
+          for (const update of updates) {
+            await supabase.functions.invoke('pipeline-management/columns', {
+              method: 'PUT',
+              headers: {
+                'x-system-user-id': user?.id || '',
+                'x-system-user-email': user?.email || '',
+                'x-workspace-id': selectedWorkspace?.workspace_id || ''
+              },
+              body: {
+                id: update.id,
+                order_position: update.order_position
+              }
+            });
+          }
+
+          console.log('✅ Colunas reordenadas com sucesso');
+          
+          // Usar a função do contexto para sincronizar
+          if (reorderColumns) {
+            await reorderColumns(newColumns);
+          }
+          
+          // Notificar o componente pai sobre a mudança
+          if (onColumnsReorder) {
+            onColumnsReorder(newColumns);
+          }
+        } catch (error) {
+          console.error('❌ Erro ao reordenar colunas:', error);
+        }
       }
     }
   };
