@@ -690,12 +690,16 @@ export const useWhatsAppConversations = () => {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'conversations' },
         (payload) => {
-          console.log('🔄 Realtime: Conversa atualizada:', {
+          console.log('🔄 Realtime: Conversa atualizada (REPLICA IDENTITY FULL):', {
             id: payload.new?.id,
             workspace_id: payload.new?.workspace_id,
             unread_count: payload.new?.unread_count,
             status: payload.new?.status,
-            current_workspace: selectedWorkspace?.workspace_id
+            agente_ativo: payload.new?.agente_ativo,
+            last_activity_at: payload.new?.last_activity_at,
+            assigned_user_id: payload.new?.assigned_user_id,
+            current_workspace: selectedWorkspace?.workspace_id,
+            full_payload: payload.new
           });
           const updatedConv = payload.new as any;
           
@@ -706,7 +710,7 @@ export const useWhatsAppConversations = () => {
           }
           
           setConversations(prev => {
-            return prev.map(conv => 
+            const updated = prev.map(conv => 
               conv.id === updatedConv.id
                 ? { 
                     ...conv, 
@@ -714,10 +718,27 @@ export const useWhatsAppConversations = () => {
                     unread_count: updatedConv.unread_count,
                     last_activity_at: updatedConv.last_activity_at,
                     status: updatedConv.status,
-                    evolution_instance: (updatedConv as any).evolution_instance ?? conv.evolution_instance
+                    evolution_instance: updatedConv.evolution_instance ?? conv.evolution_instance,
+                    // Atualizar outros campos relevantes se chegarem via realtime
+                    ...(updatedConv.assigned_user_id !== undefined && { assigned_user_id: updatedConv.assigned_user_id }),
+                    ...(updatedConv.priority !== undefined && { priority: updatedConv.priority }),
+                    ...(updatedConv.updated_at !== undefined && { updated_at: updatedConv.updated_at })
                   }
                 : conv
-            ).sort((a, b) => new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime());
+            );
+            
+            // Reordenar por atividade após atualização
+            const sorted = updated.sort((a, b) => 
+              new Date(b.last_activity_at).getTime() - new Date(a.last_activity_at).getTime()
+            );
+            
+            console.log('✅ Lista de conversas atualizada em tempo real:', {
+              total: sorted.length,
+              updated_conversation_id: updatedConv.id,
+              new_order: sorted.slice(0, 3).map(c => ({ id: c.id, unread: c.unread_count, last_activity: c.last_activity_at }))
+            });
+            
+            return sorted;
           });
         }
       )
