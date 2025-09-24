@@ -530,22 +530,42 @@ export const useWhatsAppConversations = () => {
                 const messageExists = conv.messages.some(msg => msg.id === newMessage.id);
                 if (messageExists) return conv;
 
+                // Criar objeto da nova mensagem
+                const messageObj = {
+                  id: newMessage.id,
+                  content: newMessage.content,
+                  sender_type: newMessage.sender_type,
+                  created_at: newMessage.created_at,
+                  read_at: newMessage.read_at,
+                  status: newMessage.status,
+                  message_type: newMessage.message_type,
+                  file_url: newMessage.file_url,
+                  file_name: newMessage.file_name,
+                  origem_resposta: newMessage.origem_resposta || 'manual',
+                };
+
+                // Criar a última mensagem para o card
+                const lastMessage = {
+                  content: newMessage.content,
+                  message_type: newMessage.message_type,
+                  sender_type: newMessage.sender_type,
+                  created_at: newMessage.created_at
+                };
+
                 const updatedConv = {
                   ...conv,
-                  messages: [...conv.messages, {
-                    id: newMessage.id,
-                    content: newMessage.content,
-                    sender_type: newMessage.sender_type,
-                    created_at: newMessage.created_at,
-                    read_at: newMessage.read_at,
-                    status: newMessage.status,
-                    message_type: newMessage.message_type,
-                    file_url: newMessage.file_url,
-                    file_name: newMessage.file_name,
-                    origem_resposta: newMessage.origem_resposta || 'manual',
-                  }],
+                  messages: [...conv.messages, messageObj],
+                  last_message: [lastMessage], // Atualizar last_message
                   last_activity_at: newMessage.created_at
                 };
+
+                console.log('📨 Nova mensagem adicionada com last_message atualizada:', {
+                  conversation_id: conv.id,
+                  message_content: newMessage.content,
+                  message_type: newMessage.message_type,
+                  sender_type: newMessage.sender_type,
+                  last_message_updated: true
+                });
 
                 // O unread_count será atualizado automaticamente pelo trigger no banco
                 // e será refletido via evento UPDATE da conversa que virá em seguida
