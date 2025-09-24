@@ -24,6 +24,7 @@ import { AcceptConversationButton } from "@/components/chat/AcceptConversationBu
 import { EndConversationButton } from "@/components/chat/EndConversationButton";
 import { AddTagButton } from "@/components/chat/AddTagButton";
 import { ContactSidePanel } from "@/components/ContactSidePanel";
+import { ContactTags } from "@/components/chat/ContactTags";
 import { Search, Send, Bot, Phone, MoreVertical, Circle, MessageCircle, ArrowRight, Settings, Users, Trash2, ChevronDown, Filter, Eye, RefreshCw, Mic, Square } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1128,10 +1129,24 @@ export function WhatsAppChat({
                     <h3 className="font-medium text-gray-900 text-base">
                       {selectedConversation.contact.name}
                     </h3>
-                    <AddTagButton conversationId={selectedConversation.id} isDarkMode={isDarkMode} onTagAdded={() => {
-                  // Refresh conversations after adding tag
-                  fetchConversations();
-                }} />
+                    <div className="flex items-center">
+                      <AddTagButton 
+                        conversationId={selectedConversation.id} 
+                        isDarkMode={isDarkMode} 
+                        onTagAdded={() => {
+                          // Refresh conversations after adding tag
+                          fetchConversations();
+                        }} 
+                      />
+                      <ContactTags 
+                        contactId={selectedConversation.contact.id}
+                        isDarkMode={isDarkMode}
+                        onTagRemoved={() => {
+                          // Refresh conversations after removing tag
+                          fetchConversations();
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 

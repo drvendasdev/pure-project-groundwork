@@ -58,25 +58,52 @@ export function useConversationTags(conversationId?: string) {
     }
   };
 
-  // Add tag to conversation
+  // Add tag to conversation and contact
   const addTagToConversation = async (tagId: string) => {
     if (!conversationId) return false;
 
     setIsLoading(true);
     try {
-      const { error } = await supabase
+      // First, get the conversation to find the contact
+      const { data: convData, error: convError } = await supabase
+        .from('conversations')
+        .select('contact_id')
+        .eq('id', conversationId)
+        .single();
+      
+      if (convError) throw convError;
+      
+      // Add tag to conversation
+      const { error: convTagError } = await supabase
         .from('conversation_tags')
         .insert({
           conversation_id: conversationId,
           tag_id: tagId
         });
 
-      if (error) throw error;
+      if (convTagError) throw convTagError;
+
+      // Add tag to contact (if not already exists)
+      if (convData.contact_id) {
+        const { error: contactTagError } = await supabase
+          .from('contact_tags')
+          .upsert({
+            contact_id: convData.contact_id,
+            tag_id: tagId
+          }, {
+            onConflict: 'contact_id,tag_id',
+            ignoreDuplicates: true
+          });
+
+        if (contactTagError) {
+          console.warn('Error adding tag to contact (might already exist):', contactTagError);
+        }
+      }
 
       await fetchConversationTags();
       toast({
         title: "Tag adicionada",
-        description: "A tag foi adicionada à conversa com sucesso.",
+        description: "A tag foi adicionada ao contato com sucesso.",
       });
       
       return true;
@@ -117,6 +144,21 @@ export function useConversationTags(conversationId?: string) {
     isLoading,
     addTagToConversation,
     getFilteredTags,
-    refreshTags: fetchConversationTags
+    refreshTags: fetchConversationTags,
+    fetchContactTags: async (contactId: string) => {
+      // Function to refresh contact tags externally
+      return await supabase
+        .from('contact_tags')
+        .select(`
+          id,
+          tag_id,
+          tags (
+            id,
+            name,
+            color
+          )
+        `)
+        .eq('contact_id', contactId);
+    }
   };
 }
