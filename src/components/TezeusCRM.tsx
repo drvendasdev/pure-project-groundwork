@@ -69,6 +69,7 @@ export function TezeusCRM() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [canNavigateFreely, setCanNavigateFreely] = useState(true);
+  const [isNotificationNavigation, setIsNotificationNavigation] = useState(false);
 
   // Handle dark mode changes
   useEffect(() => {
@@ -101,18 +102,31 @@ export function TezeusCRM() {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const conversationId = searchParams.get('id');
+    
+    console.log('🔔 TezeusCRM - Mudança de URL:', conversationId, 'atual:', selectedConversationId);
+    
     if (conversationId && conversationId !== selectedConversationId) {
+      console.log('🔔 Atualizando selectedConversationId para:', conversationId);
       setSelectedConversationId(conversationId);
-      setCanNavigateFreely(false); // Temporariamente bloquear navegação livre
       
-      // Permitir navegação livre após 2 segundos
-      const timer = setTimeout(() => {
-        setCanNavigateFreely(true);
-      }, 2000);
-      
-      return () => clearTimeout(timer);
+      // ✅ CORREÇÃO 4: Só bloquear navegação se NÃO for via notificação
+      if (!isNotificationNavigation) {
+        setCanNavigateFreely(false);
+        
+        // Permitir navegação livre após tempo reduzido
+        const timer = setTimeout(() => {
+          setCanNavigateFreely(true);
+        }, 1000);
+        
+        return () => clearTimeout(timer);
+      }
+    } else if (!conversationId && selectedConversationId) {
+      // ✅ CORREÇÃO 5: Limpar estado quando não há conversa na URL
+      console.log('🔔 Limpando selectedConversationId');
+      setSelectedConversationId(null);
+      setCanNavigateFreely(true);
     }
-  }, [location.search, selectedConversationId]);
+  }, [location.search, selectedConversationId, isNotificationNavigation]);
 
   // Listener para navegação via toast
   useEffect(() => {
@@ -197,10 +211,19 @@ export function TezeusCRM() {
         isCollapsed={isCollapsed}
         onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         onNavigateToConversation={(conversationId) => {
-          if (canNavigateFreely) {
-            setSelectedConversationId(conversationId);
-            navigate(`/conversas?id=${conversationId}`);
-          }
+          console.log('🔔 TezeusCRM - Navegação via notificação:', conversationId);
+          console.log('🔔 canNavigateFreely:', canNavigateFreely);
+          
+          // ✅ CORREÇÃO 2: Sempre permitir navegação via notificação
+          setIsNotificationNavigation(true);
+          setSelectedConversationId(conversationId);
+          navigate(`/conversas?id=${conversationId}`);
+          
+          // ✅ CORREÇÃO 3: Resetar flags após navegação
+          setTimeout(() => {
+            setCanNavigateFreely(true);
+            setIsNotificationNavigation(false);
+          }, 100);
         }}
       />
       <div className={`flex-1 flex flex-col max-h-screen ${activeModule === 'conversas' || activeModule === 'conexoes' ? 'p-4' : ''}`}>

@@ -414,20 +414,35 @@ export const useWhatsAppConversations = () => {
   // Marcar como lida
   const markAsRead = useCallback(async (conversationId: string) => {
     try {
+      console.log('📖 Marcando conversa como lida:', conversationId);
+      
+      // Get current user data
+      const userData = localStorage.getItem('currentUser');
+      const currentUserData = userData ? JSON.parse(userData) : null;
+      
       // Marcar todas as mensagens do contato como lidas
-      await supabase
+      const { error: messagesError } = await supabase
         .from('messages')
         .update({ read_at: new Date().toISOString() })
         .eq('conversation_id', conversationId)
         .eq('sender_type', 'contact')
         .is('read_at', null);
 
+      if (messagesError) {
+        console.error('❌ Erro ao marcar mensagens como lidas:', messagesError);
+      }
+
       // Atualizar contador de não lidas na conversa
-      await supabase
+      const { error: conversationError } = await supabase
         .from('conversations')
         .update({ unread_count: 0 })
         .eq('id', conversationId);
 
+      if (conversationError) {
+        console.error('❌ Erro ao atualizar contador da conversa:', conversationError);
+      }
+
+      // ✅ CORREÇÃO 7: Atualizar estado local imediatamente
       setConversations(prev => prev.map(conv => 
         conv.id === conversationId 
           ? { 
@@ -441,10 +456,37 @@ export const useWhatsAppConversations = () => {
             }
           : conv
       ));
+
+      // ✅ CORREÇÃO 8: Enviar webhook para N8N (opcional)
+      if (currentUserData?.id && selectedWorkspace?.workspace_id) {
+        try {
+          const headers: Record<string, string> = {
+            'x-system-user-id': currentUserData.id,
+            'x-system-user-email': currentUserData.email || '',
+            'x-workspace-id': selectedWorkspace.workspace_id
+          };
+
+          await supabase.functions.invoke('n8n-message-read-webhook', {
+            body: {
+              conversationId,
+              userId: currentUserData.id,
+              workspaceId: selectedWorkspace.workspace_id
+            },
+            headers
+          });
+          
+          console.log('✅ Webhook N8N enviado para leitura da mensagem');
+        } catch (webhookError) {
+          console.log('⚠️ Erro opcional no webhook N8N:', webhookError);
+          // Não propagar erro do webhook - é opcional
+        }
+      }
+      
+      console.log('✅ Conversa marcada como lida com sucesso');
     } catch (error) {
       console.error('❌ Erro ao marcar como lida:', error);
     }
-  }, []);
+  }, [selectedWorkspace]);
 
   // Limpar todas as conversas
   const clearAllConversations = useCallback(async () => {

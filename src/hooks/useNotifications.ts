@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWhatsAppConversations } from './useWhatsAppConversations';
 import { useNotificationSound } from './useNotificationSound';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
 export interface NotificationMessage {
@@ -23,8 +24,14 @@ export function useNotifications() {
   const [lastToastTime, setLastToastTime] = useState(0);
   const conversationsRef = useRef(conversations);
   
-  // Debug log
+  // Debug logs detalhados
   console.log('🔔 useNotifications - conversations:', conversations.length, 'total unread:', totalUnread);
+  console.log('🔔 useNotifications - conversations array:', conversations.map(c => ({
+    id: c.id,
+    name: c.contact.name,
+    unread: c.unread_count,
+    messages: c.messages?.length || 0
+  })));
   
   // Debounce para evitar re-renders excessivos
   const debounceTimeoutRef = useRef<NodeJS.Timeout>();
@@ -79,49 +86,60 @@ export function useNotifications() {
       conversations.forEach((conv) => {
         console.log('🔔 Processing conv:', conv.contact.name, 'messages:', conv.messages?.length || 0, 'unread_count:', conv.unread_count);
         
-        // Se não há mensagens carregadas, usar o unread_count da conversa
-        if (!conv.messages || conv.messages.length === 0) {
-          unreadCount += conv.unread_count || 0;
-          
-          // Criar notificação baseada nos dados básicos da conversa
-          if (conv.unread_count > 0) {
-            newNotifications.push({
-              id: `${conv.id}-unread`,
-              conversationId: conv.id,
-              contactName: conv.contact.name,
-              contactPhone: conv.contact.phone,
-              content: conv.last_message?.[0]?.content || 'Nova mensagem',
-              messageType: conv.last_message?.[0]?.message_type || 'text',
-              timestamp: new Date(conv.last_activity_at || new Date()),
-              isMedia: ['image', 'video', 'audio', 'document'].includes(conv.last_message?.[0]?.message_type || '')
-            });
-          }
-          return;
-        }
+        // ✅ CORREÇÃO 6: Priorizar unread_count da conversa sempre
+        const convUnreadCount = conv.unread_count || 0;
+        unreadCount += convUnreadCount;
         
-        // Filtrar mensagens não lidas do contato (sender_type = 'contact' e read_at = null)
-        const unreadContactMessages = conv.messages.filter(msg => 
-          msg.sender_type === 'contact' && (!msg.read_at || msg.read_at === null)
-        );
-        
-        unreadCount += unreadContactMessages.length;
-        
-        if (unreadContactMessages.length > 0) {
-          // Pegar APENAS a última mensagem não lida do contato
-          const lastUnreadMessage = unreadContactMessages[unreadContactMessages.length - 1];
-          
-          const isMedia = ['image', 'video', 'audio', 'document'].includes(lastUnreadMessage.message_type || '');
+        // Criar notificação se há mensagens não lidas (baseado em unread_count)
+        if (convUnreadCount > 0) {
+          // Usar última mensagem se disponível, senão criar notificação genérica
+          const lastMsg = conv.last_message?.[0];
           
           newNotifications.push({
-            id: lastUnreadMessage.id,
+            id: `${conv.id}-unread-${convUnreadCount}`, // ✅ ID único baseado no count
             conversationId: conv.id,
             contactName: conv.contact.name,
             contactPhone: conv.contact.phone,
-            content: isMedia ? 'Imagem' : (lastUnreadMessage.content || ''),
-            messageType: lastUnreadMessage.message_type || 'text',
-            timestamp: new Date(lastUnreadMessage.created_at),
-            isMedia
+            content: lastMsg?.content || 'Nova mensagem',
+            messageType: lastMsg?.message_type || 'text',
+            timestamp: new Date(conv.last_activity_at || new Date()),
+            isMedia: ['image', 'video', 'audio', 'document'].includes(lastMsg?.message_type || '')
           });
+          
+          console.log('✅ Notificação criada para:', conv.contact.name, 'unread:', convUnreadCount);
+        }
+        
+        // Se há mensagens carregadas, processar também (para casos específicos)
+        if (conv.messages && conv.messages.length > 0) {
+          // Filtrar mensagens não lidas do contato (sender_type = 'contact' e read_at = null)
+          const unreadContactMessages = conv.messages.filter(msg => 
+            msg.sender_type === 'contact' && (!msg.read_at || msg.read_at === null)
+          );
+          
+          // Não somar aqui pois já foi somado acima via unread_count
+          // unreadCount += unreadContactMessages.length;
+          
+          if (unreadContactMessages.length > 0) {
+            // Pegar APENAS a última mensagem não lida do contato
+            const lastUnreadMessage = unreadContactMessages[unreadContactMessages.length - 1];
+            
+            const isMedia = ['image', 'video', 'audio', 'document'].includes(lastUnreadMessage.message_type || '');
+            
+            // Só adicionar se não já temos notificação baseada em unread_count
+            const existingNotification = newNotifications.find(n => n.conversationId === conv.id);
+            if (!existingNotification) {
+              newNotifications.push({
+                id: lastUnreadMessage.id,
+                conversationId: conv.id,
+                contactName: conv.contact.name,
+                contactPhone: conv.contact.phone,
+                content: isMedia ? 'Imagem' : (lastUnreadMessage.content || ''),
+                messageType: lastUnreadMessage.message_type || 'text',
+                timestamp: new Date(lastUnreadMessage.created_at),
+                isMedia
+              });
+            }
+          }
         }
       });
       
@@ -184,6 +202,62 @@ export function useNotifications() {
     );
     await Promise.all(conversationsWithUnread.map(conv => markAsRead(conv.id)));
   };
+
+  // ✅ CORREÇÃO 9: Subscription em tempo real para mudanças de read_at
+  useEffect(() => {
+    console.log('🔔 Configurando subscription para mudanças de read_at...');
+    
+    const channel = supabase
+      .channel('notifications-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: 'sender_type=eq.contact'
+      }, (payload) => {
+        console.log('🔔 Real-time: Mensagem atualizada:', payload);
+        
+        // Se read_at foi atualizado (mensagem lida), forçar re-processamento
+        if (payload.new?.read_at && !payload.old?.read_at) {
+          console.log('🔔 Mensagem marcada como lida em tempo real');
+          // Trigger debounced update
+          if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+          }
+          
+          debounceTimeoutRef.current = setTimeout(() => {
+            // Forçar re-avaliação das conversações
+            conversationsRef.current = conversations;
+          }, 300);
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'conversations'
+      }, (payload) => {
+        console.log('🔔 Real-time: Conversa atualizada:', payload);
+        
+        // Se unread_count foi alterado, forçar re-processamento
+        if (payload.new?.unread_count !== payload.old?.unread_count) {
+          console.log('🔔 Contador de não lidas alterado em tempo real');
+          if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+          }
+          
+          debounceTimeoutRef.current = setTimeout(() => {
+            // Forçar re-avaliação das conversações
+            conversationsRef.current = conversations;
+          }, 300);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      console.log('🔔 Removendo subscription de notificações');
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return {
     notifications,

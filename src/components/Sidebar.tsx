@@ -294,10 +294,20 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   const administracaoItems = menuItems.filter(item => item.group === "administracao");
 
   const handleNotificationClick = (conversationId: string) => {
+    console.log('🔔 Sidebar - Clique na notificação:', conversationId);
     setIsNotificationOpen(false);
-    // Marcar apenas esta conversa como lida
-    markAsRead(conversationId);
-    onNavigateToConversation?.(conversationId);
+    
+    // ✅ CORREÇÃO 1: Navegar PRIMEIRO, depois marcar como lida
+    if (onNavigateToConversation) {
+      console.log('🚀 Navegando para conversa:', conversationId);
+      onNavigateToConversation(conversationId);
+      
+      // Marcar como lida após uma pequena pausa para garantir que a navegação aconteceu
+      setTimeout(() => {
+        console.log('✅ Marcando conversa como lida:', conversationId);
+        markAsRead(conversationId);
+      }, 500);
+    }
   };
 
   const handleMarkAllAsRead = () => {
