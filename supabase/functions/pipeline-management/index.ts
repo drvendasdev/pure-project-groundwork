@@ -312,7 +312,8 @@ serve(async (req) => {
               contact:contacts(
                 *,
                 contact_tags(
-                  tags(id, name, color)
+                  tag_id,
+                  tags!contact_tags_tag_id_fkey(id, name, color)
                 )
               ),
               conversation:conversations(*),

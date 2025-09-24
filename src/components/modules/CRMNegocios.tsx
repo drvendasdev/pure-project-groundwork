@@ -44,8 +44,8 @@ interface Deal {
     id: string;
     name: string;
     profile_image_url?: string;
-    tags?: string[];
     contact_tags?: Array<{
+      tag_id: string;
       tags: {
         id: string;
         name: string;
@@ -182,6 +182,9 @@ function DraggableDeal({
               {contactTag.tags.name}
             </span>
           ))}
+          {(!deal.contact?.contact_tags || deal.contact.contact_tags.length === 0) && (
+            <span className="text-xs text-muted-foreground italic">Sem tags</span>
+          )}
         </div>
         
         {/* Footer com ícones de ação e prioridade */}
