@@ -36,11 +36,14 @@ serve(async (req) => {
       'image/png': { extension: 'png', mimeType: 'image/png' },
       'image/gif': { extension: 'gif', mimeType: 'image/gif' },
       'image/webp': { extension: 'webp', mimeType: 'image/webp' },
+      'application/pdf': { extension: 'pdf', mimeType: 'application/pdf' },
       'audio/mpeg': { extension: 'mp3', mimeType: 'audio/mpeg' },
       'audio/ogg': { extension: 'ogg', mimeType: 'audio/ogg' },
       'audio/wav': { extension: 'wav', mimeType: 'audio/wav' },
       'video/mp4': { extension: 'mp4', mimeType: 'video/mp4' },
-      'video/webm': { extension: 'webm', mimeType: 'video/webm' }
+      'video/webm': { extension: 'webm', mimeType: 'video/webm' },
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { extension: 'docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { extension: 'xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
     }
 
     // Detectar e validar MIME type seguro
@@ -74,11 +77,14 @@ serve(async (req) => {
             'png': 'image/png',
             'gif': 'image/gif',
             'webp': 'image/webp',
+            'pdf': 'application/pdf',
             'mp3': 'audio/mpeg',
             'ogg': 'audio/ogg',
             'wav': 'audio/wav',
             'mp4': 'video/mp4',
-            'webm': 'video/webm'
+            'webm': 'video/webm',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           }
 
           if (extensionMapping[extension]) {

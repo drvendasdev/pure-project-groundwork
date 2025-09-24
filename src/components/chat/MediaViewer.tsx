@@ -93,7 +93,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
   // PRIMEIRA VERIFICAÇÃO: PDF
   if (isPdfFile) {
-    console.log('🔴 RENDERIZANDO PDF:', { fileName, fileUrl, messageType });
+    console.log('🔴 RENDERIZANDO PDF:', { fileName, fileUrl, messageType, extension: fileName?.split('.').pop()?.toLowerCase() });
     return (
       <div className={className}>
         <div className="relative group">

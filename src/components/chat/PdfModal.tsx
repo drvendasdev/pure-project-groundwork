@@ -61,10 +61,13 @@ export const PdfModal: React.FC<PdfModalProps> = ({
         
         <div className="flex-1 flex items-center justify-center bg-muted/20 rounded-lg overflow-hidden">
           <iframe
-            src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+            src={pdfUrl}
             title={fileName || 'PDF Viewer'}
             className="w-full h-full border-0"
             style={{ minHeight: '500px' }}
+            onError={(e) => {
+              console.error('PDF iframe error:', e);
+            }}
           />
         </div>
       </DialogContent>

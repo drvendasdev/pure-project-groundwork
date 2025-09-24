@@ -95,6 +95,9 @@ serve(async (req) => {
       else if (extension === 'mp4') contentType = 'video/mp4'
       else if (extension === 'ogg') contentType = 'audio/ogg'
       else if (extension === 'mp3') contentType = 'audio/mp3'
+      else if (extension === 'pdf') contentType = 'application/pdf'
+      else if (extension === 'doc' || extension === 'docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      else if (extension === 'xls' || extension === 'xlsx') contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
       const fileBuffer = await fileData.arrayBuffer()
       
