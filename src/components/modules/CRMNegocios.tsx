@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ContactTagsDisplay } from "@/components/crm/ContactTagsDisplay";
 
 // Interface compatível com o componente existente
 interface Deal {
@@ -172,40 +173,7 @@ function DraggableDeal({
         
         {/* Área central para tags do contato */}
         <div className="mb-3 min-h-[28px] flex items-center">
-          {(() => {
-            // Processar tags do formato aninhado do Supabase
-            const contactTags = deal.contact?.contact_tags
-              ?.map(ct => ct.tags)
-              .filter(Boolean) || [];
-            
-            return contactTags.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {contactTags.slice(0, 3).map((tag, index) => (
-                  <Badge 
-                    key={tag.id || index} 
-                    variant="outline" 
-                    className="text-xs px-2 py-0.5 h-auto"
-                    style={{ 
-                      backgroundColor: tag.color || '#808080', 
-                      borderColor: tag.color || '#808080',
-                      color: 'white'
-                    }}
-                  >
-                    {tag.name}
-                  </Badge>
-                ))}
-                {contactTags.length > 3 && (
-                  <Badge variant="outline" className="text-xs px-2 py-0.5 h-auto">
-                    +{contactTags.length - 3}
-                  </Badge>
-                )}
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground italic">
-                Sem tags do contato
-              </span>
-            );
-          })()}
+          <ContactTagsDisplay contactId={deal.contact?.id} />
         </div>
         
         {/* Footer com ícones de ação e prioridade */}
