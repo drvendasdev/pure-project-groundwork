@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { usePipelines } from "@/hooks/usePipelines";
 import { usePipelineColumns } from "@/hooks/usePipelineColumns";
 import { usePipelineCards } from "@/hooks/usePipelineCards";
+import { useContactPipelineCards } from '@/hooks/useContactPipelineCards';
 import { useToast } from "@/hooks/use-toast";
 interface Contact {
   id: string;
@@ -27,6 +28,7 @@ interface Contact {
 interface Deal {
   id: string;
   title: string;
+  description?: string;
   value: number;
   status: string;
   pipeline: string;
@@ -83,6 +85,9 @@ export function ContactSidePanel({
     columns,
     fetchColumns
   } = usePipelineColumns(selectedPipeline || null);
+
+  // Hook para buscar cards do contato
+  const { currentPipeline, transferToPipeline, isLoading: cardsLoading } = useContactPipelineCards(contact?.id || null);
 
   // Hook para criar cards
   const {
@@ -383,23 +388,60 @@ export function ContactSidePanel({
                 <CardContent className="space-y-4">
                   {/* Lista de negócios */}
                   {deals.length > 0 && <div className="space-y-2">
-                      {deals.map(deal => {})}
+                      {deals.map(deal => (
+                        <div key={deal.id} className="p-3 bg-muted rounded-md">
+                          <p className="text-sm font-medium">{deal.title}</p>
+                          <p className="text-xs text-muted-foreground">{deal.description}</p>
+                        </div>
+                      ))}
                     </div>}
 
                   <Separator />
 
                   {/* Criar novo negócio */}
                   <div className="space-y-2">
-                    <Select value={selectedPipeline} onValueChange={setSelectedPipeline} disabled={pipelinesLoading}>
+                    <Select 
+                      value={selectedPipeline} 
+                      onValueChange={(value) => {
+                        if (value !== selectedPipeline && value !== "no-pipelines") {
+                          const pipeline = pipelines.find(p => p.id === value);
+                          if (pipeline) {
+                            transferToPipeline(value, pipeline.name);
+                          }
+                        }
+                        setSelectedPipeline(value);
+                      }} 
+                      disabled={pipelinesLoading || cardsLoading}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder={pipelinesLoading ? "Carregando pipelines..." : "Selecionar pipeline/negócio"} />
+                        <SelectValue 
+                          placeholder={
+                            cardsLoading ? "Carregando..." :
+                            currentPipeline ? `Pipeline Atual: ${currentPipeline.name}` :
+                            pipelinesLoading ? "Carregando pipelines..." : 
+                            "Selecionar pipeline/negócio"
+                          } 
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        {pipelines.length > 0 ? pipelines.map(pipeline => <SelectItem key={pipeline.id} value={pipeline.id}>
-                              {pipeline.name} ({pipeline.type})
-                            </SelectItem>) : <SelectItem value="no-pipelines" disabled>
+                        {currentPipeline && (
+                          <SelectItem value={currentPipeline.id} disabled className="font-medium">
+                            📍 {currentPipeline.name} (Atual)
+                          </SelectItem>
+                        )}
+                        {pipelines.length > 0 ? (
+                          pipelines
+                            .filter(pipeline => pipeline.id !== currentPipeline?.id)
+                            .map(pipeline => (
+                              <SelectItem key={pipeline.id} value={pipeline.id}>
+                                {pipeline.name} ({pipeline.type})
+                              </SelectItem>
+                            ))
+                        ) : (
+                          <SelectItem value="no-pipelines" disabled>
                             Nenhum pipeline encontrado
-                          </SelectItem>}
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     
