@@ -13,6 +13,12 @@ interface Fila {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  color?: string;
+  order_position?: number;
+  distribution_type?: string;
+  ai_agent_id?: string;
+  greeting_message?: string;
+  workspace_id?: string;
 }
 
 export function AutomacoesFilas() {
@@ -111,13 +117,16 @@ export function AutomacoesFilas() {
                   <TableCell className="font-mono text-sm">{fila.id.substring(0, 8)}</TableCell>
                   <TableCell>
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
+                      <div 
+                        className="w-3 h-3 rounded-full mr-2" 
+                        style={{ backgroundColor: fila.color || '#8B5CF6' }}
+                      ></div>
                       {fila.name}
                     </div>
                   </TableCell>
                   <TableCell>1</TableCell>
                   <TableCell className="max-w-xs truncate">
-                    {fila.description || '-'}
+                    {fila.greeting_message || fila.description || '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex space-x-2">

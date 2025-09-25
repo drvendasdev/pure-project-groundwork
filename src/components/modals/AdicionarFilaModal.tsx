@@ -86,6 +86,11 @@ export function AdicionarFilaModal({ open, onOpenChange, onSuccess }: AdicionarF
         .insert({
           name: nome.trim(),
           description: mensagemSaudacao.trim() || null,
+          color: cor,
+          order_position: ordem ? parseInt(ordem) : 0,
+          distribution_type: distribuicao || 'aleatoria',
+          ai_agent_id: agenteId || null,
+          greeting_message: mensagemSaudacao.trim() || null,
           is_active: true
         });
 
