@@ -15,6 +15,16 @@ import { useTags } from "@/hooks/useTags";
 interface FilterModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onApplyFilters?: (filters: FilterData) => void;
+}
+
+interface FilterData {
+  tags: string[];
+  startDate?: Date;
+  endDate?: Date;
+  startTime: { hour: number; minute: number };
+  endTime: { hour: number; minute: number };
+  onlyUnreadMessages: boolean;
 }
 
 interface Tag {
@@ -23,7 +33,7 @@ interface Tag {
   color: string;
 }
 
-export function FilterModal({ open, onOpenChange }: FilterModalProps) {
+export function FilterModal({ open, onOpenChange, onApplyFilters }: FilterModalProps) {
   const { tags: availableTags, isLoading: tagsLoading } = useTags();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date>();
@@ -205,18 +215,34 @@ export function FilterModal({ open, onOpenChange }: FilterModalProps) {
     setStartTime({ hour: 0, minute: 0 });
     setEndTime({ hour: 23, minute: 59 });
     setOnlyUnreadMessages(false);
+    
+    // Limpar filtros aplicados também
+    if (onApplyFilters) {
+      onApplyFilters({
+        tags: [],
+        startDate: undefined,
+        endDate: undefined,
+        startTime: { hour: 0, minute: 0 },
+        endTime: { hour: 23, minute: 59 },
+        onlyUnreadMessages: false
+      });
+    }
   };
 
   const handleApply = () => {
-    // Aplicar filtros aqui
-    console.log({
+    const filterData: FilterData = {
       tags: selectedTags,
       startDate,
       endDate,
       startTime,
       endTime,
       onlyUnreadMessages
-    });
+    };
+    
+    if (onApplyFilters) {
+      onApplyFilters(filterData);
+    }
+    
     onOpenChange(false);
   };
 

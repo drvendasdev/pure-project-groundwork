@@ -276,6 +276,7 @@ export function CRMNegocios({
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [appliedFilters, setAppliedFilters] = useState<{tags: string[]} | null>(null);
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -295,12 +296,28 @@ export function CRMNegocios({
 
   // Função para filtrar cards por coluna
   const getFilteredCards = (columnId: string) => {
-    const columnCards = getCardsByColumn(columnId);
-    if (!searchTerm) return columnCards;
-    return columnCards.filter(card => 
-      card.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      card.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    let columnCards = getCardsByColumn(columnId);
+    
+    // Filtrar por termo de busca
+    if (searchTerm) {
+      columnCards = columnCards.filter(card => 
+        card.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        card.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Filtrar por tags selecionadas
+    if (appliedFilters?.tags && appliedFilters.tags.length > 0) {
+      columnCards = columnCards.filter(card => {
+        // Verificar se o card tem pelo menos uma das tags selecionadas
+        const cardTags = Array.isArray(card.tags) ? card.tags : [];
+        return appliedFilters.tags.some(filterTag => 
+          cardTags.some(cardTag => cardTag === filterTag)
+        );
+      });
+    }
+    
+    return columnCards;
   };
   
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -499,12 +516,22 @@ export function CRMNegocios({
               <div className="relative flex-shrink-0">
                 <Button 
                   size="sm" 
-                  className={cn("bg-warning text-black hover:bg-warning/90 font-medium", isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500")} 
+                  className={cn(
+                    "font-medium relative",
+                    appliedFilters?.tags && appliedFilters.tags.length > 0 
+                      ? "bg-orange-500 text-white hover:bg-orange-600" 
+                      : isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500"
+                  )} 
                   onClick={() => setIsFilterModalOpen(true)} 
                   disabled={!selectedPipeline}
                 >
                   <Filter className="w-4 h-4 mr-2" />
                   Filtrar
+                  {appliedFilters?.tags && appliedFilters.tags.length > 0 && (
+                    <Badge className="ml-2 bg-white text-orange-500 text-xs px-1 py-0 h-auto">
+                      {appliedFilters.tags.length}
+                    </Badge>
+                  )}
                 </Button>
               </div>
               
@@ -735,7 +762,10 @@ export function CRMNegocios({
 
       <FilterModal 
         open={isFilterModalOpen} 
-        onOpenChange={setIsFilterModalOpen} 
+        onOpenChange={setIsFilterModalOpen}
+        onApplyFilters={(filters) => {
+          setAppliedFilters({ tags: filters.tags });
+        }}
       />
 
       <CriarPipelineModal 
