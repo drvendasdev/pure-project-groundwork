@@ -287,6 +287,50 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+
+        if (method === 'DELETE') {
+          const columnId = url.searchParams.get('id');
+          if (!columnId) {
+            return new Response(
+              JSON.stringify({ error: 'Column ID required' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          console.log('🗑️ Deleting column:', columnId);
+
+          // First, check if there are any cards in this column
+          const { data: cards, error: cardsError } = await supabaseClient
+            .from('pipeline_cards')
+            .select('id')
+            .eq('column_id', columnId);
+
+          if (cardsError) throw cardsError;
+
+          if (cards && cards.length > 0) {
+            return new Response(
+              JSON.stringify({ 
+                error: 'Cannot delete column with existing cards. Move cards to another column first.',
+                cardsCount: cards.length 
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Delete the column
+          const { error } = await supabaseClient
+            .from('pipeline_columns')
+            .delete()
+            .eq('id', columnId);
+
+          if (error) throw error;
+
+          console.log('✅ Column deleted successfully:', columnId);
+          
+          return new Response(JSON.stringify({ success: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         break;
 
       case 'cards':

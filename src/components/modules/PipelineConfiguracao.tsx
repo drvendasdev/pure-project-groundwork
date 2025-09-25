@@ -15,6 +15,7 @@ import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor, KeyboardSensor } from '@dnd-kit/core';
 import { SortableContext, useSortable, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -228,7 +229,8 @@ export default function PipelineConfiguracao({
     selectedPipeline,
     reorderColumns,
     pipelines,
-    isLoadingColumns
+    isLoadingColumns,
+    selectPipeline
   } = usePipelinesContext();
   const {
     user
@@ -236,6 +238,7 @@ export default function PipelineConfiguracao({
   const {
     selectedWorkspace
   } = useWorkspace();
+  const { toast } = useToast();
   const [pipelineName, setPipelineName] = useState(selectedPipeline?.name || "Vendas");
   const [pipelineType, setPipelineType] = useState(selectedPipeline?.type || "padrao");
   const [currency, setCurrency] = useState("brl");
@@ -269,9 +272,46 @@ export default function PipelineConfiguracao({
       console.error('Error updating column permissions:', error);
     }
   };
-  const deleteColumn = (columnId: string) => {
-    // TODO: Implementar exclusão de coluna via API
-    console.log('Delete column:', columnId);
+  const deleteColumn = async (columnId: string) => {
+    try {
+      console.log('🗑️ Deleting column:', columnId);
+      
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/columns?id=${columnId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+
+      if (error) throw error;
+
+      console.log('✅ Column deleted successfully');
+      
+      // Refresh columns after deletion by reloading the current pipeline
+      if (selectedPipeline) {
+        selectPipeline(selectedPipeline);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error deleting column:', error);
+      
+      // Show user-friendly error message
+      if (error.message?.includes('existing cards')) {
+        toast({
+          title: "Erro ao excluir coluna",
+          description: "Não é possível excluir uma coluna que contém cards. Mova os cards para outra coluna primeiro.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erro ao excluir coluna",
+          description: "Ocorreu um erro ao tentar excluir a coluna. Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    }
   };
   const addNewAction = () => {
     const newAction: Action = {
