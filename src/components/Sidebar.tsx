@@ -154,27 +154,9 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       group: "automacoes"
     },
     {
-      id: "automacoes-bot",
-      label: "DS Bot",
-      icon: <Bot className="w-5 h-5" />,
-      group: "automacoes"
-    },
-    {
-      id: "automacoes-integracoes",
-      label: "Integrações",
-      icon: <GitBranch className="w-5 h-5" />,
-      group: "automacoes"
-    },
-    {
       id: "automacoes-filas",
       label: "Filas",
       icon: <Users className="w-5 h-5" />,
-      group: "automacoes"
-    },
-    {
-      id: "automacoes-api",
-      label: "API",
-      icon: <Zap className="w-5 h-5" />,
       group: "automacoes"
     },
     {
