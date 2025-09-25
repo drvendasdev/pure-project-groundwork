@@ -753,7 +753,7 @@ export function CRMNegocios({
                          style={{ borderTopColor: column.color }}
                        >
                         {/* Cabeçalho da coluna - fundo branco/claro */}
-                        <div className="bg-background/95 p-4 pb-3 flex-shrink-0 rounded-t-lg">
+                        <div className="bg-white p-4 pb-3 flex-shrink-0 rounded-t border-b border-border/20">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <h3 className="font-semibold text-foreground text-base mb-1">
