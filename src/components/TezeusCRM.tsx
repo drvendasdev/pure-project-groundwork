@@ -194,7 +194,7 @@ export function TezeusCRM() {
   };
 
   return (
-    <div className="min-h-screen flex w-full gap-2 bg-gradient-to-br from-background via-background to-muted zoom-out-desktop">
+    <div className="min-h-screen flex w-full gap-2 bg-gradient-to-br from-background via-background to-muted">
       <Sidebar 
         activeModule={activeModule}
         onModuleChange={(module) => {

@@ -137,16 +137,6 @@
   min-width: 9rem;
 }
 
-/* Desktop zoom-out effect */
-.zoom-out-desktop {
-  @media (min-width: 1024px) {
-    transform: scale(0.8);
-    transform-origin: top left;
-    width: 125%; /* 100% / 0.8 = 125% para compensar */
-    height: 125%;
-  }
-}
-
 /* Custom scrollbar styling */
 * {
   scrollbar-width: thin;
