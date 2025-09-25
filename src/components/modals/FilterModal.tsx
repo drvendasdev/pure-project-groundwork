@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useTags } from "@/hooks/useTags";
 
 interface FilterModalProps {
   open: boolean;
@@ -22,17 +23,8 @@ interface Tag {
   color: string;
 }
 
-const availableTags: Tag[] = [
-  { id: "cliente-revendedora", name: "Cliente revendedora", color: "#8b5cf6" },
-  { id: "cliente-varejo", name: "Cliente varejo", color: "#10b981" },
-  { id: "guia-turistico", name: "Guia turístico", color: "#f59e0b" },
-  { id: "lojista-bairro", name: "Lojista de bairro", color: "#ec4899" },
-  { id: "lojista-feirao-lu", name: "Lojista do Feirão do Lu", color: "#3b82f6" },
-  { id: "lojista-outro-feirao", name: "Lojista outro Feirão", color: "#10b981" },
-  { id: "teste-interno", name: "TESTE INTERNO", color: "#ef4444" },
-];
-
 export function FilterModal({ open, onOpenChange }: FilterModalProps) {
+  const { tags: availableTags, isLoading: tagsLoading } = useTags();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
@@ -246,8 +238,11 @@ export function FilterModal({ open, onOpenChange }: FilterModalProps) {
                 <Button
                   variant="outline"
                   className="w-full justify-start text-left font-normal mt-1"
+                  disabled={tagsLoading}
                 >
-                  {selectedTags.length === 0 ? (
+                  {tagsLoading ? (
+                    <span className="text-muted-foreground">Carregando tags...</span>
+                  ) : selectedTags.length === 0 ? (
                     <span className="text-muted-foreground">Selecionar tags</span>
                   ) : (
                     <span>{selectedTags.length} tag(s) selecionada(s)</span>
@@ -256,25 +251,35 @@ export function FilterModal({ open, onOpenChange }: FilterModalProps) {
               </PopoverTrigger>
               <PopoverContent className="w-80 p-0" align="start">
                 <div className="max-h-60 overflow-y-auto p-2">
-                  {availableTags.map((tag) => (
-                    <div
-                      key={tag.id}
-                      className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                      onClick={() => toggleTag(tag.id)}
-                    >
-                      <Checkbox
-                        checked={selectedTags.includes(tag.id)}
-                        onCheckedChange={() => toggleTag(tag.id)}
-                      />
-                      <div className="flex items-center space-x-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        <span className="text-sm">{tag.name}</span>
-                      </div>
+                  {tagsLoading ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      Carregando tags...
                     </div>
-                  ))}
+                  ) : availableTags.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      Nenhuma tag encontrada
+                    </div>
+                  ) : (
+                    availableTags.map((tag) => (
+                      <div
+                        key={tag.id}
+                        className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                        onClick={() => toggleTag(tag.id)}
+                      >
+                        <Checkbox
+                          checked={selectedTags.includes(tag.id)}
+                          onCheckedChange={() => toggleTag(tag.id)}
+                        />
+                        <div className="flex items-center space-x-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          <span className="text-sm">{tag.name}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
