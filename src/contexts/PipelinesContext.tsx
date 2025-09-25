@@ -52,6 +52,7 @@ interface PipelinesContextType {
   columns: PipelineColumn[];
   cards: PipelineCard[];
   isLoading: boolean;
+  isLoadingColumns: boolean;
   fetchPipelines: () => Promise<void>;
   createPipeline: (name: string, type: string) => Promise<Pipeline>;
   selectPipeline: (pipeline: Pipeline) => void;
@@ -71,6 +72,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
   const [columns, setColumns] = useState<PipelineColumn[]>([]);
   const [cards, setCards] = useState<PipelineCard[]>([]);
   const [isLoading, setIsLoading] = useState(true); // Start as loading
+  const [isLoadingColumns, setIsLoadingColumns] = useState(false);
   const { selectedWorkspace } = useWorkspace();
   const { toast } = useToast();
   const { user, userRole } = useAuth();
@@ -138,6 +140,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     if (!getHeaders || !pipelineId) return;
 
     try {
+      setIsLoadingColumns(true);
       const { data, error } = await supabase.functions.invoke(`pipeline-management/columns?pipeline_id=${pipelineId}`, {
         method: 'GET',
         headers: getHeaders
@@ -152,6 +155,8 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
         description: "Erro ao carregar colunas",
         variant: "destructive",
       });
+    } finally {
+      setIsLoadingColumns(false);
     }
   }, [getHeaders, toast]);
 
@@ -210,6 +215,9 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
 
   const selectPipeline = useCallback((pipeline: Pipeline) => {
     setSelectedPipeline(pipeline);
+    // Clear columns immediately when switching pipelines to trigger skeleton
+    setColumns([]);
+    setCards([]);
   }, []);
 
   const createColumn = useCallback(async (name: string, color: string) => {
@@ -369,6 +377,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     columns,
     cards,
     isLoading,
+    isLoadingColumns,
     fetchPipelines,
     createPipeline,
     selectPipeline,
