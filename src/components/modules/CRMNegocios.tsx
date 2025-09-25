@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { formatDistanceToNow, differenceInHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useToast } from "@/hooks/use-toast";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, closestCenter, DragOverEvent, Active, Over } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -288,6 +289,7 @@ export function CRMNegocios({
 }: CRMNegociosProps) {
   const { selectedWorkspace } = useWorkspace();
   const { canManagePipelines, canManageColumns } = useWorkspaceRole();
+  const { toast } = useToast();
   const {
     pipelines,
     selectedPipeline,
@@ -299,7 +301,8 @@ export function CRMNegocios({
     selectPipeline,
     createColumn,
     moveCard,
-    getCardsByColumn
+    getCardsByColumn,
+    updateCard
   } = usePipelinesContext();
   const { activeUsers, isLoading: isLoadingActiveUsers } = usePipelineActiveUsers(selectedPipeline?.id);
   
@@ -453,19 +456,22 @@ export function CRMNegocios({
     if (!selectedCardForValue) return;
     
     try {
-      // Atualizar o card no contexto do pipeline
-      const cardId = selectedCardForValue.id;
+      // Usar a função updateCard do contexto para salvar o valor
+      await updateCard(selectedCardForValue.id, { value });
       
-      // Fazer a atualização via API/context
-      // Como estamos trabalhando com o contexto de pipelines, vamos simular a atualização
-      // Em uma implementação real, isso seria feito via API
-      
-      // Por enquanto, vamos fechar o modal - a implementação completa seria via context
-      console.log('Atualizando valor do card:', cardId, 'para:', value);
+      toast({
+        title: "Sucesso",
+        description: "Valor do negócio atualizado com sucesso",
+      });
       
       setSelectedCardForValue(null);
     } catch (error) {
       console.error('Erro ao atualizar valor do card:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar valor do negócio",
+        variant: "destructive",
+      });
     }
   };
   
