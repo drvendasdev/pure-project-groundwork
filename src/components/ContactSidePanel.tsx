@@ -16,7 +16,6 @@ import { usePipelines } from "@/hooks/usePipelines";
 import { usePipelineColumns } from "@/hooks/usePipelineColumns";
 import { usePipelineCards } from "@/hooks/usePipelineCards";
 import { useToast } from "@/hooks/use-toast";
-
 interface Contact {
   id: string;
   name: string;
@@ -25,7 +24,6 @@ interface Contact {
   profile_image_url?: string;
   extra_info?: Record<string, any>;
 }
-
 interface Deal {
   id: string;
   title: string;
@@ -33,7 +31,6 @@ interface Deal {
   status: string;
   pipeline: string;
 }
-
 interface Observation {
   id: string;
   content: string;
@@ -41,7 +38,6 @@ interface Observation {
   attachment_url?: string;
   attachment_name?: string;
 }
-
 interface ContactSidePanelProps {
   isOpen: boolean;
   onClose: () => void;
@@ -55,57 +51,79 @@ const getInitials = (name: string) => {
 
 // Função auxiliar para cor do avatar
 const getAvatarColor = (name: string) => {
-  const colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
-  ];
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'];
   const hash = name.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
   return colors[hash % colors.length];
 };
-
-export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelProps) {
+export function ContactSidePanel({
+  isOpen,
+  onClose,
+  contact
+}: ContactSidePanelProps) {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>([]);
-  const [newCustomField, setNewCustomField] = useState({ key: '', value: '' });
+  const [customFields, setCustomFields] = useState<Array<{
+    key: string;
+    value: string;
+  }>>([]);
+  const [newCustomField, setNewCustomField] = useState({
+    key: '',
+    value: ''
+  });
   const [newObservation, setNewObservation] = useState('');
   const [selectedPipeline, setSelectedPipeline] = useState('');
-  
+
   // Hook para buscar pipelines reais
-  const { pipelines, isLoading: pipelinesLoading } = usePipelines();
-  
+  const {
+    pipelines,
+    isLoading: pipelinesLoading
+  } = usePipelines();
+
   // Hook para buscar colunas do pipeline selecionado
-  const { columns, fetchColumns } = usePipelineColumns(selectedPipeline || null);
-  
+  const {
+    columns,
+    fetchColumns
+  } = usePipelineColumns(selectedPipeline || null);
+
   // Hook para criar cards
-  const { createCard } = usePipelineCards(selectedPipeline || null);
-  
+  const {
+    createCard
+  } = usePipelineCards(selectedPipeline || null);
+
   // Hook para toast
-  const { toast } = useToast();
+  const {
+    toast
+  } = useToast();
 
   // Mock data para demonstração
-  const [deals] = useState<Deal[]>([
-    { id: '1', title: 'Proposta de Vendas', value: 5000, status: 'Em Negociação', pipeline: 'Vendas' },
-    { id: '2', title: 'Upsell Premium', value: 1500, status: 'Qualificado', pipeline: 'Expansão' }
-  ]);
-
-  const [observations] = useState<Observation[]>([
-    { 
-      id: '1', 
-      content: 'Cliente demonstrou interesse em produtos premium', 
-      created_at: '2024-01-15T10:30:00Z',
-    },
-    { 
-      id: '2', 
-      content: 'Enviado proposta comercial', 
-      created_at: '2024-01-14T14:20:00Z',
-      attachment_url: '#',
-      attachment_name: 'proposta_comercial.pdf'
-    }
-  ]);
-
+  const [deals] = useState<Deal[]>([{
+    id: '1',
+    title: 'Proposta de Vendas',
+    value: 5000,
+    status: 'Em Negociação',
+    pipeline: 'Vendas'
+  }, {
+    id: '2',
+    title: 'Upsell Premium',
+    value: 1500,
+    status: 'Qualificado',
+    pipeline: 'Expansão'
+  }]);
+  const [observations] = useState<Observation[]>([{
+    id: '1',
+    content: 'Cliente demonstrou interesse em produtos premium',
+    created_at: '2024-01-15T10:30:00Z'
+  }, {
+    id: '2',
+    content: 'Enviado proposta comercial',
+    created_at: '2024-01-14T14:20:00Z',
+    attachment_url: '#',
+    attachment_name: 'proposta_comercial.pdf'
+  }]);
   useEffect(() => {
     if (contact) {
-      setEditingContact({ ...contact });
+      setEditingContact({
+        ...contact
+      });
       // Converter extra_info em campos personalizados
       if (contact.extra_info) {
         const fields = Object.entries(contact.extra_info).map(([key, value]) => ({
@@ -118,10 +136,8 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
       }
     }
   }, [contact]);
-
   const handleSaveContact = async () => {
     if (!editingContact) return;
-    
     try {
       // Converter campos customizados de volta para extra_info
       const updatedExtraInfo = customFields.reduce((acc, field) => {
@@ -134,18 +150,16 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
         ...editingContact,
         extra_info: updatedExtraInfo
       };
-
       console.log('Salvando contato:', updatedContact);
       console.log('Campos personalizados:', customFields);
-      
+
       // Se um pipeline foi selecionado, criar um card na primeira coluna
       if (selectedPipeline && selectedPipeline !== 'no-pipelines') {
         // Buscar as colunas do pipeline selecionado
         await fetchColumns();
-        
+
         // Encontrar a primeira coluna (menor order_position)
         const firstColumn = columns.sort((a, b) => a.order_position - b.order_position)[0];
-        
         if (firstColumn) {
           await createCard({
             column_id: firstColumn.id,
@@ -155,24 +169,23 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
             value: 0,
             status: 'aberto'
           });
-          
           toast({
             title: "Sucesso",
-            description: "Dados salvos e card criado no pipeline!",
+            description: "Dados salvos e card criado no pipeline!"
           });
         } else {
           toast({
             title: "Aviso",
-            description: "Pipeline selecionado não possui colunas. Dados salvos.",
+            description: "Pipeline selecionado não possui colunas. Dados salvos."
           });
         }
       } else {
         toast({
-          title: "Sucesso", 
-          description: "Dados do contato salvos com sucesso",
+          title: "Sucesso",
+          description: "Dados do contato salvos com sucesso"
         });
       }
-      
+
       // Fecha o painel após salvar
       onClose();
     } catch (error) {
@@ -180,51 +193,46 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
       toast({
         title: "Erro",
         description: "Erro ao salvar dados do contato",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
-
   const handleAddCustomField = () => {
     if (!newCustomField.key.trim() || !newCustomField.value.trim()) {
       toast({
         title: "Erro",
         description: "Preencha o nome do campo e o valor",
-        variant: "destructive",
+        variant: "destructive"
       });
       return;
     }
 
     // Verificar se o campo já existe
-    const fieldExists = customFields.some(field => 
-      field.key.toLowerCase() === newCustomField.key.trim().toLowerCase()
-    );
-
+    const fieldExists = customFields.some(field => field.key.toLowerCase() === newCustomField.key.trim().toLowerCase());
     if (fieldExists) {
       toast({
         title: "Erro",
         description: "Este campo já existe. Use um nome diferente.",
-        variant: "destructive",
+        variant: "destructive"
       });
       return;
     }
-
-    setCustomFields([...customFields, { 
-      key: newCustomField.key.trim(), 
-      value: newCustomField.value.trim() 
+    setCustomFields([...customFields, {
+      key: newCustomField.key.trim(),
+      value: newCustomField.value.trim()
     }]);
-    setNewCustomField({ key: '', value: '' });
-    
+    setNewCustomField({
+      key: '',
+      value: ''
+    });
     toast({
       title: "Sucesso",
-      description: "Campo adicionado com sucesso!",
+      description: "Campo adicionado com sucesso!"
     });
   };
-
   const handleRemoveCustomField = (index: number) => {
     setCustomFields(customFields.filter((_, i) => i !== index));
   };
-
   const handleAddObservation = () => {
     if (newObservation.trim()) {
       // Aqui você implementaria a chamada para salvar a observação
@@ -232,14 +240,12 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
       setNewObservation('');
     }
   };
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
     }).format(value);
   };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -249,11 +255,8 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
       minute: '2-digit'
     });
   };
-
   if (!contact) return null;
-
-  return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
+  return <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="right" className="w-[500px] sm:w-[540px] p-0">
         <div className="flex flex-col h-full">
           {/* Cabeçalho */}
@@ -277,17 +280,10 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                   {/* Avatar e upload de imagem */}
                   <div className="flex items-center gap-4">
                     <Avatar className="h-16 w-16">
-                      {editingContact?.profile_image_url && (
-                        <AvatarImage 
-                          src={editingContact.profile_image_url} 
-                          alt={editingContact.name} 
-                          className="object-cover" 
-                        />
-                      )}
-                      <AvatarFallback 
-                        className="text-white font-medium"
-                        style={{ backgroundColor: getAvatarColor(editingContact?.name || '') }}
-                      >
+                      {editingContact?.profile_image_url && <AvatarImage src={editingContact.profile_image_url} alt={editingContact.name} className="object-cover" />}
+                      <AvatarFallback className="text-white font-medium" style={{
+                      backgroundColor: getAvatarColor(editingContact?.name || '')
+                    }}>
                         {getInitials(editingContact?.name || '')}
                       </AvatarFallback>
                     </Avatar>
@@ -301,36 +297,26 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                   <div className="grid grid-cols-1 gap-4">
                     <div>
                       <Label htmlFor="name">Nome</Label>
-                      <Input
-                        id="name"
-                        value={editingContact?.name || ''}
-                        onChange={(e) => setEditingContact(prev => 
-                          prev ? { ...prev, name: e.target.value } : null
-                        )}
-                      />
+                      <Input id="name" value={editingContact?.name || ''} onChange={e => setEditingContact(prev => prev ? {
+                      ...prev,
+                      name: e.target.value
+                    } : null)} />
                     </div>
                     
                     <div>
                       <Label htmlFor="phone">Telefone</Label>
-                      <Input
-                        id="phone"
-                        value={editingContact?.phone || ''}
-                        onChange={(e) => setEditingContact(prev => 
-                          prev ? { ...prev, phone: e.target.value } : null
-                        )}
-                      />
+                      <Input id="phone" value={editingContact?.phone || ''} onChange={e => setEditingContact(prev => prev ? {
+                      ...prev,
+                      phone: e.target.value
+                    } : null)} />
                     </div>
                     
                     <div>
                       <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={editingContact?.email || ''}
-                        onChange={(e) => setEditingContact(prev => 
-                          prev ? { ...prev, email: e.target.value } : null
-                        )}
-                      />
+                      <Input id="email" type="email" value={editingContact?.email || ''} onChange={e => setEditingContact(prev => prev ? {
+                      ...prev,
+                      email: e.target.value
+                    } : null)} />
                     </div>
                   </div>
 
@@ -347,25 +333,17 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Lista de campos personalizados */}
-                  {customFields.length > 0 && (
-                    <div className="space-y-2">
-                      {customFields.map((field, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                  {customFields.length > 0 && <div className="space-y-2">
+                      {customFields.map((field, index) => <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <div>
                             <span className="font-medium text-sm">{field.key}:</span>
                             <span className="text-sm ml-2">{field.value}</span>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveCustomField(index)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveCustomField(index)}>
                             <X className="h-4 w-4" />
                           </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        </div>)}
+                    </div>}
 
                    {/* Adicionar novo campo */}
                    <div className="space-y-3">
@@ -374,34 +352,22 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                          <Label htmlFor="field-name" className="text-xs text-muted-foreground">
                            Nome do campo
                          </Label>
-                         <Input
-                           id="field-name"
-                           placeholder="ex: Nome da empresa"
-                           value={newCustomField.key}
-                           onChange={(e) => setNewCustomField(prev => ({ ...prev, key: e.target.value }))}
-                           className="text-sm"
-                         />
+                         <Input id="field-name" placeholder="ex: Nome da empresa" value={newCustomField.key} onChange={e => setNewCustomField(prev => ({
+                        ...prev,
+                        key: e.target.value
+                      }))} className="text-sm" />
                        </div>
                        <div className="space-y-1">
                          <Label htmlFor="field-value" className="text-xs text-muted-foreground">
                            Valor
                          </Label>
-                         <Input
-                           id="field-value"
-                           placeholder="ex: empresa-x"
-                           value={newCustomField.value}
-                           onChange={(e) => setNewCustomField(prev => ({ ...prev, value: e.target.value }))}
-                           className="text-sm"
-                         />
+                         <Input id="field-value" placeholder="ex: empresa-x" value={newCustomField.value} onChange={e => setNewCustomField(prev => ({
+                        ...prev,
+                        value: e.target.value
+                      }))} className="text-sm" />
                        </div>
                      </div>
-                     <Button 
-                       variant="outline" 
-                       size="sm" 
-                       onClick={handleAddCustomField}
-                       disabled={!newCustomField.key.trim() || !newCustomField.value.trim()}
-                       className="w-full"
-                     >
+                     <Button variant="outline" size="sm" onClick={handleAddCustomField} disabled={!newCustomField.key.trim() || !newCustomField.value.trim()} className="w-full">
                        <Plus className="h-4 w-4 mr-2" />
                        Adicionar informação
                      </Button>
@@ -416,22 +382,9 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Lista de negócios */}
-                  {deals.length > 0 && (
-                    <div className="space-y-2">
-                      {deals.map((deal) => (
-                        <div key={deal.id} className="p-3 border rounded-md">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-medium text-sm">{deal.title}</h4>
-                            <Badge variant="secondary">{deal.status}</Badge>
-                          </div>
-                          <div className="flex items-center justify-between text-sm text-muted-foreground">
-                            <span>{deal.pipeline}</span>
-                            <span className="font-medium text-green-600">{formatCurrency(deal.value)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {deals.length > 0 && <div className="space-y-2">
+                      {deals.map(deal => {})}
+                    </div>}
 
                   <Separator />
 
@@ -442,23 +395,14 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                         <SelectValue placeholder={pipelinesLoading ? "Carregando pipelines..." : "Selecionar pipeline/negócio"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {pipelines.length > 0 ? (
-                          pipelines.map((pipeline) => (
-                            <SelectItem key={pipeline.id} value={pipeline.id}>
+                        {pipelines.length > 0 ? pipelines.map(pipeline => <SelectItem key={pipeline.id} value={pipeline.id}>
                               {pipeline.name} ({pipeline.type})
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-pipelines" disabled>
+                            </SelectItem>) : <SelectItem value="no-pipelines" disabled>
                             Nenhum pipeline encontrado
-                          </SelectItem>
-                        )}
+                          </SelectItem>}
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm" disabled={!selectedPipeline || selectedPipeline === 'no-pipelines' || pipelinesLoading}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Criar novo negócio
-                    </Button>
+                    
                   </div>
                 </CardContent>
               </Card>
@@ -470,45 +414,30 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Lista de observações */}
-                  {observations.length > 0 && (
-                    <div className="space-y-3">
-                      {observations.map((obs) => (
-                        <div key={obs.id} className="p-3 bg-muted rounded-md">
+                  {observations.length > 0 && <div className="space-y-3">
+                      {observations.map(obs => <div key={obs.id} className="p-3 bg-muted rounded-md">
                           <p className="text-sm mb-2">{obs.content}</p>
-                          {obs.attachment_url && obs.attachment_name && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {obs.attachment_url && obs.attachment_name && <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <FileText className="h-3 w-3" />
                               <span>{obs.attachment_name}</span>
-                            </div>
-                          )}
+                            </div>}
                           <div className="text-xs text-muted-foreground mt-2">
                             {formatDate(obs.created_at)}
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        </div>)}
+                    </div>}
 
                   <Separator />
 
                   {/* Adicionar nova observação */}
                   <div className="space-y-2">
-                    <Textarea
-                      placeholder="Digite sua observação..."
-                      value={newObservation}
-                      onChange={(e) => setNewObservation(e.target.value)}
-                      rows={3}
-                    />
+                    <Textarea placeholder="Digite sua observação..." value={newObservation} onChange={e => setNewObservation(e.target.value)} rows={3} />
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm">
                         <Paperclip className="h-4 w-4 mr-2" />
                         Anexar arquivo
                       </Button>
-                      <Button 
-                        size="sm" 
-                        onClick={handleAddObservation}
-                        disabled={!newObservation.trim()}
-                      >
+                      <Button size="sm" onClick={handleAddObservation} disabled={!newObservation.trim()}>
                         <Plus className="h-4 w-4 mr-2" />
                         Adicionar
                       </Button>
@@ -520,6 +449,5 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
           </ScrollArea>
         </div>
       </SheetContent>
-    </Sheet>
-  );
+    </Sheet>;
 }
