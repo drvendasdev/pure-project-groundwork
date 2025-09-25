@@ -1,206 +1,366 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Edit2, Trash2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Edit, Trash2, Search } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Product {
   id: string;
   name: string;
-  description: string;
-  price: number;
-  category: string;
-  status: 'active' | 'inactive';
+  value: number;
 }
 
 export function CRMProdutos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<Product[]>([
-    {
-      id: '1',
-      name: 'Produto A',
-      description: 'Descrição do produto A',
-      price: 1500.00,
-      category: 'Categoria 1',
-      status: 'active'
-    },
-    {
-      id: '2',
-      name: 'Produto B',
-      description: 'Descrição do produto B',
-      price: 2500.00,
-      category: 'Categoria 2',
-      status: 'active'
-    }
+    { id: '1', name: 'ExLuir', value: 150.00 },
+    { id: '2', name: 'Gestão de Tráfego Pago - Meta (IG/FB)', value: 3000.00 },
+    { id: '3', name: 'Treinamento Lojista Milionário (Novo e lojista)', value: 7000.00 },
+    { id: '4', name: 'Treinamento Lojista Milionário (Feirão)', value: 0.01 },
+    { id: '5', name: 'ERP BLINO - Mensalidade', value: 3000.00 },
+    { id: '6', name: 'ERP BLINO - Implantação', value: 5000.00 },
+    { id: '7', name: 'Tezeus - 4o usuário em diante', value: 150.00 },
+    { id: '8', name: 'Tezeus - Nova Conexão (Novo Chip conectado)', value: 150.00 },
+    { id: '9', name: 'Tezeus - Mensalidade', value: 3000.00 },
+    { id: '10', name: 'Tezeus - Implantação', value: 5000.00 },
   ]);
+  
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newProduct, setNewProduct] = useState({
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  
+  const [formData, setFormData] = useState({
     name: '',
-    description: '',
-    price: '',
-    category: ''
+    value: ''
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchTerm.toLowerCase())
+    product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentProducts = filteredProducts.slice(startIndex, endIndex);
+
+  const resetForm = () => {
+    setFormData({ name: '', value: '' });
+  };
+
   const handleCreateProduct = () => {
-    const product: Product = {
+    if (!formData.name.trim()) return;
+    
+    const newProduct: Product = {
       id: Date.now().toString(),
-      name: newProduct.name,
-      description: newProduct.description,
-      price: parseFloat(newProduct.price) || 0,
-      category: newProduct.category,
-      status: 'active'
+      name: formData.name.trim(),
+      value: parseFloat(formData.value) || 0
     };
 
-    setProducts([...products, product]);
-    setNewProduct({ name: '', description: '', price: '', category: '' });
+    setProducts([...products, newProduct]);
+    resetForm();
     setIsCreateModalOpen(false);
   };
 
-  const handleDeleteProduct = (id: string) => {
-    setProducts(products.filter(p => p.id !== id));
+  const handleEditProduct = () => {
+    if (!selectedProduct || !formData.name.trim()) return;
+    
+    setProducts(products.map(p => 
+      p.id === selectedProduct.id 
+        ? { ...p, name: formData.name.trim(), value: parseFloat(formData.value) || 0 }
+        : p
+    ));
+    resetForm();
+    setIsEditModalOpen(false);
+    setSelectedProduct(null);
+  };
+
+  const handleDeleteProduct = () => {
+    if (!productToDelete) return;
+    
+    setProducts(products.filter(p => p.id !== productToDelete.id));
+    setIsDeleteModalOpen(false);
+    setProductToDelete(null);
+  };
+
+  const openEditModal = (product: Product) => {
+    setSelectedProduct(product);
+    setFormData({
+      name: product.name,
+      value: product.value.toString()
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const openDeleteModal = (product: Product) => {
+    setProductToDelete(product);
+    setIsDeleteModalOpen(true);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
   };
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Produtos Comerciais</h1>
-          <p className="text-muted-foreground">Gerencie os produtos disponíveis para vendas</p>
-        </div>
+        <h1 className="text-2xl font-bold text-foreground">Produtos Comerciais</h1>
         
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Produto
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Criar Novo Produto</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nome do Produto</Label>
-                <Input
-                  id="name"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                  placeholder="Digite o nome do produto"
-                />
-              </div>
-              <div>
-                <Label htmlFor="description">Descrição</Label>
-                <Textarea
-                  id="description"
-                  value={newProduct.description}
-                  onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
-                  placeholder="Digite a descrição do produto"
-                />
-              </div>
-              <div>
-                <Label htmlFor="price">Preço</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  step="0.01"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-                  placeholder="0,00"
-                />
-              </div>
-              <div>
-                <Label htmlFor="category">Categoria</Label>
-                <Input
-                  id="category"
-                  value={newProduct.category}
-                  onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
-                  placeholder="Digite a categoria"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleCreateProduct}>
-                  Criar Produto
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button 
+          onClick={() => {
+            resetForm();
+            setIsCreateModalOpen(true);
+          }}
+          className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
+        >
+          Adicionar Produto
+        </Button>
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-        <Input
-          placeholder="Buscar produtos..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredProducts.map((product) => (
-          <Card key={product.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{product.name}</CardTitle>
-                  <Badge variant="secondary" className="mt-1">
-                    {product.category}
-                  </Badge>
-                </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteProduct(product.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">
-                {product.description}
-              </p>
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-semibold text-primary">
-                  R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-                <Badge variant={product.status === 'active' ? 'default' : 'secondary'}>
-                  {product.status === 'active' ? 'Ativo' : 'Inativo'}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {filteredProducts.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Nenhum produto encontrado</p>
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <Input
+            placeholder="Buscar produtos"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
-      )}
+      </div>
+
+      {/* Table */}
+      <div className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Nome</TableHead>
+              <TableHead className="font-semibold text-right">Valor</TableHead>
+              <TableHead className="font-semibold text-center w-24">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {currentProducts.map((product) => (
+              <TableRow key={product.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium">{product.name}</TableCell>
+                <TableCell className="text-right">{formatCurrency(product.value)}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex justify-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditModal(product)}
+                      className="h-8 w-8 p-0 hover:bg-muted"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDeleteModal(product)}
+                      className="h-8 w-8 p-0 hover:bg-muted text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Rows per page:</span>
+          <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(parseInt(value))}>
+            <SelectTrigger className="w-16">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">
+            {startIndex + 1}-{Math.min(endIndex, filteredProducts.length)} of {filteredProducts.length}
+          </span>
+          
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious 
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationNext 
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      </div>
+
+      {/* Create Product Modal */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo Produto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Input
+                placeholder="Nome"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                className="border-input"
+              />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">Valor</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
+                  R$
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.value}
+                  onChange={(e) => setFormData({...formData, value: e.target.value})}
+                  className="pl-8 border-input"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsCreateModalOpen(false)}
+                className="text-red-500 hover:text-red-600"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleCreateProduct}
+                className="bg-yellow-500 hover:bg-yellow-600 text-black"
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Product Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Produto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Input
+                placeholder="Nome"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                className="border-input"
+              />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">Valor</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">
+                  R$
+                </span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.value}
+                  onChange={(e) => setFormData({...formData, value: e.target.value})}
+                  className="pl-8 border-input"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-red-500 hover:text-red-600"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleEditProduct}
+                className="bg-yellow-500 hover:bg-yellow-600 text-black"
+              >
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-muted-foreground">
+              Tem certeza que deseja excluir o produto "{productToDelete?.name}"?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleDeleteProduct}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Excluir
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
