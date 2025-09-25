@@ -264,13 +264,16 @@ serve(async (req) => {
 
           const body = await req.json();
           
-          // Prepare update data - accept both permissions and order_position
+          // Prepare update data - accept permissions, order_position, and name
           const updateData: any = {};
           if (body.permissions !== undefined) {
             updateData.permissions = body.permissions;
           }
           if (body.order_position !== undefined) {
             updateData.order_position = body.order_position;
+          }
+          if (body.name !== undefined) {
+            updateData.name = body.name;
           }
           
           console.log('🔄 Updating column:', columnId, 'with data:', updateData);
