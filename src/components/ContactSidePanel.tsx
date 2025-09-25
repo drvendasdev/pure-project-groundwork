@@ -123,8 +123,19 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
     if (!editingContact) return;
     
     try {
-      // Aqui você implementaria a chamada para salvar os dados do contato
-      console.log('Salvando contato:', editingContact);
+      // Converter campos customizados de volta para extra_info
+      const updatedExtraInfo = customFields.reduce((acc, field) => {
+        acc[field.key] = field.value;
+        return acc;
+      }, {} as Record<string, any>);
+
+      // Atualizar o contato com os novos dados
+      const updatedContact = {
+        ...editingContact,
+        extra_info: updatedExtraInfo
+      };
+
+      console.log('Salvando contato:', updatedContact);
       console.log('Campos personalizados:', customFields);
       
       // Se um pipeline foi selecionado, criar um card na primeira coluna
@@ -175,10 +186,39 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
   };
 
   const handleAddCustomField = () => {
-    if (newCustomField.key && newCustomField.value) {
-      setCustomFields([...customFields, { ...newCustomField }]);
-      setNewCustomField({ key: '', value: '' });
+    if (!newCustomField.key.trim() || !newCustomField.value.trim()) {
+      toast({
+        title: "Erro",
+        description: "Preencha o nome do campo e o valor",
+        variant: "destructive",
+      });
+      return;
     }
+
+    // Verificar se o campo já existe
+    const fieldExists = customFields.some(field => 
+      field.key.toLowerCase() === newCustomField.key.trim().toLowerCase()
+    );
+
+    if (fieldExists) {
+      toast({
+        title: "Erro",
+        description: "Este campo já existe. Use um nome diferente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCustomFields([...customFields, { 
+      key: newCustomField.key.trim(), 
+      value: newCustomField.value.trim() 
+    }]);
+    setNewCustomField({ key: '', value: '' });
+    
+    toast({
+      title: "Sucesso",
+      description: "Campo adicionado com sucesso!",
+    });
   };
 
   const handleRemoveCustomField = (index: number) => {
@@ -327,30 +367,45 @@ export function ContactSidePanel({ isOpen, onClose, contact }: ContactSidePanelP
                     </div>
                   )}
 
-                  {/* Adicionar novo campo */}
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Nome do campo"
-                        value={newCustomField.key}
-                        onChange={(e) => setNewCustomField(prev => ({ ...prev, key: e.target.value }))}
-                      />
-                      <Input
-                        placeholder="Valor"
-                        value={newCustomField.value}
-                        onChange={(e) => setNewCustomField(prev => ({ ...prev, value: e.target.value }))}
-                      />
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={handleAddCustomField}
-                      disabled={!newCustomField.key || !newCustomField.value}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Adicionar informação
-                    </Button>
-                  </div>
+                   {/* Adicionar novo campo */}
+                   <div className="space-y-3">
+                     <div className="grid grid-cols-2 gap-3">
+                       <div className="space-y-1">
+                         <Label htmlFor="field-name" className="text-xs text-muted-foreground">
+                           Nome do campo
+                         </Label>
+                         <Input
+                           id="field-name"
+                           placeholder="ex: Nome da empresa"
+                           value={newCustomField.key}
+                           onChange={(e) => setNewCustomField(prev => ({ ...prev, key: e.target.value }))}
+                           className="text-sm"
+                         />
+                       </div>
+                       <div className="space-y-1">
+                         <Label htmlFor="field-value" className="text-xs text-muted-foreground">
+                           Valor
+                         </Label>
+                         <Input
+                           id="field-value"
+                           placeholder="ex: empresa-x"
+                           value={newCustomField.value}
+                           onChange={(e) => setNewCustomField(prev => ({ ...prev, value: e.target.value }))}
+                           className="text-sm"
+                         />
+                       </div>
+                     </div>
+                     <Button 
+                       variant="outline" 
+                       size="sm" 
+                       onClick={handleAddCustomField}
+                       disabled={!newCustomField.key.trim() || !newCustomField.value.trim()}
+                       className="w-full"
+                     >
+                       <Plus className="h-4 w-4 mr-2" />
+                       Adicionar informação
+                     </Button>
+                   </div>
                 </CardContent>
               </Card>
 
