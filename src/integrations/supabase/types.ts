@@ -1294,30 +1294,56 @@ export type Database = {
       }
       queues: {
         Row: {
+          ai_agent_id: string | null
+          color: string | null
           created_at: string
           description: string | null
+          distribution_type: string | null
+          greeting_message: string | null
           id: string
           is_active: boolean
           name: string
+          order_position: number | null
           updated_at: string
+          workspace_id: string | null
         }
         Insert: {
+          ai_agent_id?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
+          distribution_type?: string | null
+          greeting_message?: string | null
           id?: string
           is_active?: boolean
           name: string
+          order_position?: number | null
           updated_at?: string
+          workspace_id?: string | null
         }
         Update: {
+          ai_agent_id?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
+          distribution_type?: string | null
+          greeting_message?: string | null
           id?: string
           is_active?: boolean
           name?: string
+          order_position?: number | null
           updated_at?: string
+          workspace_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "queues_ai_agent_id_fkey"
+            columns: ["ai_agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quick_audios: {
         Row: {
