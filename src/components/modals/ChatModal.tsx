@@ -11,6 +11,7 @@ import { MediaViewer } from '@/components/chat/MediaViewer';
 import { AddTagButton } from '@/components/chat/AddTagButton';
 import { ContactTags } from '@/components/chat/ContactTags';
 import { MediaUpload } from '@/components/chat/MediaUpload';
+import { MessageStatusIndicator } from '@/components/ui/message-status-indicator';
 import { useConversationMessages } from '@/hooks/useConversationMessages';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -306,20 +307,30 @@ export function ChatModal({
             ) : (
               <div className="space-y-4">
                 {messages.map((message) => (
-                  <div key={message.id} className="flex items-start gap-3 max-w-[80%] flex-row">
-                    {/* Avatar da mensagem */}
-                    <Avatar className="w-8 h-8 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1 transition-all">
-                      {contactAvatar ? (
-                        <AvatarImage src={contactAvatar} alt={contactName} className="object-cover" />
-                      ) : (
-                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                          {getInitials(contactName)}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
+                  <div key={message.id} className={cn(
+                    "flex items-start gap-3 max-w-[80%]",
+                    message.sender_type === 'contact' ? 'flex-row' : 'flex-row-reverse ml-auto'
+                  )}>
+                    {/* Avatar apenas para mensagens do contato */}
+                    {message.sender_type === 'contact' && (
+                      <Avatar className="w-8 h-8 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1 transition-all">
+                        {contactAvatar ? (
+                          <AvatarImage src={contactAvatar} alt={contactName} className="object-cover" />
+                        ) : (
+                          <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                            {getInitials(contactName)}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                    )}
                     
                     {/* Conteúdo da mensagem */}
-                    <div className="rounded-lg max-w-full bg-muted p-3">
+                    <div className={cn(
+                      "rounded-lg max-w-full p-3",
+                      message.sender_type === 'contact' 
+                        ? 'bg-muted' 
+                        : 'bg-primary text-primary-foreground'
+                    )}>
                       {message.message_type === 'text' && (
                         <p className="text-sm break-words">{message.content}</p>
                       )}
@@ -339,9 +350,19 @@ export function ChatModal({
                         />
                       )}
                       
-                      {/* Timestamp */}
-                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                      {/* Timestamp e status */}
+                      <div className={cn(
+                        "flex items-center gap-1 mt-1 text-xs",
+                        message.sender_type === 'contact' 
+                          ? 'text-muted-foreground' 
+                          : 'text-primary-foreground/70'
+                      )}>
                         <span>{formatTime(message.created_at)}</span>
+                        {message.sender_type === 'agent' && (
+                          <MessageStatusIndicator 
+                            status={message.status === 'sent' ? 'sent' : 'delivered'}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
