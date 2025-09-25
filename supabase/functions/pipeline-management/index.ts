@@ -46,6 +46,7 @@ interface Database {
         };
         Update: {
           permissions?: string[];
+          order_position?: number;
         };
       };
       pipeline_cards: {
@@ -279,11 +280,21 @@ serve(async (req) => {
           }
 
           const body = await req.json();
+          
+          // Prepare update data - accept both permissions and order_position
+          const updateData: any = {};
+          if (body.permissions !== undefined) {
+            updateData.permissions = body.permissions;
+          }
+          if (body.order_position !== undefined) {
+            updateData.order_position = body.order_position;
+          }
+          
+          console.log('🔄 Updating column:', columnId, 'with data:', updateData);
+          
           const { data: column, error } = await supabaseClient
             .from('pipeline_columns')
-            .update({
-              permissions: body.permissions || [],
-            })
+            .update(updateData)
             .eq('id', columnId)
             .select()
             .single();
