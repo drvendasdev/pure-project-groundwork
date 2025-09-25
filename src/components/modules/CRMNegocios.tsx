@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Search, Plus, Filter, Eye, MoreHorizontal, Phone, MessageCircle, MessageSquare, Calendar, DollarSign, User, EyeOff, Folder, AlertTriangle, Check } from "lucide-react";
+import { Settings, Search, Plus, Filter, Eye, MoreHorizontal, Phone, MessageCircle, MessageSquare, Calendar, DollarSign, User, EyeOff, Folder, AlertTriangle, Check, MoreVertical, Edit, Download, ArrowRight } from "lucide-react";
 import { AddColumnModal } from "@/components/modals/AddColumnModal";
 import { PipelineConfigModal } from "@/components/modals/PipelineConfigModal";
 import { FilterModal } from "@/components/modals/FilterModal";
@@ -17,7 +17,8 @@ import { CriarPipelineModal } from "@/components/modals/CriarPipelineModal";
 import { CriarNegocioModal } from "@/components/modals/CriarNegocioModal";
 import { DealDetailsModal } from "@/components/modals/DealDetailsModal";
 import { ChatModal } from "@/components/modals/ChatModal";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { TransferirModal } from "@/components/modals/TransferirModal";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { usePipelineActiveUsers } from "@/hooks/usePipelineActiveUsers";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -295,6 +296,8 @@ export function CRMNegocios({
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [appliedFilters, setAppliedFilters] = useState<{tags: string[]} | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTransferirModalOpen, setIsTransferirModalOpen] = useState(false);
+  const [selectedColumnForAction, setSelectedColumnForAction] = useState<string | null>(null);
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -750,14 +753,67 @@ export function CRMNegocios({
                                 {columnCards.length}
                               </Badge>
                             </div>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-6 w-6 text-muted-foreground hover:text-foreground" 
-                              onClick={() => setIsCriarNegocioModalOpen(true)}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-6 w-6 text-muted-foreground hover:text-foreground" 
+                                >
+                                  <MoreVertical className="h-3.5 w-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuItem onClick={() => setIsCriarNegocioModalOpen(true)}>
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Novo negócio
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedColumnForAction(column.id);
+                                  setIsConfigModalOpen(true);
+                                }}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Editar coluna
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedColumnForAction(column.id);
+                                  setIsTransferirModalOpen(true);
+                                }}>
+                                  <ArrowRight className="mr-2 h-4 w-4" />
+                                  Transferir negócios
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  // Exportar CSV da coluna
+                                  const columnCards = getCardsByColumn(column.id);
+                                  const csvData = columnCards.map(card => ({
+                                    'Título': card.title,
+                                    'Valor': card.value || 0,
+                                    'Status': card.status,
+                                    'Responsável': card.responsible_user?.name || 'Não atribuído',
+                                    'Criado em': new Date(card.created_at).toLocaleDateString('pt-BR')
+                                  }));
+                                  
+                                  const csv = [
+                                    Object.keys(csvData[0] || {}).join(','),
+                                    ...csvData.map(row => Object.values(row).join(','))
+                                  ].join('\n');
+                                  
+                                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                                  const link = document.createElement('a');
+                                  const url = URL.createObjectURL(blob);
+                                  link.setAttribute('href', url);
+                                  link.setAttribute('download', `${column.name}_negocios.csv`);
+                                  link.style.visibility = 'hidden';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }}>
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Baixar CSV
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
                         
@@ -904,6 +960,14 @@ export function CRMNegocios({
         contactName={selectedChatCard?.contact?.name || selectedChatCard?.name || ""}
         contactPhone={selectedChatCard?.contact?.phone || ""}
         contactAvatar={selectedChatCard?.contact?.profile_image_url || ""}
+      />
+
+      <TransferirModal 
+        isOpen={isTransferirModalOpen} 
+        onClose={() => {
+          setIsTransferirModalOpen(false);
+          setSelectedColumnForAction(null);
+        }}
       />
     </DndContext>
   );
