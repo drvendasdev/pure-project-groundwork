@@ -5,6 +5,7 @@ import { Edit, Trash2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AdicionarFilaModal } from "@/components/modals/AdicionarFilaModal";
+import { EditarFilaModal } from "@/components/modals/EditarFilaModal";
 
 interface Fila {
   id: string;
@@ -25,6 +26,8 @@ export function AutomacoesFilas() {
   const [filas, setFilas] = useState<Fila[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedFila, setSelectedFila] = useState<Fila | null>(null);
 
   const loadFilas = async () => {
     try {
@@ -60,6 +63,11 @@ export function AutomacoesFilas() {
       console.error('Erro ao excluir fila:', error);
       toast.error('Erro ao excluir fila');
     }
+  };
+
+  const handleEditFila = (fila: Fila) => {
+    setSelectedFila(fila);
+    setShowEditModal(true);
   };
 
   useEffect(() => {
@@ -133,7 +141,7 @@ export function AutomacoesFilas() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {/* TODO: Implementar edição */}}
+                        onClick={() => handleEditFila(fila)}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -158,6 +166,17 @@ export function AutomacoesFilas() {
         onOpenChange={setShowAddModal}
         onSuccess={() => {
           setShowAddModal(false);
+          loadFilas();
+        }}
+      />
+
+      <EditarFilaModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        fila={selectedFila}
+        onSuccess={() => {
+          setShowEditModal(false);
+          setSelectedFila(null);
           loadFilas();
         }}
       />
