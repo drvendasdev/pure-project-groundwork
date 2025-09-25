@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Pencil, Plus, Trash2, ChevronDown, Menu, Users, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
@@ -26,6 +27,7 @@ interface SortableColumnProps {
   isDarkMode: boolean;
   onDelete: (id: string) => void;
   onUpdatePermissions: (columnId: string, userIds: string[]) => void;
+  isLoading?: boolean;
 }
 interface Action {
   id: string;
@@ -47,7 +49,8 @@ function SortableColumn({
   column,
   isDarkMode,
   onDelete,
-  onUpdatePermissions
+  onUpdatePermissions,
+  isLoading = false
 }: SortableColumnProps) {
   const {
     getCardsByColumn
@@ -82,6 +85,47 @@ function SortableColumn({
     style: 'currency',
     currency: 'BRL'
   }).format(totalValue);
+
+  if (isLoading) {
+    return (
+      <div ref={setNodeRef} style={style} className="grid-item">
+        <div className="bg-white rounded-lg shadow-md p-4 relative flex flex-col overflow-hidden border-t-4 border-gray-300">
+          {/* Header skeleton */}
+          <div className="flex items-start justify-between mb-2">
+            <Skeleton className="h-4 w-24" />
+            <div className="flex items-center gap-1">
+              <Skeleton className="h-6 w-6" />
+              <Skeleton className="h-6 w-6" />
+              <Skeleton className="h-6 w-6" />
+            </div>
+          </div>
+
+          {/* Statistics skeleton */}
+          <div className="flex justify-between items-center mb-3">
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+
+          {/* Users section skeleton */}
+          <Skeleton className="h-3 w-40 mt-2 mb-1" />
+          <div className="flex items-center mt-1 mb-1">
+            <Skeleton className="h-3 w-3 mr-2" />
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-6 w-6 ml-2" />
+          </div>
+
+          <Skeleton className="h-3 w-48 mt-1 mb-1" />
+          <div className="flex items-center mt-1 mb-2">
+            <Skeleton className="h-3 w-3 mr-2" />
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-6 w-6 ml-2" />
+          </div>
+        </div>
+      </div>
+    );
+  }
   return <div ref={setNodeRef} style={style} className="grid-item">
       <div className="bg-white rounded-lg shadow-md p-4 relative flex flex-col overflow-hidden" style={{
       borderTop: `4px solid ${column.color}`
@@ -183,7 +227,8 @@ export default function PipelineConfiguracao({
     columns,
     selectedPipeline,
     reorderColumns,
-    pipelines
+    pipelines,
+    isLoadingColumns
   } = usePipelinesContext();
   const {
     user
@@ -379,13 +424,56 @@ export default function PipelineConfiguracao({
 
         {/* Colunas Tab */}
         <TabsContent value="colunas" className="space-y-4">
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-            <SortableContext items={columns.map(col => col.id)} strategy={horizontalListSortingStrategy}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {columns.map(column => <SortableColumn key={column.id} column={column} isDarkMode={isDarkMode} onDelete={deleteColumn} onUpdatePermissions={handleUpdateColumnPermissions} />)}
+          {isLoadingColumns ? (
+            // Skeleton loading para colunas
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...Array(3)].map((_, index) => (
+                <SortableColumn
+                  key={`skeleton-${index}`}
+                  column={{ id: `skeleton-${index}`, name: '', color: '#gray' }}
+                  isDarkMode={isDarkMode}
+                  onDelete={() => {}}
+                  onUpdatePermissions={() => {}}
+                  isLoading={true}
+                />
+              ))}
+            </div>
+          ) : columns.length === 0 ? (
+            // Estado vazio - pipeline novo
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="text-gray-400 mb-4">
+                <Menu className="h-12 w-12 mx-auto" />
               </div>
-            </SortableContext>
-          </DndContext>
+              <h3 className={cn("text-lg font-medium mb-2", isDarkMode ? "text-white" : "text-gray-900")}>
+                Nenhuma coluna encontrada
+              </h3>
+              <p className={cn("text-sm mb-4", isDarkMode ? "text-gray-400" : "text-gray-500")}>
+                Este pipeline ainda não possui colunas configuradas.
+              </p>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Primeira Coluna
+              </Button>
+            </div>
+          ) : (
+            // Estado normal - pipeline com colunas
+            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+              <SortableContext items={columns.map(col => col.id)} strategy={horizontalListSortingStrategy}>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {columns.map(column => (
+                    <SortableColumn 
+                      key={column.id} 
+                      column={column} 
+                      isDarkMode={isDarkMode} 
+                      onDelete={deleteColumn} 
+                      onUpdatePermissions={handleUpdateColumnPermissions}
+                      isLoading={false}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
         </TabsContent>
 
         {/* Ações Tab */}
