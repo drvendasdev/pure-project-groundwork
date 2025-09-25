@@ -116,10 +116,12 @@ export const useSystemUsers = () => {
   const updateUser = async (userData: UpdateUserData) => {
     setLoading(true);
     try {
+      const { id, ...updateData } = userData;
       const { data, error } = await supabase.functions.invoke('manage-system-user', {
         body: {
           action: 'update',
-          userData
+          userData: updateData,
+          userId: id
         }
       });
 

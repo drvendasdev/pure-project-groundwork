@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -215,6 +216,9 @@ export function AdicionarEditarUsuarioModal({
             <User className="w-5 h-5" />
             {isEditing ? 'Editar Usuário' : 'Adicionar Usuário'}
           </DialogTitle>
+          <DialogDescription>
+            {isEditing ? 'Modifique os dados do usuário e selecione a empresa.' : 'Preencha os dados do novo usuário e selecione a empresa.'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
