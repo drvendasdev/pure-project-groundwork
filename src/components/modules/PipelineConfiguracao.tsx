@@ -16,6 +16,7 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { DeletarColunaModal } from "@/components/modals/DeletarColunaModal";
 import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor, KeyboardSensor } from '@dnd-kit/core';
 import { SortableContext, useSortable, horizontalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -26,7 +27,7 @@ interface PipelineConfigProps {
 interface SortableColumnProps {
   column: any;
   isDarkMode: boolean;
-  onDelete: (id: string) => void;
+  onDelete: (column: { id: string; name: string }) => void;
   onUpdatePermissions: (columnId: string, userIds: string[]) => void;
   isLoading?: boolean;
 }
@@ -140,7 +141,7 @@ function SortableColumn({
             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5">
               <Pencil className="h-3 w-3" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5" onClick={() => onDelete(column.id)}>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5" onClick={() => onDelete({ id: column.id, name: column.name })}>
               <Trash2 className="h-3 w-3" />
             </Button>
             <Button className="h-6 w-6 p-0" variant="ghost" size="sm" {...attributes} {...listeners}>
@@ -224,6 +225,8 @@ export default function PipelineConfiguracao({
   const [activeTab, setActiveTab] = useState('geral');
   const [actions, setActions] = useState<Action[]>(initialActions);
   const [actionColumns, setActionColumns] = useState<{[key: string]: any[]}>({});
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [columnToDelete, setColumnToDelete] = useState<{ id: string; name: string } | null>(null);
   const {
     columns,
     selectedPipeline,
@@ -272,6 +275,11 @@ export default function PipelineConfiguracao({
       console.error('Error updating column permissions:', error);
     }
   };
+  const handleDeleteColumn = (column: { id: string; name: string }) => {
+    setColumnToDelete(column);
+    setIsDeleteModalOpen(true);
+  };
+
   const deleteColumn = async (columnId: string) => {
     try {
       console.log('🗑️ Deleting column:', columnId);
@@ -505,7 +513,7 @@ export default function PipelineConfiguracao({
                       key={column.id} 
                       column={column} 
                       isDarkMode={isDarkMode} 
-                      onDelete={deleteColumn} 
+                      onDelete={handleDeleteColumn} 
                       onUpdatePermissions={handleUpdateColumnPermissions}
                       isLoading={false}
                     />
@@ -655,5 +663,21 @@ export default function PipelineConfiguracao({
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de confirmação para deletar coluna */}
+      <DeletarColunaModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setColumnToDelete(null);
+        }}
+        onConfirm={() => {
+          if (columnToDelete) {
+            deleteColumn(columnToDelete.id);
+          }
+        }}
+        columnName={columnToDelete?.name || ''}
+        isDarkMode={isDarkMode}
+      />
     </div>;
 }
