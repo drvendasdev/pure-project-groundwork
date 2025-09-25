@@ -343,8 +343,8 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {ungroupedItems.map(renderMenuItem)}
         
-        {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
         {renderGroup("crm", "CRM", crmItems)}
+        {hasRole(['master', 'admin', 'mentor_master', 'gestor']) && renderGroup("workspace", "Workspace", workspaceItems)}
         
         {hasRole(['master', 'admin']) && renderGroup("administracao", "Administração", administracaoItems)}
       </nav>
