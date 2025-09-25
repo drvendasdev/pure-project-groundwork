@@ -1200,6 +1200,33 @@ export type Database = {
           },
         ]
       }
+      products: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          value: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          value?: number
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          value?: number
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

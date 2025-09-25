@@ -20,27 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface Product {
-  id: string;
-  name: string;
-  value: number;
-}
+import { useProducts, Product } from "@/hooks/useProducts";
 
 export function CRMProdutos() {
+  const { products, isLoading, createProduct, updateProduct, deleteProduct } = useProducts();
   const [searchTerm, setSearchTerm] = useState("");
-  const [products, setProducts] = useState<Product[]>([
-    { id: '1', name: 'ExLuir', value: 150.00 },
-    { id: '2', name: 'Gestão de Tráfego Pago - Meta (IG/FB)', value: 3000.00 },
-    { id: '3', name: 'Treinamento Lojista Milionário (Novo e lojista)', value: 7000.00 },
-    { id: '4', name: 'Treinamento Lojista Milionário (Feirão)', value: 0.01 },
-    { id: '5', name: 'ERP BLINO - Mensalidade', value: 3000.00 },
-    { id: '6', name: 'ERP BLINO - Implantação', value: 5000.00 },
-    { id: '7', name: 'Tezeus - 4o usuário em diante', value: 150.00 },
-    { id: '8', name: 'Tezeus - Nova Conexão (Novo Chip conectado)', value: 150.00 },
-    { id: '9', name: 'Tezeus - Mensalidade', value: 3000.00 },
-    { id: '10', name: 'Tezeus - Implantação', value: 5000.00 },
-  ]);
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -69,39 +53,47 @@ export function CRMProdutos() {
     setFormData({ name: '', value: '' });
   };
 
-  const handleCreateProduct = () => {
+  const handleCreateProduct = async () => {
     if (!formData.name.trim()) return;
     
-    const newProduct: Product = {
-      id: Date.now().toString(),
-      name: formData.name.trim(),
-      value: parseFloat(formData.value) || 0
-    };
-
-    setProducts([...products, newProduct]);
-    resetForm();
-    setIsCreateModalOpen(false);
+    try {
+      await createProduct({
+        name: formData.name.trim(),
+        value: parseFloat(formData.value) || 0
+      });
+      resetForm();
+      setIsCreateModalOpen(false);
+    } catch (error) {
+      console.error('Erro ao criar produto:', error);
+    }
   };
 
-  const handleEditProduct = () => {
+  const handleEditProduct = async () => {
     if (!selectedProduct || !formData.name.trim()) return;
     
-    setProducts(products.map(p => 
-      p.id === selectedProduct.id 
-        ? { ...p, name: formData.name.trim(), value: parseFloat(formData.value) || 0 }
-        : p
-    ));
-    resetForm();
-    setIsEditModalOpen(false);
-    setSelectedProduct(null);
+    try {
+      await updateProduct(selectedProduct.id, {
+        name: formData.name.trim(),
+        value: parseFloat(formData.value) || 0
+      });
+      resetForm();
+      setIsEditModalOpen(false);
+      setSelectedProduct(null);
+    } catch (error) {
+      console.error('Erro ao editar produto:', error);
+    }
   };
 
-  const handleDeleteProduct = () => {
+  const handleDeleteProduct = async () => {
     if (!productToDelete) return;
     
-    setProducts(products.filter(p => p.id !== productToDelete.id));
-    setIsDeleteModalOpen(false);
-    setProductToDelete(null);
+    try {
+      await deleteProduct(productToDelete.id);
+      setIsDeleteModalOpen(false);
+      setProductToDelete(null);
+    } catch (error) {
+      console.error('Erro ao excluir produto:', error);
+    }
   };
 
   const openEditModal = (product: Product) => {
