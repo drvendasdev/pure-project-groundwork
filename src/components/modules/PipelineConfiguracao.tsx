@@ -29,6 +29,7 @@ interface SortableColumnProps {
   isDarkMode: boolean;
   onDelete: (column: { id: string; name: string }) => void;
   onUpdatePermissions: (columnId: string, userIds: string[]) => void;
+  onUpdateColumnName: (columnId: string, newName: string) => void;
   isLoading?: boolean;
 }
 interface Action {
@@ -52,6 +53,7 @@ function SortableColumn({
   isDarkMode,
   onDelete,
   onUpdatePermissions,
+  onUpdateColumnName,
   isLoading = false
 }: SortableColumnProps) {
   const {
@@ -64,6 +66,8 @@ function SortableColumn({
     members
   } = useWorkspaceMembers(selectedWorkspace?.workspace_id);
   const [selectedUsers, setSelectedUsers] = useState<string[]>(column.permissions || []);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [columnName, setColumnName] = useState(column.name);
   const {
     attributes,
     listeners,
@@ -87,6 +91,18 @@ function SortableColumn({
     style: 'currency',
     currency: 'BRL'
   }).format(totalValue);
+
+  const handleSaveColumnName = () => {
+    if (columnName.trim() && columnName !== column.name) {
+      onUpdateColumnName(column.id, columnName.trim());
+    }
+    setIsEditingName(false);
+  };
+
+  const handleCancelEdit = () => {
+    setColumnName(column.name);
+    setIsEditingName(false);
+  };
 
   if (isLoading) {
     return (
@@ -132,15 +148,43 @@ function SortableColumn({
       <div className="bg-white rounded-lg shadow-md p-4 relative flex flex-col overflow-hidden" style={{
       borderTop: `4px solid ${column.color}`
     }}>
-        {/* Header com nome e botões */}
-        <div className="flex items-start justify-between mb-2">
-          <p className="text-xs font-bold w-30 overflow-hidden text-ellipsis whitespace-nowrap">
-            {column.name}
-          </p>
-          <div className="flex items-center">
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5">
-              <Pencil className="h-3 w-3" />
-            </Button>
+         {/* Header com nome e botões */}
+         <div className="flex items-start justify-between mb-2">
+           {isEditingName ? (
+             <div className="flex-1 mr-2">
+               <Input
+                 value={columnName}
+                 onChange={(e) => setColumnName(e.target.value)}
+                 className="text-xs h-6 px-2"
+                 onBlur={handleCancelEdit}
+                 onKeyDown={(e) => {
+                   if (e.key === 'Enter') {
+                     e.preventDefault();
+                     handleSaveColumnName();
+                   }
+                   if (e.key === 'Escape') {
+                     handleCancelEdit();
+                   }
+                 }}
+                 autoFocus
+               />
+               <Button
+                 size="sm"
+                 className="mt-1 h-6 text-xs bg-yellow-500 hover:bg-yellow-600 text-black"
+                 onClick={handleSaveColumnName}
+               >
+                 salvar
+               </Button>
+             </div>
+           ) : (
+             <p className="text-xs font-bold w-30 overflow-hidden text-ellipsis whitespace-nowrap">
+               {column.name}
+             </p>
+           )}
+           <div className="flex items-center">
+             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5" onClick={() => setIsEditingName(true)}>
+               <Pencil className="h-3 w-3" />
+             </Button>
             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5" onClick={() => onDelete({ id: column.id, name: column.name })}>
               <Trash2 className="h-3 w-3" />
             </Button>
@@ -278,6 +322,44 @@ export default function PipelineConfiguracao({
   const handleDeleteColumn = (column: { id: string; name: string }) => {
     setColumnToDelete(column);
     setIsDeleteModalOpen(true);
+  };
+
+  const handleUpdateColumnName = async (columnId: string, newName: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke(`pipeline-management/columns?id=${columnId}`, {
+        method: 'PUT',
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        },
+        body: {
+          name: newName
+        }
+      });
+
+      if (error) throw error;
+
+      console.log('✅ Column name updated successfully');
+      
+      // Refresh columns after update
+      if (selectedPipeline) {
+        selectPipeline(selectedPipeline);
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Nome da coluna atualizado com sucesso.",
+      });
+      
+    } catch (error: any) {
+      console.error('❌ Error updating column name:', error);
+      toast({
+        title: "Erro ao atualizar nome",
+        description: "Ocorreu um erro ao tentar atualizar o nome da coluna. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const deleteColumn = async (columnId: string) => {
@@ -480,9 +562,10 @@ export default function PipelineConfiguracao({
                   key={`skeleton-${index}`}
                   column={{ id: `skeleton-${index}`, name: '', color: '#gray' }}
                   isDarkMode={isDarkMode}
-                  onDelete={() => {}}
-                  onUpdatePermissions={() => {}}
-                  isLoading={true}
+                   onDelete={() => {}}
+                   onUpdatePermissions={() => {}}
+                   onUpdateColumnName={() => {}}
+                   isLoading={true}
                 />
               ))}
             </div>
@@ -513,8 +596,9 @@ export default function PipelineConfiguracao({
                       key={column.id} 
                       column={column} 
                       isDarkMode={isDarkMode} 
-                      onDelete={handleDeleteColumn} 
-                      onUpdatePermissions={handleUpdateColumnPermissions}
+                       onDelete={handleDeleteColumn}
+                       onUpdatePermissions={handleUpdateColumnPermissions}
+                       onUpdateColumnName={handleUpdateColumnName}
                       isLoading={false}
                     />
                   ))}
