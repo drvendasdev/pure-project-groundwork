@@ -409,14 +409,15 @@ serve(async (req) => {
     );
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     console.error('❌ Pipeline Management Function Error:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : 'Unknown'
     });
     return new Response(
       JSON.stringify({ 
-        error: error.message,
+        error: errorMessage,
         timestamp: new Date().toISOString(),
         action: 'pipeline-management'
       }),

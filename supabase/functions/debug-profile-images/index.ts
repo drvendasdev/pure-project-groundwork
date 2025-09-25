@@ -21,10 +21,10 @@ async function fetchContactProfileImage(contactId: string, phone: string, worksp
     contactId,
     phone,
     workspaceId,
-    steps: [],
+    steps: [] as string[],
     success: false,
     profileImageUrl: null,
-    errors: []
+    errors: [] as string[]
   };
 
   try {
@@ -131,12 +131,12 @@ async function fetchContactProfileImage(contactId: string, phone: string, worksp
           debugInfo.errors.push(`API error ${profileResponse.status}: ${errorText}`);
         }
       } catch (error) {
-        debugInfo.errors.push(`Network error: ${error.message}`);
+        debugInfo.errors.push(`Network error: ${(error as Error).message || 'Unknown error'}`);
       }
     }
 
   } catch (error) {
-    debugInfo.errors.push(`General error: ${error.message}`);
+    debugInfo.errors.push(`General error: ${(error as Error).message || 'Unknown error'}`);
   }
 
   return debugInfo;
@@ -205,7 +205,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error', 
-        details: error.message 
+        details: (error as Error).message || 'Unknown error' 
       }),
       { 
         status: 500, 
