@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AdicionarUsuarioModal } from "@/components/modals/AdicionarUsuarioModal";
-import { EditarUsuarioModal } from "@/components/modals/EditarUsuarioModal";
+import { AdicionarEditarUsuarioModal } from "@/components/modals/AdicionarEditarUsuarioModal";
 import { PausarUsuarioModal } from "@/components/modals/PausarUsuarioModal";
 import { DeletarUsuarioModal } from "@/components/modals/DeletarUsuarioModal";
 import { AdministracaoCargos } from "./AdministracaoCargos";
@@ -14,8 +13,8 @@ export function AdministracaoUsuarios() {
   const { loading, listUsers, createUser, updateUser, deleteUser } = useSystemUsers();
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
   const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SystemUser | undefined>(undefined);
@@ -35,8 +34,8 @@ export function AdministracaoUsuarios() {
   const handleEditUser = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
-      setSelectedUser(user);
-      setIsEditModalOpen(true);
+      setEditingUser(user);
+      setIsAddEditModalOpen(true);
     }
   };
   const handlePauseUser = (userId: string) => {
@@ -73,45 +72,14 @@ export function AdministracaoUsuarios() {
     setSelectedUser(undefined);
   };
 
-  const handleAddUser = async (userData: {
-    name: string;
-    email: string;
-    empresa: string;
-    profile: string;
-    status: string;
-    senha: string;
-    default_channel: string | null;
-    cargo_ids: string[];
-  }) => {
-    const result = await createUser({
-      name: userData.name,
-      email: userData.email,
-      profile: userData.profile,
-      status: userData.status,
-      senha: userData.senha,
-      default_channel: userData.default_channel,
-      cargo_ids: userData.cargo_ids
-    });
-    
-
-    if (result.data) {
-      await refreshUsers();
-    }
+  const handleAddUser = () => {
+    setEditingUser(null);
+    setIsAddEditModalOpen(true);
   };
-  const handleUpdateUser = async (updatedUser: SystemUser) => {
-    const result = await updateUser({
-      id: updatedUser.id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      profile: updatedUser.profile,
-      status: updatedUser.status
-    });
-
-    if (result.data) {
-      await refreshUsers();
-    }
-    setIsEditModalOpen(false);
-    setSelectedUser(undefined);
+  const handleModalSuccess = () => {
+    refreshUsers();
+    setIsAddEditModalOpen(false);
+    setEditingUser(null);
   };
   const handleGerenciarCargos = () => {
     setShowCargos(true);
@@ -140,7 +108,7 @@ export function AdministracaoUsuarios() {
           </Button>
 
           {/* Botão Adicionar usuário */}
-          <Button variant="yellow" onClick={() => setIsAddModalOpen(true)} className="gap-2 rounded-xl">
+          <Button variant="yellow" onClick={handleAddUser} className="gap-2 rounded-xl">
             <Plus className="h-4 w-4" />
             Adicionar usuário
           </Button>
@@ -221,14 +189,13 @@ export function AdministracaoUsuarios() {
         )}
       </div>
 
-      {/* Modal de adicionar usuário */}
-      <AdicionarUsuarioModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAddUser={handleAddUser} />
-
-      {/* Modal de editar usuário */}
-      <EditarUsuarioModal isOpen={isEditModalOpen} onClose={() => {
-      setIsEditModalOpen(false);
-      setSelectedUser(undefined);
-    }} onEditUser={handleUpdateUser} user={selectedUser} />
+      {/* Modal de adicionar/editar usuário */}
+      <AdicionarEditarUsuarioModal 
+        open={isAddEditModalOpen} 
+        onOpenChange={setIsAddEditModalOpen}
+        editingUser={editingUser}
+        onSuccess={handleModalSuccess}
+      />
 
       {/* Modal de pausar usuário */}
       <PausarUsuarioModal isOpen={isPauseModalOpen} onClose={() => {
