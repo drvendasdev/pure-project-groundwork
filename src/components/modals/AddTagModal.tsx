@@ -33,16 +33,45 @@ export function AddTagModal({
   const { selectedWorkspace } = useWorkspace();
   const [tagInput, setTagInput] = useState("");
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Buscar todas as tags quando o modal abrir
   useEffect(() => {
-    if (isOpen && tagInput.length > 0) {
-      fetchSuggestions();
-    } else {
-      setSuggestions([]);
+    if (isOpen) {
+      fetchAllTags();
     }
-  }, [tagInput, isOpen]);
+  }, [isOpen]);
+
+  // Filtrar sugestões baseado no input
+  useEffect(() => {
+    if (tagInput.length > 0) {
+      const filtered = allTags.filter(tag => 
+        tag.name.toLowerCase().includes(tagInput.toLowerCase())
+      );
+      setSuggestions(filtered);
+    } else {
+      setSuggestions(allTags);
+    }
+  }, [tagInput, allTags]);
+
+  const fetchAllTags = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('workspace_id', selectedWorkspace!.workspace_id)
+        .order('name');
+
+      if (error) throw error;
+      setAllTags(data || []);
+      setSuggestions(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar tags:', error);
+    }
+  };
 
   const fetchSuggestions = async () => {
     try {
@@ -147,28 +176,33 @@ export function AddTagModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
+          <div className="relative space-y-2">
             <Input
               placeholder="Digite o nome da tag"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyPress={handleKeyPress}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => {
+                // Delay para permitir clique nos itens do dropdown
+                setTimeout(() => setShowDropdown(false), 200);
+              }}
               className={cn(
                 isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white"
               )}
               disabled={isLoading}
             />
 
-            {suggestions.length > 0 && (
+            {showDropdown && suggestions.length > 0 && (
               <div className={cn(
-                "border rounded-md p-2 space-y-1",
-                isDarkMode ? "border-gray-600 bg-[#1f1f1f]" : "border-gray-200 bg-gray-50"
+                "absolute z-50 w-full border rounded-md p-2 space-y-1 max-h-48 overflow-y-auto shadow-lg",
+                isDarkMode ? "border-gray-600 bg-[#1f1f1f]" : "border-gray-200 bg-white"
               )}>
                 <p className={cn(
                   "text-xs font-medium",
                   isDarkMode ? "text-gray-400" : "text-gray-600"
                 )}>
-                  Sugestões:
+                  {tagInput ? "Tags encontradas:" : "Todas as tags:"}
                 </p>
                 {suggestions.map((tag) => (
                   <Button
@@ -179,18 +213,43 @@ export function AddTagModal({
                       "w-full justify-start h-auto p-1",
                       isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-100"
                     )}
-                    onClick={() => handleAddTag(tag.name, true, tag)}
+                    onClick={() => {
+                      handleAddTag(tag.name, true, tag);
+                      setShowDropdown(false);
+                    }}
                     disabled={isLoading}
                   >
                     <Badge 
                       variant="secondary" 
-                      className="mr-2"
+                      className="mr-2 text-white"
                       style={{ backgroundColor: tag.color }}
                     >
                       {tag.name}
                     </Badge>
                   </Button>
                 ))}
+                {tagInput && !suggestions.some(tag => tag.name.toLowerCase() === tagInput.toLowerCase()) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "w-full justify-start h-auto p-1 border-t",
+                      isDarkMode ? "hover:bg-gray-700 border-gray-600" : "hover:bg-gray-100 border-gray-200"
+                    )}
+                    onClick={() => {
+                      handleAddTag(tagInput.trim());
+                      setShowDropdown(false);
+                    }}
+                    disabled={isLoading}
+                  >
+                    <span className={cn(
+                      "text-sm",
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
+                    )}>
+                      + Criar nova tag "{tagInput}"
+                    </span>
+                  </Button>
+                )}
               </div>
             )}
           </div>
