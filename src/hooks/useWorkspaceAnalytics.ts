@@ -32,12 +32,16 @@ export const useWorkspaceAnalytics = () => {
   const { user, userRole } = useAuth();
 
   const fetchAnalytics = async () => {
-    if (!selectedWorkspace || !user) return;
+    if (!selectedWorkspace || !user) {
+      console.log('🚫 Analytics: Missing workspace or user', { selectedWorkspace, user });
+      return;
+    }
     
     setIsLoading(true);
     try {
       const workspaceId = selectedWorkspace.workspace_id;
       const isUser = userRole === 'user';
+      console.log('📊 Analytics: Starting fetch for workspace', { workspaceId, userRole, isUser });
 
       // Fetch conversations data
       let conversationQuery = supabase
@@ -49,26 +53,70 @@ export const useWorkspaceAnalytics = () => {
         conversationQuery = conversationQuery.eq('assigned_user_id', user.id);
       }
 
-      const { data: conversations } = await conversationQuery;
+      console.log('🔍 Analytics: Fetching conversations...');
+      const { data: conversations, error: conversationsError } = await conversationQuery;
+      
+      if (conversationsError) {
+        console.error('❌ Analytics: Conversations error', conversationsError);
+        throw conversationsError;
+      }
+      
+      console.log('✅ Analytics: Conversations fetched', { count: conversations?.length || 0 });
 
       const activeConversations = conversations?.filter(c => c.status === 'open').length || 0;
       const totalConversations = conversations?.length || 0;
 
       // Fetch pipelines for this workspace first
-      const { data: pipelines } = await supabase
+      console.log('🔍 Analytics: Fetching pipelines...');
+      const { data: pipelines, error: pipelinesError } = await supabase
         .from('pipelines')
         .select('id')
         .eq('workspace_id', workspaceId);
 
+      if (pipelinesError) {
+        console.error('❌ Analytics: Pipelines error', pipelinesError);
+        throw pipelinesError;
+      }
+
       const pipelineIds = pipelines?.map(p => p.id) || [];
+      console.log('✅ Analytics: Pipelines fetched', { count: pipelines?.length || 0, pipelineIds });
+
+      if (pipelineIds.length === 0) {
+        console.log('⚠️ Analytics: No pipelines found, skipping cards fetch');
+        // Continue with just conversation data
+        const activeConversations = conversations?.filter(c => c.status === 'open').length || 0;
+        const totalConversations = conversations?.length || 0;
+
+        setAnalytics({
+          activeConversations,
+          totalConversations,
+          dealsInProgress: 0,
+          completedDeals: 0,
+          lostDeals: 0,
+          conversionRate: 0,
+          averageResponseTime: 0,
+          conversationTrends: [],
+          dealTrends: [],
+        });
+        return;
+      }
 
       // Fetch pipeline columns
-      const { data: columns } = await supabase
+      console.log('🔍 Analytics: Fetching pipeline columns...');
+      const { data: columns, error: columnsError } = await supabase
         .from('pipeline_columns')
         .select('id, name')
         .in('pipeline_id', pipelineIds);
 
+      if (columnsError) {
+        console.error('❌ Analytics: Columns error', columnsError);
+        throw columnsError;
+      }
+      
+      console.log('✅ Analytics: Columns fetched', { count: columns?.length || 0 });
+
       // Fetch pipeline cards
+      console.log('🔍 Analytics: Fetching pipeline cards...');
       let cardsQuery = supabase
         .from('pipeline_cards')
         .select('id, column_id, value, created_at, updated_at')
@@ -76,9 +124,17 @@ export const useWorkspaceAnalytics = () => {
 
       if (isUser) {
         cardsQuery = cardsQuery.eq('responsible_user_id', user.id);
+        console.log('👤 Analytics: Filtering cards by user', user.id);
       }
 
-      const { data: cards } = await cardsQuery;
+      const { data: cards, error: cardsError } = await cardsQuery;
+      
+      if (cardsError) {
+        console.error('❌ Analytics: Cards error', cardsError);
+        throw cardsError;
+      }
+      
+      console.log('✅ Analytics: Cards fetched', { count: cards?.length || 0 });
 
       // Create a map of column names
       const columnMap = new Map(columns?.map(col => [col.id, col.name.toLowerCase()]) || []);
@@ -139,7 +195,7 @@ export const useWorkspaceAnalytics = () => {
         return { date, completed, lost };
       });
 
-      setAnalytics({
+      const finalAnalytics = {
         activeConversations,
         totalConversations,
         dealsInProgress: dealsInProgressCount,
@@ -149,12 +205,22 @@ export const useWorkspaceAnalytics = () => {
         averageResponseTime: 0, // TODO: Calculate from message data
         conversationTrends,
         dealTrends,
-      });
+      };
+      
+      console.log('📈 Analytics: Final results', finalAnalytics);
+      setAnalytics(finalAnalytics);
 
     } catch (error) {
-      console.error('Error fetching workspace analytics:', error);
+      console.error('❌ Analytics: Error fetching workspace analytics:', error);
+      console.error('❌ Analytics: Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      
       // Set default values on error
-      setAnalytics({
+      const defaultAnalytics = {
         activeConversations: 0,
         totalConversations: 0,
         dealsInProgress: 0,
@@ -164,7 +230,10 @@ export const useWorkspaceAnalytics = () => {
         averageResponseTime: 0,
         conversationTrends: [],
         dealTrends: [],
-      });
+      };
+      
+      console.log('📊 Analytics: Using default values due to error', defaultAnalytics);
+      setAnalytics(defaultAnalytics);
     } finally {
       setIsLoading(false);
     }
