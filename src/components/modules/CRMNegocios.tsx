@@ -19,6 +19,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { usePipelineActiveUsers } from "@/hooks/usePipelineActiveUsers";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { ActiveUsersAvatars } from "@/components/pipeline/ActiveUsersAvatars";
 
 import { useSortable } from '@dnd-kit/sortable';
@@ -248,6 +249,7 @@ export function CRMNegocios({
   isDarkMode = false
 }: CRMNegociosProps) {
   const { selectedWorkspace } = useWorkspace();
+  const { canManagePipelines, canManageColumns } = useWorkspaceRole();
   const {
     pipelines,
     selectedPipeline,
@@ -381,7 +383,7 @@ export function CRMNegocios({
             <h1 className="text-2xl font-bold text-foreground">Negócios</h1>
             <p className="text-muted-foreground">Gerencie seus negócios no pipeline de vendas</p>
           </div>
-          {!isLoading && (
+          {!isLoading && canManagePipelines(selectedWorkspace?.workspace_id) && (
             <Button 
               onClick={() => setIsCriarPipelineModalOpen(true)}
               className="bg-primary hover:bg-primary/90"
@@ -402,15 +404,20 @@ export function CRMNegocios({
               Nenhum pipeline encontrado
             </h3>
             <p className="text-muted-foreground mb-4">
-              Crie seu primeiro pipeline para começar a gerenciar seus negócios
+              {canManagePipelines(selectedWorkspace?.workspace_id) 
+                ? "Crie seu primeiro pipeline para começar a gerenciar seus negócios"
+                : "Nenhum pipeline disponível no momento"
+              }
             </p>
-            <Button 
-              onClick={() => setIsCriarPipelineModalOpen(true)}
-              className="bg-primary hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Criar Pipeline
-            </Button>
+            {canManagePipelines(selectedWorkspace?.workspace_id) && (
+              <Button 
+                onClick={() => setIsCriarPipelineModalOpen(true)}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Pipeline
+              </Button>
+            )}
           </div>
         )}
         
@@ -438,15 +445,17 @@ export function CRMNegocios({
           <div className={cn("flex items-center bg-background border rounded-lg p-3 shadow-sm", isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white border-gray-200")}>
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {/* Settings Button */}
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className={cn("h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0", isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10")} 
-                onClick={() => setIsConfigModalOpen(true)} 
-                disabled={!selectedPipeline}
-              >
-                <Settings className="w-5 h-5" />
-              </Button>
+              {canManagePipelines(selectedWorkspace?.workspace_id) && (
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className={cn("h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0", isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10")} 
+                  onClick={() => setIsConfigModalOpen(true)} 
+                  disabled={!selectedPipeline}
+                >
+                  <Settings className="w-5 h-5" />
+                </Button>
+              )}
               
               {/* Pipeline Select */}
               <div className="min-w-[200px] mr-2 flex-shrink-0">
@@ -475,14 +484,16 @@ export function CRMNegocios({
               </div>
               
               {/* Plus Button */}
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className={cn("h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0", isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10")} 
-                onClick={() => setIsCriarPipelineModalOpen(true)}
-              >
-                <Plus className="w-5 h-5" />
-              </Button>
+              {canManagePipelines(selectedWorkspace?.workspace_id) && (
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className={cn("h-10 w-10 text-primary hover:bg-primary/10 flex-shrink-0", isDarkMode ? "text-orange-400 hover:bg-orange-400/10" : "text-orange-500 hover:bg-orange-500/10")} 
+                  onClick={() => setIsCriarPipelineModalOpen(true)}
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              )}
 
               {/* Filtrar Button */}
               <div className="relative flex-shrink-0">
@@ -529,8 +540,8 @@ export function CRMNegocios({
               />
             </div>
             
-            {/* + Coluna Button - Only show if pipeline exists */}
-            {selectedPipeline && (
+            {/* + Coluna Button - Only show if pipeline exists and user can manage columns */}
+            {selectedPipeline && canManageColumns(selectedWorkspace?.workspace_id) && (
               <Button 
                 size="sm" 
                 className={cn("bg-warning text-black hover:bg-warning/90 font-medium ml-4 flex-shrink-0", isDarkMode ? "bg-yellow-500 text-black hover:bg-yellow-600" : "bg-yellow-400 text-black hover:bg-yellow-500")} 

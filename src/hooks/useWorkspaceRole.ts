@@ -11,6 +11,8 @@ interface WorkspaceRoleHook {
   isUser: (workspaceId?: string) => boolean;
   canCreateConnections: (workspaceId?: string) => boolean;
   canManageWorkspace: (workspaceId?: string) => boolean;
+  canManagePipelines: (workspaceId?: string) => boolean;
+  canManageColumns: (workspaceId?: string) => boolean;
   getUserWorkspaces: () => Promise<string[]>;
   loading: boolean;
 }
@@ -123,6 +125,32 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
     return false;
   };
 
+  const canManagePipelines = (workspaceId?: string) => {
+    // master can manage pipelines anywhere
+    if (isMaster) return true;
+    
+    // admin can manage pipelines in their workspace
+    if (workspaceId) {
+      return isAdmin(workspaceId);
+    }
+    
+    // If no specific workspace, check if user is at least admin somewhere
+    return userWorkspaceRole === 'admin';
+  };
+
+  const canManageColumns = (workspaceId?: string) => {
+    // master can manage columns anywhere
+    if (isMaster) return true;
+    
+    // admin can manage columns in their workspace
+    if (workspaceId) {
+      return isAdmin(workspaceId);
+    }
+    
+    // If no specific workspace, check if user is at least admin somewhere
+    return userWorkspaceRole === 'admin';
+  };
+
   const getUserWorkspaces = async (): Promise<string[]> => {
     if (isMaster) {
       // master has access to all workspaces
@@ -144,6 +172,8 @@ export function useWorkspaceRole(): WorkspaceRoleHook {
     isUser,
     canCreateConnections,
     canManageWorkspace,
+    canManagePipelines,
+    canManageColumns,
     getUserWorkspaces,
     loading
   };
