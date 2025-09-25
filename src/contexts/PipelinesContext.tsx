@@ -56,6 +56,7 @@ interface PipelinesContextType {
   fetchPipelines: () => Promise<void>;
   createPipeline: (name: string, type: string) => Promise<Pipeline>;
   selectPipeline: (pipeline: Pipeline) => void;
+  refreshCurrentPipeline: () => Promise<void>;
   createColumn: (name: string, color: string) => Promise<PipelineColumn>;
   createCard: (cardData: Partial<PipelineCard>) => Promise<PipelineCard>;
   updateCard: (cardId: string, updates: Partial<PipelineCard>) => Promise<void>;
@@ -220,6 +221,16 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     setCards([]);
   }, []);
 
+  // New function to refresh the current pipeline data
+  const refreshCurrentPipeline = useCallback(async () => {
+    if (selectedPipeline?.id) {
+      await Promise.all([
+        fetchColumns(selectedPipeline.id),
+        fetchCards(selectedPipeline.id)
+      ]);
+    }
+  }, [selectedPipeline?.id, fetchColumns, fetchCards]);
+
   const createColumn = useCallback(async (name: string, color: string) => {
     if (!getHeaders || !selectedPipeline) throw new Error('Requirements not met');
 
@@ -381,6 +392,7 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     fetchPipelines,
     createPipeline,
     selectPipeline,
+    refreshCurrentPipeline,
     createColumn,
     createCard,
     updateCard,
@@ -442,12 +454,15 @@ export function PipelinesProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     fetchPipelines,
     createPipeline,
+    createPipeline,
     selectPipeline,
+    refreshCurrentPipeline,
     createColumn,
     createCard,
     updateCard,
     moveCard,
     getCardsByColumn,
+    isLoadingColumns
   ]);
 
   return (

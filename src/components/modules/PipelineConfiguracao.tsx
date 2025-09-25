@@ -281,13 +281,15 @@ export default function PipelineConfiguracao({
   const [actionColumns, setActionColumns] = useState<{[key: string]: any[]}>({});
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [columnToDelete, setColumnToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isLoadingColumns, setIsLoadingColumns] = useState(false);
   const {
     columns,
     selectedPipeline,
     reorderColumns,
     pipelines,
-    isLoadingColumns,
-    selectPipeline
+    isLoadingColumns: contextIsLoadingColumns,
+    selectPipeline,
+    refreshCurrentPipeline
   } = usePipelinesContext();
   const {
     user
@@ -336,6 +338,9 @@ export default function PipelineConfiguracao({
 
   const handleUpdateColumnName = async (columnId: string, newName: string) => {
     try {
+      // Set local loading state for this specific column
+      setIsLoadingColumns(true);
+      
       const { data, error } = await supabase.functions.invoke(`pipeline-management/columns?id=${columnId}`, {
         method: 'PUT',
         headers: {
@@ -352,9 +357,10 @@ export default function PipelineConfiguracao({
 
       console.log('✅ Column name updated successfully');
       
-      // Refresh columns after update
+      // Update the local columns state immediately to avoid flickering
       if (selectedPipeline) {
-        selectPipeline(selectedPipeline);
+        // Use refreshCurrentPipeline instead of selectPipeline to avoid clearing state
+        await refreshCurrentPipeline();
       }
 
       toast({
@@ -369,6 +375,8 @@ export default function PipelineConfiguracao({
         description: "Ocorreu um erro ao tentar atualizar o nome da coluna. Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoadingColumns(false);
     }
   };
 
@@ -564,7 +572,7 @@ export default function PipelineConfiguracao({
 
         {/* Colunas Tab */}
         <TabsContent value="colunas" className="space-y-4">
-          {isLoadingColumns ? (
+          {(contextIsLoadingColumns || isLoadingColumns) ? (
             // Skeleton loading para colunas
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {[...Array(3)].map((_, index) => (
