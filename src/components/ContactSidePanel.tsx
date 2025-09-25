@@ -16,6 +16,7 @@ import { usePipelines } from "@/hooks/usePipelines";
 import { usePipelineColumns } from "@/hooks/usePipelineColumns";
 import { usePipelineCards } from "@/hooks/usePipelineCards";
 import { useContactPipelineCards } from '@/hooks/useContactPipelineCards';
+import { useContactObservations } from '@/hooks/useContactObservations';
 import { useToast } from "@/hooks/use-toast";
 interface Contact {
   id: string;
@@ -73,6 +74,8 @@ export function ContactSidePanel({
   });
   const [newObservation, setNewObservation] = useState('');
   const [selectedPipeline, setSelectedPipeline] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
 
   // Hook para buscar pipelines reais
   const {
@@ -99,6 +102,15 @@ export function ContactSidePanel({
     toast
   } = useToast();
 
+  // Hook para observações
+  const {
+    observations: realObservations,
+    addObservation,
+    downloadFile,
+    getFileIcon,
+    isUploading
+  } = useContactObservations(contact?.id || "");
+
   // Mock data para demonstração
   const [deals] = useState<Deal[]>([{
     id: '1',
@@ -112,17 +124,6 @@ export function ContactSidePanel({
     value: 1500,
     status: 'Qualificado',
     pipeline: 'Expansão'
-  }]);
-  const [observations] = useState<Observation[]>([{
-    id: '1',
-    content: 'Cliente demonstrou interesse em produtos premium',
-    created_at: '2024-01-15T10:30:00Z'
-  }, {
-    id: '2',
-    content: 'Enviado proposta comercial',
-    created_at: '2024-01-14T14:20:00Z',
-    attachment_url: '#',
-    attachment_name: 'proposta_comercial.pdf'
   }]);
   useEffect(() => {
     if (contact) {
@@ -238,12 +239,37 @@ export function ContactSidePanel({
   const handleRemoveCustomField = (index: number) => {
     setCustomFields(customFields.filter((_, i) => i !== index));
   };
-  const handleAddObservation = () => {
-    if (newObservation.trim()) {
-      // Aqui você implementaria a chamada para salvar a observação
-      console.log('Nova observação:', newObservation);
-      setNewObservation('');
+  const handleAddObservation = async () => {
+    if (!newObservation.trim()) return;
+    
+    const success = await addObservation(newObservation, selectedFile || undefined);
+    if (success) {
+      setNewObservation("");
+      setSelectedFile(null);
+      if (fileInputRef) {
+        fileInputRef.value = '';
+      }
     }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "Erro",
+          description: "Arquivo muito grande. Máximo 10MB permitido.",
+          variant: "destructive"
+        });
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const triggerFileSelect = () => {
+    fileInputRef?.click();
   };
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -456,32 +482,84 @@ export function ContactSidePanel({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Lista de observações */}
-                  {observations.length > 0 && <div className="space-y-3">
-                      {observations.map(obs => <div key={obs.id} className="p-3 bg-muted rounded-md">
-                          <p className="text-sm mb-2">{obs.content}</p>
-                          {obs.attachment_url && obs.attachment_name && <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <FileText className="h-3 w-3" />
-                              <span>{obs.attachment_name}</span>
-                            </div>}
-                          <div className="text-xs text-muted-foreground mt-2">
+                  <ScrollArea className="max-h-32">
+                    <div className="space-y-3 pr-4">
+                      {realObservations.map((obs) => (
+                        <div key={obs.id} className="p-3 bg-muted rounded-lg">
+                          <p className="text-sm">{obs.content}</p>
+                          {obs.file_name && obs.file_url && (
+                            <div className="mt-2">
+                              <button
+                                onClick={() => downloadFile(obs.file_url!, obs.file_name!)}
+                                className="text-xs text-muted-foreground cursor-pointer hover:text-primary flex items-center gap-1"
+                              >
+                                <span>{getFileIcon(obs.file_type)}</span>
+                                {obs.file_name}
+                              </button>
+                            </div>
+                          )}
+                          <span className="text-xs text-muted-foreground">
                             {formatDate(obs.created_at)}
-                          </div>
-                        </div>)}
-                    </div>}
-
-                  <Separator />
+                          </span>
+                        </div>
+                      ))}
+                      {realObservations.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          Nenhuma observação encontrada
+                        </p>
+                      )}
+                     </div>
+                  </ScrollArea>
 
                   {/* Adicionar nova observação */}
                   <div className="space-y-2">
-                    <Textarea placeholder="Digite sua observação..." value={newObservation} onChange={e => setNewObservation(e.target.value)} rows={3} />
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm">
-                        <Paperclip className="h-4 w-4 mr-2" />
-                        Anexar arquivo
+                    <Textarea
+                      placeholder="Digite uma observação..."
+                      value={newObservation}
+                      onChange={(e) => setNewObservation(e.target.value)}
+                      className="min-h-[80px]"
+                    />
+                    
+                    {/* Preview do arquivo selecionado */}
+                    {selectedFile && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted p-2 rounded">
+                        <span>{getFileIcon(selectedFile.type)}</span>
+                        <span>{selectedFile.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedFile(null)}
+                          className="h-4 w-4 p-0"
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <input
+                        type="file"
+                        ref={setFileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept="*/*"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={triggerFileSelect}
+                        disabled={isUploading}
+                      >
+                        📎 Anexar arquivo
                       </Button>
-                      <Button size="sm" onClick={handleAddObservation} disabled={!newObservation.trim()}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Adicionar
+                      <Button
+                        size="sm"
+                        onClick={handleAddObservation}
+                        className="text-xs"
+                        disabled={!newObservation.trim() || isUploading}
+                      >
+                        {isUploading ? "Enviando..." : "Adicionar"}
                       </Button>
                     </div>
                   </div>

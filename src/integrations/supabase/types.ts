@@ -395,6 +395,45 @@ export type Database = {
           },
         ]
       }
+      contact_observations: {
+        Row: {
+          contact_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          file_name: string | null
+          file_type: string | null
+          file_url: string | null
+          id: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          contact_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string | null
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          contact_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string | null
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       contact_tags: {
         Row: {
           contact_id: string
