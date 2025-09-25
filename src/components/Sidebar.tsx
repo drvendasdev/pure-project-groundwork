@@ -25,6 +25,7 @@ import {
   Shield,
   DollarSign,
   Target,
+  Package,
   Calendar,
   CheckSquare,
   MessageSquare,
@@ -138,6 +139,12 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       id: "crm-tags",
       label: "Tags",
       icon: <Target className="w-5 h-5" />,
+      group: "crm"
+    },
+    {
+      id: "crm-produtos",
+      label: "Produtos Comerciais",
+      icon: <Package className="w-5 h-5" />,
       group: "crm"
     },
     {
