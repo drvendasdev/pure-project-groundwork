@@ -156,7 +156,6 @@ function SortableColumn({
                  value={columnName}
                  onChange={(e) => setColumnName(e.target.value)}
                  className="text-xs h-6 px-2"
-                 onBlur={handleCancelEdit}
                  onKeyDown={(e) => {
                    if (e.key === 'Enter') {
                      e.preventDefault();
@@ -170,7 +169,7 @@ function SortableColumn({
                />
                <Button
                  size="sm"
-                 className="mt-1 h-6 text-xs bg-yellow-500 hover:bg-yellow-600 text-black"
+                 className="mt-2 h-6 text-xs bg-yellow-500 hover:bg-yellow-600 text-black"
                  onClick={handleSaveColumnName}
                >
                  salvar
@@ -182,7 +181,18 @@ function SortableColumn({
              </p>
            )}
            <div className="flex items-center">
-             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5" onClick={() => setIsEditingName(true)}>
+             <Button 
+               variant="ghost" 
+               size="sm" 
+               className="h-6 w-6 p-0 mr-1.5" 
+               onClick={() => {
+                 if (isEditingName) {
+                   handleCancelEdit();
+                 } else {
+                   setIsEditingName(true);
+                 }
+               }}
+             >
                <Pencil className="h-3 w-3" />
              </Button>
             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 mr-1.5" onClick={() => onDelete({ id: column.id, name: column.name })}>
