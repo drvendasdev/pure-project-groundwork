@@ -66,14 +66,14 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 rounded-full border border-gray-300 hover:bg-gray-50"
+            className="h-6 w-6 rounded-full border border-border hover:bg-accent"
           >
             <Plus className="w-3 h-3" />
           </Button>
           
           {/* Pill hover - Imagem 2 */}
           {isHovered && (
-            <div className="absolute left-8 top-0 flex items-center h-6 px-2 bg-white border border-dashed border-gray-300 rounded-full text-xs text-gray-600 whitespace-nowrap z-10">
+            <div className="absolute left-8 top-0 flex items-center h-6 px-2 bg-popover border border-dashed border-border rounded-full text-xs text-muted-foreground whitespace-nowrap z-10">
               + Adicionar tag
             </div>
           )}
@@ -86,7 +86,7 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
         onKeyDown={handleKeyDown}
       >
         <div className="space-y-4">
-          <p className="text-sm font-medium text-gray-700">Selecione uma tag:</p>
+          <p className="text-sm font-medium text-foreground">Selecione uma tag:</p>
           
           {/* Lista de tags disponíveis */}
           <ScrollArea className="max-h-40">
@@ -122,7 +122,7 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
                 );
               })}
               {availableTags.length === 0 && (
-                <p className="text-sm text-gray-500">Nenhuma tag disponível</p>
+                <p className="text-sm text-muted-foreground">Nenhuma tag disponível</p>
               )}
             </div>
           </ScrollArea>
@@ -130,16 +130,16 @@ export function AddTagButton({ conversationId, isDarkMode = false, onTagAdded }:
           {/* Botões - Imagem 3 */}
           <div className="flex gap-2">
             <Button
-              variant="outline"
+              variant="destructive"
               onClick={handleCancel}
-              className="flex-1 text-red-600 border-red-600 hover:bg-red-50"
+              className="flex-1"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleAddTag}
               disabled={!selectedTagId || isLoading}
-              className="flex-1 bg-gray-400 hover:bg-gray-500 disabled:bg-gray-300"
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
             >
               {isLoading ? "Adicionando..." : "Adicionar"}
             </Button>

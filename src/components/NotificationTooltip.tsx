@@ -50,7 +50,7 @@ export function NotificationTooltip({
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">Notificações</h3>
-            <Badge variant="secondary" className="bg-red-500 text-white">
+            <Badge variant="destructive" className="bg-destructive text-destructive-foreground">
               {totalUnread}
             </Badge>
           </div>
@@ -71,7 +71,7 @@ export function NotificationTooltip({
                     <Avatar className="w-10 h-10 flex-shrink-0">
                       <AvatarImage src="" alt={notification.contactName} />
                       <AvatarFallback 
-                        className={`${getAvatarColor(notification.contactName)} text-white text-xs font-semibold`}
+                        className={`${getAvatarColor(notification.contactName)} text-primary-foreground text-xs font-semibold`}
                       >
                         {getAvatarInitials(notification.contactName)}
                       </AvatarFallback>

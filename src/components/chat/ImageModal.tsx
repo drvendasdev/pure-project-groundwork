@@ -49,7 +49,7 @@ export const ImageModal: React.FC<ImageModalProps> = ({
             variant="secondary"
             size="sm"
             onClick={onClose}
-            className="absolute top-4 right-4 rounded-full bg-black/50 text-white hover:bg-black/70"
+            className="absolute top-4 right-4 rounded-full bg-background/80 text-foreground hover:bg-background/90"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -59,7 +59,7 @@ export const ImageModal: React.FC<ImageModalProps> = ({
             variant="secondary"
             size="sm"
             onClick={handleDownload}
-            className="absolute top-4 left-4 rounded-full bg-black/50 text-white hover:bg-black/70"
+            className="absolute top-4 left-4 rounded-full bg-background/80 text-foreground hover:bg-background/90"
           >
             <Download className="h-4 w-4" />
           </Button>

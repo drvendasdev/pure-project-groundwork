@@ -84,13 +84,34 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 220 13% 9%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    /* Brand colors - adjusted for dark mode */
+    --brand-blue: 220 100% 45%;
+    --brand-blue-light: 220 100% 55%;
+    --brand-yellow: 45 100% 65%;
+    --brand-yellow-hover: 45 100% 55%;
 
-    --popover: 222.2 84% 4.9%;
+    /* Status colors - dark mode */
+    --success: 120 50% 55%;
+    --success-foreground: 0 0% 0%;
+    --warning: 35 100% 60%;
+    --warning-foreground: 0 0% 0%;
+    --error: 0 65% 65%;
+    --error-foreground: 0 0% 0%;
+
+    /* UI colors - dark mode */
+    --card: 220 13% 12%;
+    --card-foreground: 210 40% 98%;
+    --card-border: 220 13% 20%;
+
+    --sidebar: 220 13% 10%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-active: 45 100% 65%;
+    --sidebar-active-foreground: 0 0% 0%;
+
+    --popover: 220 13% 12%;
     --popover-foreground: 210 40% 98%;
 
     --primary: 45 100% 65%;
@@ -111,6 +132,15 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 45 100% 55%;
+
+    /* Metric card colors - dark mode */
+    --metric-card: 220 13% 12%;
+    --metric-card-foreground: 210 40% 98%;
+
+    /* Interactive states - dark mode */
+    --hover-light: 220 13% 15%;
+    --active-light: 220 100% 15%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -140,7 +170,7 @@
 /* Custom scrollbar styling */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(234 179 8) transparent;
+  scrollbar-color: hsl(var(--primary)) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -153,17 +183,17 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgb(234 179 8);
+  background-color: hsl(var(--primary));
   border-radius: 4px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(202 138 4);
+  background-color: hsl(var(--primary) / 0.8);
 }
 
 /* Custom select styling */
 select option:checked,
 select option:hover {
-  background-color: rgb(234 179 8) !important;
-  color: black !important;
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
 }

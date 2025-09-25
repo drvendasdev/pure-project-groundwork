@@ -34,9 +34,9 @@ export function AddColumnModal({ open, onOpenChange, onAddColumn, isDarkMode = f
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className={`sm:max-w-md ${isDarkMode ? 'bg-[#2d2d2d] border-gray-600' : 'bg-white'}`}>
+        <DialogContent className="sm:max-w-md bg-card border-border">
           <DialogHeader>
-            <DialogTitle className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <DialogTitle className="text-card-foreground">
               Adicionar Coluna
             </DialogTitle>
           </DialogHeader>
@@ -47,12 +47,12 @@ export function AddColumnModal({ open, onOpenChange, onAddColumn, isDarkMode = f
                 placeholder="Nome"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className={isDarkMode ? 'bg-[#3d3d3d] border-gray-600 text-white' : ''}
+                className="bg-input border-border text-foreground"
               />
             </div>
             
             <div>
-              <label className={`block text-sm mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <label className="block text-sm mb-2 text-muted-foreground">
                 Cor
               </label>
               <div className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export function AddColumnModal({ open, onOpenChange, onAddColumn, isDarkMode = f
                 <Input
                   value={color}
                   onChange={(e) => setColor(e.target.value)}
-                  className={`flex-1 ${isDarkMode ? 'bg-[#3d3d3d] border-gray-600 text-white' : ''}`}
+                  className="flex-1 bg-input border-border text-foreground"
                   placeholder="#000000"
                 />
               </div>
@@ -79,13 +79,13 @@ export function AddColumnModal({ open, onOpenChange, onAddColumn, isDarkMode = f
               <Button 
                 variant="outline" 
                 onClick={() => onOpenChange(false)}
-                className={isDarkMode ? 'border-gray-600 text-white hover:bg-gray-700' : ''}
+                className="border-border text-card-foreground hover:bg-muted"
               >
                 Cancelar
               </Button>
               <Button 
                 onClick={handleSubmit}
-                className="bg-warning hover:bg-yellow-500 text-black"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 disabled={!name.trim()}
               >
                 Adicionar

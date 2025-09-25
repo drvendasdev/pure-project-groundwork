@@ -31,7 +31,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({
       <DialogContent className="max-w-4xl w-full h-[90vh] flex flex-col border-0 bg-black/95 p-0">
         <DialogHeader className="flex-shrink-0 p-4 bg-black/80">
           <div className="flex items-center justify-between">
-            <DialogTitle className="truncate text-white">
+            <DialogTitle className="truncate text-foreground">
               {fileName || 'Vídeo'}
             </DialogTitle>
             <div className="flex gap-2">
@@ -39,7 +39,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={handleDownload}
-                className="bg-white/10 text-white hover:bg-white/20"
+                className="bg-muted/10 text-foreground hover:bg-muted/20"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Baixar
@@ -48,7 +48,7 @@ export const VideoModal: React.FC<VideoModalProps> = ({
                 variant="secondary"
                 size="sm"
                 onClick={onClose}
-                className="bg-white/10 text-white hover:bg-white/20"
+                className="bg-muted/10 text-foreground hover:bg-muted/20"
               >
                 <X className="h-4 w-4" />
               </Button>

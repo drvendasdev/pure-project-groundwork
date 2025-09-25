@@ -29,13 +29,13 @@ export function TopBar({ onNavigateToConversation }: TopBarProps) {
             }}
           />
           <CardContent className="p-6 relative z-10">
-            <p className="text-xs font-semibold mb-2" style={{ color: 'black' }}>
+            <p className="text-xs font-semibold mb-2 text-foreground">
               Bem Vindo
             </p>
-            <h3 className="text-xl font-semibold mb-1" style={{ color: 'black' }}>
+            <h3 className="text-xl font-semibold mb-1 text-foreground">
               CDE - Centro de Desenvolvimento Empresarial
             </h3>
-            <p className="text-xs" style={{ color: 'rgb(107, 114, 128)' }}>
+            <p className="text-xs text-muted-foreground">
               Aqui estão algumas estatísticas da sua empresa
             </p>
           </CardContent>
@@ -44,24 +44,19 @@ export function TopBar({ onNavigateToConversation }: TopBarProps) {
         {/* Wallet Card */}
         <Card className="flex-1">
           <CardHeader>
-            <CardTitle className="text-xl" style={{ color: 'black' }}>
+            <CardTitle className="text-xl text-foreground">
               Minha carteira
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div 
-              className="flex items-center justify-between"
-              style={{
-                backgroundColor: 'rgb(245, 245, 245)',
-                padding: 15,
-                borderRadius: 14
-              }}
+              className="flex items-center justify-between bg-muted p-4 rounded-lg"
             >
-              <div className="text-2xl font-bold" style={{ color: 'black' }}>
+              <div className="text-2xl font-bold text-foreground">
                 R$ 0
               </div>
               <Button 
-                className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={() => setShowWalletModal(true)}
               >
                 Adicionar Saldo

@@ -211,8 +211,8 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
           isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3",
           item.group && !isCollapsed && "pl-8",
           isActive 
-            ? "bg-yellow-100 text-gray-900 hover:bg-yellow-100"
-            : "hover:bg-gray-50 text-gray-700"
+            ? "bg-sidebar-active text-sidebar-active-foreground hover:bg-sidebar-active"
+            : "hover:bg-sidebar-accent text-sidebar-foreground"
         )}
       >
         {item.icon}
@@ -254,7 +254,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       <div key={groupName}>
         <button
           onClick={() => toggleGroup(groupName)}
-          className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium hover:bg-gray-50 rounded-md text-gray-700"
+          className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium hover:bg-sidebar-accent rounded-md text-sidebar-foreground"
         >
           {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           <span>{label}</span>
@@ -307,7 +307,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
     <div 
       data-sidebar
       className={cn(
-        "rounded-lg shadow-md m-2 flex flex-col max-h-[calc(100vh-1rem)] transition-all duration-300 relative bg-white border border-border/50",
+        "rounded-lg shadow-md m-2 flex flex-col max-h-[calc(100vh-1rem)] transition-all duration-300 relative bg-sidebar border border-sidebar-border",
         isCollapsed ? "w-20" : "w-64"
       )}
     >
@@ -320,7 +320,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
       >
         <h1 
           className={cn(
-            "font-bold transition-all duration-300 text-black",
+            "font-bold transition-all duration-300 text-sidebar-foreground",
             isCollapsed ? "text-lg" : "text-2xl"
           )}
         >
@@ -365,8 +365,8 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
                       <button className="p-2 hover:bg-accent rounded-md relative">
                         <Bell className="w-5 h-5 text-muted-foreground" />
                         <Badge 
-                          variant="secondary" 
-                          className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs bg-red-500 text-white border-0"
+                          variant="destructive" 
+                          className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs bg-destructive text-destructive-foreground border-0"
                         >
                           {totalUnread > 99 ? '99+' : totalUnread}
                         </Badge>
