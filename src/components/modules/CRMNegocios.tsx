@@ -309,11 +309,21 @@ export function CRMNegocios({
     // Filtrar por tags selecionadas
     if (appliedFilters?.tags && appliedFilters.tags.length > 0) {
       columnCards = columnCards.filter(card => {
-        // Verificar se o card tem pelo menos uma das tags selecionadas
+        // Verificar tags diretas do card
         const cardTags = Array.isArray(card.tags) ? card.tags : [];
-        return appliedFilters.tags.some(filterTag => 
+        const hasCardTag = appliedFilters.tags.some(filterTag => 
           cardTags.some(cardTag => cardTag === filterTag)
         );
+        
+        // Verificar tags do contato associado
+        const contactTags = card.contact?.contact_tags || [];
+        const hasContactTag = appliedFilters.tags.some(filterTag => 
+          contactTags.some(contactTag => 
+            contactTag.tags?.id === filterTag || contactTag.tags?.name === filterTag
+          )
+        );
+        
+        return hasCardTag || hasContactTag;
       });
     }
     
