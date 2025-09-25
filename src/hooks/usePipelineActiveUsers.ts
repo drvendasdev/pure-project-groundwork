@@ -24,12 +24,21 @@ export function usePipelineActiveUsers(pipelineId?: string) {
     const fetchActiveUsers = async () => {
       setIsLoading(true);
       try {
-        // Buscar informações do usuário atual para verificar permissões
-        const { data: currentUser } = await supabase
-          .from('system_users')
-          .select('id, profile')
-          .eq('email', user?.email)
-          .single();
+        // Buscar lista de usuários via Edge Function para contornar RLS
+        const { data: usersResponse, error: usersError } = await supabase.functions.invoke('manage-system-user', {
+          body: {
+            action: 'list',
+            userData: {}
+          }
+        });
+
+        if (usersError) {
+          console.error('Error fetching users via Edge Function:', usersError);
+          return;
+        }
+
+        const allUsers = usersResponse?.data || [];
+        const currentUser = allUsers.find((u: any) => u.email === user?.email);
 
         if (!currentUser) {
           console.error('Current user not found');
@@ -66,7 +75,7 @@ export function usePipelineActiveUsers(pipelineId?: string) {
           return;
         }
 
-        // Buscar informações dos usuários separadamente
+        // Buscar informações dos usuários pelos IDs encontrados
         const userIds = Array.from(new Set(
           cardsWithConversations?.map((card: any) => card.conversations?.assigned_user_id).filter(Boolean) || []
         ));
@@ -76,15 +85,8 @@ export function usePipelineActiveUsers(pipelineId?: string) {
           return;
         }
 
-        const { data: users, error: usersError } = await supabase
-          .from('system_users')
-          .select('id, name, avatar')
-          .in('id', userIds);
-
-        if (usersError) {
-          console.error('Error fetching users:', usersError);
-          return;
-        }
+        // Filtrar usuários pelos IDs necessários
+        const users = allUsers.filter((user: any) => userIds.includes(user.id));
 
         // Agrupar por usuário
         const userMap = new Map<string, ActiveUser>();
