@@ -49,7 +49,7 @@ serve(async (req) => {
       
       const connections = sseConnections.get(instance)!;
       const connectionId = Date.now() + Math.random();
-      const connection = { id: connectionId, controller };
+      const connection = { id: connectionId, controller, cleanup: undefined as any };
       connections.push(connection);
 
       console.log(`SSE connection ${connectionId} added for instance ${instance}. Total: ${connections.length}`);

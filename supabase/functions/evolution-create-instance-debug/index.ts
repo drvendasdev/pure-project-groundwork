@@ -30,7 +30,7 @@ serve(async (req) => {
     } catch (parseError) {
       console.error('❌ JSON parse error:', parseError);
       return new Response(
-        JSON.stringify({ success: false, error: 'JSON parse failed', details: parseError.message }),
+        JSON.stringify({ success: false, error: 'JSON parse failed', details: (parseError as Error).message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -93,8 +93,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: false, 
         error: 'Debug function failed',
-        message: error.message,
-        stack: error.stack
+        message: (error as Error).message,
+        stack: (error as Error).stack
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

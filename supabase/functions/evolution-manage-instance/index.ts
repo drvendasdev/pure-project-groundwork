@@ -33,12 +33,6 @@ async function getEvolutionConfig(supabase: any, workspaceId: string) {
 
   // No fallback - require workspace configuration
   throw new Error('Evolution API not configured for workspace. Please configure URL and API key in Evolution settings.');
-  
-  const apiKey = Deno.env.get('EVOLUTION_API_KEY') || 
-                 Deno.env.get('EVOLUTION_APIKEY') || 
-                 Deno.env.get('EVOLUTION_ADMIN_API_KEY');
-  
-  return { url, apiKey };
 }
 
 serve(async (req) => {
@@ -127,15 +121,19 @@ serve(async (req) => {
           
           // First, delete all related data in the correct order
           
-          // 1. Delete messages related to conversations from this connection
+          // 1. Get conversation IDs first
+          const { data: conversations } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('connection_id', connection.id);
+
+          const conversationIds = conversations?.map(c => c.id) || [];
+
+          // Delete messages first (they reference conversations)
           const { error: messagesError } = await supabase
             .from('messages')
             .delete()
-            .in('conversation_id', supabase
-              .from('conversations')
-              .select('id')
-              .eq('connection_id', connection.id)
-            )
+            .in('conversation_id', conversationIds)
           
           if (messagesError) {
             console.error('⚠️ Error deleting messages:', messagesError)
@@ -147,11 +145,7 @@ serve(async (req) => {
           const { error: assignmentsError } = await supabase
             .from('conversation_assignments')
             .delete()
-            .in('conversation_id', supabase
-              .from('conversations')
-              .select('id')
-              .eq('connection_id', connection.id)
-            )
+            .in('conversation_id', conversationIds)
           
           if (assignmentsError) {
             console.error('⚠️ Error deleting conversation assignments:', assignmentsError)
@@ -163,11 +157,7 @@ serve(async (req) => {
           const { error: tagsError } = await supabase
             .from('conversation_tags')
             .delete()
-            .in('conversation_id', supabase
-              .from('conversations')
-              .select('id')
-              .eq('connection_id', connection.id)
-            )
+            .in('conversation_id', conversationIds)
           
           if (tagsError) {
             console.error('⚠️ Error deleting conversation tags:', tagsError)
@@ -179,11 +169,7 @@ serve(async (req) => {
           const { error: cardsError } = await supabase
             .from('pipeline_cards')
             .delete()
-            .in('conversation_id', supabase
-              .from('conversations')
-              .select('id')
-              .eq('connection_id', connection.id)
-            )
+            .in('conversation_id', conversationIds)
           
           if (cardsError) {
             console.error('⚠️ Error deleting pipeline cards:', cardsError)
@@ -325,7 +311,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || 'Internal server error' 
+        error: (error as Error).message || 'Internal server error' 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

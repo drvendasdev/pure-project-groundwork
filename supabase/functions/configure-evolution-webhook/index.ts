@@ -57,7 +57,7 @@ serve(async (req) => {
     // Get instance connection details
     const { data: connectionData, error: connectionError } = await supabase
       .from('connections')
-      .select('id, workspace_id')
+      .select('id, workspace_id, metadata')
       .eq('instance_name', instance_name)
       .maybeSingle();
 
@@ -127,7 +127,7 @@ serve(async (req) => {
       .from('connections')
       .update({ 
         metadata: { 
-          ...connectionData.metadata, 
+          ...(connectionData.metadata || {}), 
           webhook_configured: true,
           webhook_url: webhookUrl,
           webhook_configured_at: new Date().toISOString()

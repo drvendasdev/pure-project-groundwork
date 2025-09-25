@@ -358,9 +358,9 @@ serve(async (req) => {
       console.error('❌ Evolution API request failed:', fetchError);
       await supabase.from('connections').delete().eq('id', connectionData.id);
       
-      const errorMessage = fetchError.name === 'AbortError' 
+      const errorMessage = (fetchError as any).name === 'AbortError' 
         ? 'Request timeout - Evolution API não respondeu em 30 segundos'
-        : `Falha na conexão com Evolution API: ${fetchError.message}`;
+        : `Falha na conexão com Evolution API: ${(fetchError as Error).message}`;
       
       return new Response(
         JSON.stringify({ success: false, error: errorMessage }),
@@ -454,15 +454,15 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ CRITICAL ERROR in evolution-create-instance:', error);
-    console.error('❌ Error name:', error.name);
-    console.error('❌ Error message:', error.message);
-    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error name:', (error as any).name);
+    console.error('❌ Error message:', (error as Error).message);
+    console.error('❌ Error stack:', (error as Error).stack);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: `Erro interno: ${error.message || 'Erro desconhecido'}`,
-        errorType: error.name || 'UnknownError'
+        error: `Erro interno: ${(error as Error).message || 'Erro desconhecido'}`,
+        errorType: (error as any).name || 'UnknownError'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
