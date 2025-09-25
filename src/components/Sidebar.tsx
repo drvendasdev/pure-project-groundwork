@@ -16,7 +16,6 @@ import { ImpersonateWorkspaceModal } from "@/components/modals/ImpersonateWorksp
 import { 
   LayoutDashboard, 
   MessageCircle, 
-  Phone, 
   Users, 
   FolderOpen, 
   Settings, 
@@ -41,7 +40,7 @@ import {
   BarChart3,
   AudioLines
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+
 
 interface SidebarProps {
   activeModule: ModuleType;
@@ -416,28 +415,7 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
             </Tooltip>
           </TooltipProvider>
           
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button className="p-2 hover:bg-accent rounded-md">
-                  <Phone className="w-5 h-5 text-muted-foreground" />
-                </button>
-              </TooltipTrigger>
-              {isCollapsed && (
-                <TooltipContent side="right">
-                  <p>Ligações</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
           
-          {!isCollapsed && (
-            <Switch 
-              className="ml-auto" 
-              checked={isDarkMode}
-              onCheckedChange={onToggleDarkMode}
-            />
-          )}
         </div>
       </div>
 
