@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, closestCenter, DragOverEvent, Active, Over } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -277,6 +277,7 @@ export function CRMNegocios({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [appliedFilters, setAppliedFilters] = useState<{tags: string[]} | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -285,6 +286,20 @@ export function CRMNegocios({
       }
     })
   );
+
+  // useEffect para simular refresh dos dados na montagem do componente
+  useEffect(() => {
+    const refreshData = async () => {
+      setIsRefreshing(true);
+      // Simula carregamento de 300ms para atualizar dados
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setIsRefreshing(false);
+    };
+    
+    if (selectedWorkspace?.workspace_id) {
+      refreshData();
+    }
+  }, [selectedWorkspace?.workspace_id]);
 
   // Função para formatar valores monetários
   const formatCurrency = (value: number) => {
@@ -453,6 +468,20 @@ export function CRMNegocios({
           onClose={() => setIsCriarPipelineModalOpen(false)} 
           onSave={handlePipelineCreate} 
         />
+      </div>
+    );
+  }
+  
+  // Mostrar loading de refresh se estiver carregando
+  if (isRefreshing || isLoading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="text-muted-foreground text-sm">Atualizando dados do pipeline...</p>
+          </div>
+        </div>
       </div>
     );
   }
