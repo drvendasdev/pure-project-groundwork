@@ -248,7 +248,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           message: 'Error fetching profile from Evolution API',
-          error: fetchError.message 
+          error: (fetchError as Error).message 
         }),
         { 
           status: 500, 
@@ -260,13 +260,13 @@ serve(async (req) => {
   } catch (error) {
     console.error('❌ Error processing request:', error);
     
-    // Increment retry counter on general error (if we have contactId)
-    if (contactId) {
+    // Increment retry counter on general error (if we have existingContact)
+    if (existingContact) {
       try {
         const { data: contact } = await supabase
           .from('contacts')
           .select('profile_fetch_attempts')
-          .eq('id', contactId)
+          .eq('id', existingContact.id)
           .single();
           
         if (contact) {
@@ -276,7 +276,7 @@ serve(async (req) => {
               profile_fetch_attempts: contact.profile_fetch_attempts + 1,
               profile_fetch_last_attempt: new Date().toISOString()
             })
-            .eq('id', contactId);
+            .eq('id', existingContact.id);
         }
       } catch (updateError) {
         console.error('❌ Failed to update retry counter:', updateError);
@@ -287,7 +287,7 @@ serve(async (req) => {
       JSON.stringify({ 
         success: false, 
         message: 'Internal server error', 
-        error: error.message 
+        error: (error as Error).message 
       }),
       { 
         status: 500, 

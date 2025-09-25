@@ -278,16 +278,16 @@ serve(async (req) => {
 
       } catch (error) {
         await logEvent(supabase, connection.id, correlationId, 'EVOLUTION_REQUEST_ERROR', 'error', 
-          'Failed to communicate with Evolution API', { error: error.message });
+          'Failed to communicate with Evolution API', { error: (error as Error).message });
 
         await supabase
           .from('connections')
-          .update({ status: 'error', metadata: { ...connection.metadata, error: error.message } })
+          .update({ status: 'error', metadata: { ...connection.metadata, error: (error as Error).message } })
           .eq('id', connection.id);
 
         return new Response(JSON.stringify({
           error: 'Erro ao comunicar com a Evolution API',
-          details: error.message
+          details: (error as Error).message
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

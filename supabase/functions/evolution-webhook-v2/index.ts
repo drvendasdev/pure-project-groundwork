@@ -98,7 +98,7 @@ serve(async (req) => {
       
       if (evolutionMessageId) {
         // Map Evolution ACK levels to our message status
-        let newStatus: string;
+        let newStatus: string | undefined;
         let timestampField: string | null = null;
         
         switch (ackLevel) {
@@ -529,7 +529,7 @@ serve(async (req) => {
     if (webhookUrl) {
       console.log(`🚀 [${requestId}] Forwarding to N8N: ${webhookUrl}`);
       
-      const headers = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
       
@@ -620,7 +620,7 @@ serve(async (req) => {
     console.error(`❌ [${requestId}] Error processing Evolution webhook:`, error);
     return new Response(JSON.stringify({
       error: 'Internal server error',
-      message: error.message,
+      message: (error as Error).message,
       requestId
     }), {
       status: 500,

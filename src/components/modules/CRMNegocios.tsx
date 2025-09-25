@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { formatDistanceToNow, differenceInHours } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, closestCenter, DragOverEvent, Active, Over } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +44,7 @@ interface Deal {
   priority: 'low' | 'medium' | 'high';
   product?: string;
   lastContact?: string;
+  created_at?: string;
   contact?: {
     id: string;
     name: string;
@@ -123,6 +126,21 @@ function DraggableDeal({
   // Gerar iniciais do responsável para o avatar
   const getInitials = (name: string) => {
     return name.split(' ').map(word => word.charAt(0)).join('').substring(0, 2).toUpperCase();
+  };
+
+  // Formatar tempo relativo de criação
+  const formatTimeAgo = (createdAt?: string) => {
+    if (!createdAt) return 'Data indisponível';
+    
+    const createdDate = new Date(createdAt);
+    const hoursAgo = differenceInHours(new Date(), createdDate);
+    
+    if (hoursAgo < 24) {
+      return formatDistanceToNow(createdDate, { addSuffix: true, locale: ptBR });
+    } else {
+      const daysAgo = Math.floor(hoursAgo / 24);
+      return `há ${daysAgo} ${daysAgo === 1 ? 'dia' : 'dias'}`;
+    }
   };
   
   return (
@@ -224,11 +242,9 @@ function DraggableDeal({
           </div>
           
           <div className="flex items-center gap-2">
-            {deal.lastContact && (
-              <span className="text-xs text-muted-foreground">
-                {deal.lastContact}
-              </span>
-            )}
+            <span className="text-xs text-muted-foreground">
+              {formatTimeAgo(deal.created_at)}
+            </span>
             {deal.priority === 'high' && (
               <div className="flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-600">
                 <AlertTriangle className="w-3 h-3" />
@@ -710,9 +726,9 @@ export function CRMNegocios({
                                 responsible: card.responsible_user?.name || 
                                            (card.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
                                 tags: Array.isArray(card.tags) ? card.tags : [],
-                                priority: 'medium',
-                                lastContact: "2h atrás", // Placeholder
-                                contact: card.contact,
+                                 priority: 'medium',
+                                 created_at: card.created_at,
+                                 contact: card.contact,
                                 conversation: card.conversation || (card.conversation_id ? { id: card.conversation_id } : undefined)
                               };
                               return (
@@ -759,9 +775,10 @@ export function CRMNegocios({
                 stage: activeColumn?.name || "",
                 responsible: activeCard.responsible_user?.name || 
                            (activeCard.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
-                tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
-                priority: 'medium',
-                contact: activeCard.contact,
+                 tags: Array.isArray(activeCard.tags) ? activeCard.tags : [],
+                 priority: 'medium',
+                 created_at: activeCard.created_at,
+                 contact: activeCard.contact,
                 conversation: activeCard.conversation || (activeCard.conversation_id ? { id: activeCard.conversation_id } : undefined)
               };
               return (
