@@ -58,16 +58,22 @@ export const useWhatsAppConversations = () => {
   const { user, logout } = useAuth();
 
   const fetchConversations = async () => {
+    const DEBUG_CONVERSATIONS = false; // Mudar para true para debug
+    
     try {
       setLoading(true);
-      console.log('🔄 Carregando conversas do WhatsApp...');
+      if (DEBUG_CONVERSATIONS) {
+        console.log('🔄 Carregando conversas do WhatsApp...');
+      }
 
       // Get current user from localStorage (custom auth system)
       const userData = localStorage.getItem('currentUser');
       const currentUserData = userData ? JSON.parse(userData) : null;
       
-      console.log('👤 Usuário autenticado:', currentUserData?.email, 'ID:', currentUserData?.id);
-      console.log('🏢 Workspace selecionado:', selectedWorkspace?.name, 'ID:', selectedWorkspace?.workspace_id);
+      if (DEBUG_CONVERSATIONS) {
+        console.log('👤 Usuário autenticado:', currentUserData?.email, 'ID:', currentUserData?.id);
+        console.log('🏢 Workspace selecionado:', selectedWorkspace?.name, 'ID:', selectedWorkspace?.workspace_id);
+      }
       
       if (!currentUserData?.id) {
         console.log('No user data in localStorage');
@@ -128,10 +134,12 @@ export const useWhatsAppConversations = () => {
       }));
       
       setConversations(formattedConversations);
-      console.log(`✅ ${formattedConversations.length} conversas carregadas (SEM mensagens)`);
-      
-      if (formattedConversations.length === 0) {
-        console.log('ℹ️ Nenhuma conversa encontrada. Verifique se há conexões configuradas e conversas ativas.');
+      if (DEBUG_CONVERSATIONS) {
+        console.log(`✅ ${formattedConversations.length} conversas carregadas (SEM mensagens)`);
+        
+        if (formattedConversations.length === 0) {
+          console.log('ℹ️ Nenhuma conversa encontrada. Verifique se há conexões configuradas e conversas ativas.');
+        }
       }
     } catch (error) {
       console.error('❌ Erro ao buscar conversas:', error);
@@ -251,8 +259,11 @@ export const useWhatsAppConversations = () => {
     fileUrl?: string, 
     fileName?: string
   ) => {
+    const DEBUG_CONVERSATIONS = false; // Logs condicionais
     try {
-      console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
+      if (DEBUG_CONVERSATIONS) {
+        console.log('📤 Enviando mensagem:', { conversationId, content, messageType });
+      }
 
       // Obter dados do usuário logado
       const userData = localStorage.getItem('currentUser');
@@ -291,8 +302,10 @@ export const useWhatsAppConversations = () => {
         headers['x-workspace-id'] = selectedWorkspace.workspace_id;
       }
 
-      console.log('🚀 Chamando send-message-simple com payload:', payload);
-      console.log('🚀 Headers enviados:', headers);
+      if (DEBUG_CONVERSATIONS) {
+        console.log('🚀 Chamando send-message-simple com payload:', payload);
+        console.log('🚀 Headers enviados:', headers);
+      }
       const { data: sendResult, error: apiError } = await supabase.functions.invoke('test-send-msg', {
         body: payload,
         headers
@@ -337,7 +350,9 @@ export const useWhatsAppConversations = () => {
         }));
       }
 
-      console.log('✅ Mensagem enviada com sucesso:', sendResult);
+      if (DEBUG_CONVERSATIONS) {
+        console.log('✅ Mensagem enviada com sucesso:', sendResult);
+      }
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem:', error);
       
@@ -413,8 +428,11 @@ export const useWhatsAppConversations = () => {
 
   // Marcar como lida
   const markAsRead = useCallback(async (conversationId: string) => {
+    const DEBUG_CONVERSATIONS = false; // Logs condicionais
     try {
-      console.log('📖 Marcando conversa como lida:', conversationId);
+      if (DEBUG_CONVERSATIONS) {
+        console.log('📖 Marcando conversa como lida:', conversationId);
+      }
       
       // Get current user data
       const userData = localStorage.getItem('currentUser');
@@ -457,9 +475,10 @@ export const useWhatsAppConversations = () => {
           : conv
       ));
 
-      console.log('✅ Conversa marcada como lida - notificações atualizadas');
-      
-      console.log('✅ Conversa marcada como lida com sucesso');
+      if (DEBUG_CONVERSATIONS) {
+        console.log('✅ Conversa marcada como lida - notificações atualizadas');
+        console.log('✅ Conversa marcada como lida com sucesso');
+      }
     } catch (error) {
       console.error('❌ Erro ao marcar como lida:', error);
     }
@@ -494,7 +513,10 @@ export const useWhatsAppConversations = () => {
     const currentUserData = userData ? JSON.parse(userData) : null;
     
     if (currentUserData?.id && selectedWorkspace?.workspace_id) {
-      console.log('🏢 Workspace mudou para:', selectedWorkspace?.workspace_id, '- Recarregando conversas');
+      const DEBUG_CONVERSATIONS = false;
+      if (DEBUG_CONVERSATIONS) {
+        console.log('🏢 Workspace mudou para:', selectedWorkspace?.workspace_id, '- Recarregando conversas');
+      }
       
       // Forçar limpeza completa das conversas quando workspace muda
       setConversations([]);

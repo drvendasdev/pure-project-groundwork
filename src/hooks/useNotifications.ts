@@ -24,14 +24,11 @@ export function useNotifications() {
   const [lastToastTime, setLastToastTime] = useState(0);
   const conversationsRef = useRef(conversations);
   
-  // Debug logs detalhados
-  console.log('🔔 useNotifications - conversations:', conversations.length, 'total unread:', totalUnread);
-  console.log('🔔 useNotifications - conversations array:', conversations.map(c => ({
-    id: c.id,
-    name: c.contact.name,
-    unread: c.unread_count,
-    messages: c.messages?.length || 0
-  })));
+  // Logs de debug condicionais (apenas se necessário)
+  const DEBUG_NOTIFICATIONS = false; // Mudar para true para debug
+  if (DEBUG_NOTIFICATIONS) {
+    console.log('🔔 useNotifications - conversations:', conversations.length, 'total unread:', totalUnread);
+  }
   
   // Debounce para evitar re-renders excessivos
   const debounceTimeoutRef = useRef<NodeJS.Timeout>();
@@ -84,7 +81,9 @@ export function useNotifications() {
       const newNotifications: NotificationMessage[] = [];
       
       conversations.forEach((conv) => {
-        console.log('🔔 Processing conv:', conv.contact.name, 'messages:', conv.messages?.length || 0, 'unread_count:', conv.unread_count);
+        if (DEBUG_NOTIFICATIONS) {
+          console.log('🔔 Processing conv:', conv.contact.name, 'messages:', conv.messages?.length || 0, 'unread_count:', conv.unread_count);
+        }
         
         // ✅ CORREÇÃO 6: Priorizar unread_count da conversa sempre
         const convUnreadCount = conv.unread_count || 0;
@@ -106,7 +105,9 @@ export function useNotifications() {
             isMedia: ['image', 'video', 'audio', 'document'].includes(lastMsg?.message_type || '')
           });
           
-          console.log('✅ Notificação criada para:', conv.contact.name, 'unread:', convUnreadCount);
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('✅ Notificação criada para:', conv.contact.name, 'unread:', convUnreadCount);
+          }
         }
         
         // Se há mensagens carregadas, processar também (para casos específicos)
@@ -157,7 +158,7 @@ export function useNotifications() {
       // Ordenar por mais recente primeiro
       newNotifications.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
       setNotifications(newNotifications);
-    }, 300); // Debounce de 300ms
+    }, 500); // Debounce aumentado para 500ms para reduzir execuções
 
     return () => {
       if (debounceTimeoutRef.current) {
@@ -203,9 +204,11 @@ export function useNotifications() {
     await Promise.all(conversationsWithUnread.map(conv => markAsRead(conv.id)));
   };
 
-  // ✅ CORREÇÃO 9: Subscription em tempo real para mudanças de read_at
+  // Subscription em tempo real para mudanças otimizada
   useEffect(() => {
-    console.log('🔔 Configurando subscription para mudanças de read_at...');
+    if (DEBUG_NOTIFICATIONS) {
+      console.log('🔔 Configurando subscription para mudanças de read_at...');
+    }
     
     const channel = supabase
       .channel('notifications-updates')
@@ -215,18 +218,21 @@ export function useNotifications() {
         table: 'messages',
         filter: 'sender_type=eq.contact'
       }, (payload) => {
-        console.log('🔔 Real-time: Mensagem atualizada:', payload);
+        if (DEBUG_NOTIFICATIONS) {
+          console.log('🔔 Real-time: Mensagem atualizada:', payload);
+        }
         
         // Se read_at foi atualizado (mensagem lida), forçar re-processamento
         if (payload.new?.read_at && !payload.old?.read_at) {
-          console.log('🔔 Mensagem marcada como lida em tempo real');
-          // Trigger debounced update
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('🔔 Mensagem marcada como lida em tempo real');
+          }
+          // Trigger debounced update sem logs
           if (debounceTimeoutRef.current) {
             clearTimeout(debounceTimeoutRef.current);
           }
           
           debounceTimeoutRef.current = setTimeout(() => {
-            // Forçar re-avaliação das conversações
             conversationsRef.current = conversations;
           }, 300);
         }
@@ -236,17 +242,20 @@ export function useNotifications() {
         schema: 'public',
         table: 'conversations'
       }, (payload) => {
-        console.log('🔔 Real-time: Conversa atualizada:', payload);
+        if (DEBUG_NOTIFICATIONS) {
+          console.log('🔔 Real-time: Conversa atualizada:', payload);
+        }
         
         // Se unread_count foi alterado, forçar re-processamento
         if (payload.new?.unread_count !== payload.old?.unread_count) {
-          console.log('🔔 Contador de não lidas alterado em tempo real');
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('🔔 Contador de não lidas alterado em tempo real');
+          }
           if (debounceTimeoutRef.current) {
             clearTimeout(debounceTimeoutRef.current);
           }
           
           debounceTimeoutRef.current = setTimeout(() => {
-            // Forçar re-avaliação das conversações
             conversationsRef.current = conversations;
           }, 300);
         }
@@ -254,7 +263,9 @@ export function useNotifications() {
       .subscribe();
 
     return () => {
-      console.log('🔔 Removendo subscription de notificações');
+      if (DEBUG_NOTIFICATIONS) {
+        console.log('🔔 Removendo subscription de notificações');
+      }
       supabase.removeChannel(channel);
     };
   }, []);
