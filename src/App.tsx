@@ -35,6 +35,7 @@ const App = () => (
             <Route path="/crm-ligacoes" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/crm-contatos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/crm-tags" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
+            <Route path="/crm-produtos" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             
             <Route path="/automacoes-agente" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />
             <Route path="/automacoes-bot" element={<ProtectedRoute><TezeusCRM /></ProtectedRoute>} />

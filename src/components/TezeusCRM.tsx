@@ -94,6 +94,10 @@ export function TezeusCRM() {
     if (!path || path === "dashboard") return "dashboard";
     if (path.startsWith("editar-agente/")) return "editar-agente";
     if (path.includes("/usuarios")) return "workspace-usuarios";
+    
+    // Debug log to see what path we're getting
+    console.log('🔍 URL Path:', path);
+    
     return path as ModuleType;
   };
 
