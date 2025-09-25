@@ -732,33 +732,48 @@ export function CRMNegocios({
             <div className="flex gap-2 sm:gap-4 h-full min-w-full">
               {columns.map(column => {
                 const columnCards = getFilteredCards(column.id);
+                
+                // Calculate total value of cards in this column
+                const calculateColumnTotal = () => {
+                  return columnCards.reduce((total, card) => total + (card.value || 0), 0);
+                };
+
+                const formatCurrency = (value: number) => {
+                  return new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL'
+                  }).format(value);
+                };
+
                 return (
                   <DroppableColumn key={column.id} id={`column-${column.id}`}>
                     <div className="w-60 sm:w-68 flex-shrink-0">
                        <div 
-                         className={cn("bg-card rounded-lg border border-t-4 h-[600px] max-h-[80vh] flex flex-col", `border-t-[${column.color}]`)} 
+                         className={cn("bg-card rounded-lg border border-t-4 h-[600px] max-h-[80vh] flex flex-col border-b-2 border-b-yellow-500", `border-t-[${column.color}]`)} 
                          style={{ borderTopColor: column.color }}
                        >
-                        <div className="p-4 pb-3 flex-shrink-0">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: column.color }} 
-                              />
-                              <h3 className="font-semibold text-foreground text-sm">
+                        {/* Cabeçalho da coluna - fundo branco/claro */}
+                        <div className="bg-background/95 p-4 pb-3 flex-shrink-0 rounded-t-lg">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-foreground text-base mb-1">
                                 {column.name}
                               </h3>
-                              <Badge variant="secondary" className="text-xs px-2 py-0.5 h-auto">
-                                {columnCards.length}
-                              </Badge>
+                              <div className="text-sm text-muted-foreground space-y-1">
+                                <div className="font-medium">
+                                  Total: {formatCurrency(calculateColumnTotal())}
+                                </div>
+                                <div>
+                                  {columnCards.length} {columnCards.length === 1 ? 'negócio' : 'negócios'}
+                                </div>
+                              </div>
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button 
                                   size="icon" 
                                   variant="ghost" 
-                                  className="h-6 w-6 text-muted-foreground hover:text-foreground" 
+                                  className="h-6 w-6 text-muted-foreground hover:text-foreground flex-shrink-0" 
                                 >
                                   <MoreVertical className="h-3.5 w-3.5" />
                                 </Button>
@@ -817,48 +832,62 @@ export function CRMNegocios({
                           </div>
                         </div>
                         
-                        <div className={cn("flex-1 p-3 pt-0 overflow-y-auto min-h-0 space-y-3", dragOverColumn === column.id ? "bg-primary/5" : "")}>
-                          <SortableContext items={columnCards.map(card => `card-${card.id}`)} strategy={verticalListSortingStrategy}>
-                            {columnCards.map(card => {
-                              const deal: Deal = {
-                                id: card.id,
-                                name: card.title,
-                                value: card.value || 0,
-                                stage: column.name,
-                                responsible: card.responsible_user?.name || 
-                                           (card.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
-                                tags: Array.isArray(card.tags) ? card.tags : [],
-                                 priority: 'medium',
-                                 created_at: card.created_at,
-                                 contact: card.contact,
-                                conversation: card.conversation || (card.conversation_id ? { id: card.conversation_id } : undefined)
-                              };
-                              return (
-                                <DraggableDeal 
-                                  key={card.id} 
-                                  deal={deal} 
-                                  isDarkMode={isDarkMode} 
-                                  onClick={() => openCardDetails(card)} 
-                                  columnColor={column.color}
-                                  onChatClick={(dealData) => {
-                                    console.log('🎯 CRM: Abrindo chat para deal:', dealData);
-                                    console.log('🆔 CRM: Deal ID:', dealData.id);
-                                    console.log('🗣️ CRM: Deal conversation:', dealData.conversation);
-                                    console.log('👤 CRM: Deal contact:', dealData.contact);
-                                    setSelectedChatCard(dealData);
-                                    setIsChatModalOpen(true);
-                                  }}
-                                />
-                              );
-                            })}
-                            
-                            {/* Invisible drop zone for empty columns and bottom of lists */}
-                            <div className="min-h-[40px] w-full" />
-                          </SortableContext>
+                        {/* Corpo da coluna - fundo colorido */}
+                        <div 
+                          className={cn("flex-1 p-3 pt-4 overflow-y-auto min-h-0", dragOverColumn === column.id ? "opacity-90" : "")}
+                          style={{ backgroundColor: `${column.color}10` }}
+                        >
+                          {columnCards.length === 0 ? (
+                            <div className="flex items-center justify-center h-32 text-center">
+                              <p className="text-muted-foreground text-sm">
+                                Nenhum negócio encontrado nesta etapa
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <SortableContext items={columnCards.map(card => `card-${card.id}`)} strategy={verticalListSortingStrategy}>
+                                {columnCards.map(card => {
+                                  const deal: Deal = {
+                                    id: card.id,
+                                    name: card.title,
+                                    value: card.value || 0,
+                                    stage: column.name,
+                                    responsible: card.responsible_user?.name || 
+                                               (card.conversation?.assigned_user_id ? "Atribuído" : "Não atribuído"),
+                                    tags: Array.isArray(card.tags) ? card.tags : [],
+                                    priority: 'medium',
+                                    created_at: card.created_at,
+                                    contact: card.contact,
+                                    conversation: card.conversation || (card.conversation_id ? { id: card.conversation_id } : undefined)
+                                  };
+                                  return (
+                                    <DraggableDeal 
+                                      key={card.id} 
+                                      deal={deal} 
+                                      isDarkMode={isDarkMode} 
+                                      onClick={() => openCardDetails(card)} 
+                                      columnColor={column.color}
+                                      onChatClick={(dealData) => {
+                                        console.log('🎯 CRM: Abrindo chat para deal:', dealData);
+                                        console.log('🆔 CRM: Deal ID:', dealData.id);
+                                        console.log('🗣️ CRM: Deal conversation:', dealData.conversation);
+                                        console.log('👤 CRM: Deal contact:', dealData.contact);
+                                        setSelectedChatCard(dealData);
+                                        setIsChatModalOpen(true);
+                                      }}
+                                    />
+                                  );
+                                })}
+                                
+                                {/* Invisible drop zone for empty columns and bottom of lists */}
+                                <div className="min-h-[40px] w-full" />
+                              </SortableContext>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    </div>
-                  </DroppableColumn>
+                       </div>
+                     </div>
+                   </DroppableColumn>
                 );
               })}
             </div>
