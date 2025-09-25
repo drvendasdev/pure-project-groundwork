@@ -192,24 +192,7 @@ serve(async (req) => {
 
           if (error) throw error;
 
-          // Create default columns for new pipeline
-          const defaultColumns = [
-            { name: 'Prospect', color: '#22c55e', order_position: 0 },
-            { name: 'Qualificado', color: '#3b82f6', order_position: 1 },
-            { name: 'Proposta', color: '#f59e0b', order_position: 2 },
-            { name: 'Fechado', color: '#ef4444', order_position: 3 }
-          ];
-
-          const { error: columnsError } = await supabaseClient
-            .from('pipeline_columns')
-            .insert(
-              defaultColumns.map(col => ({
-                pipeline_id: pipeline.id,
-                ...col,
-              }))
-            );
-
-          if (columnsError) throw columnsError;
+          console.log('✅ Pipeline created successfully:', pipeline.id);
 
           return new Response(JSON.stringify(pipeline), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
