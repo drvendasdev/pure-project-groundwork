@@ -89,6 +89,7 @@ export function DealDetailsModal({
     columns,
     isLoading: isLoadingColumns
   } = usePipelineColumns(selectedPipelineId || null);
+  // A aba "negócio" sempre deve aparecer quando o modal é aberto via card
   const tabs = [{
     id: "negocios",
     label: "Negócios"
@@ -219,24 +220,34 @@ export function DealDetailsModal({
         setContactPipelines(uniquePipelines);
         setPipelineCardsCount(cards.length);
 
-        // Definir pipeline inicial (primeiro pipeline ou pipeline selecionado)
-        const initialPipeline = selectedPipeline && uniquePipelines.find(p => p.id === selectedPipeline.id) 
+        // Definir pipeline inicial - prioriza o pipeline do contexto se disponível
+        const initialPipeline = selectedPipeline 
           ? selectedPipeline.id 
           : uniquePipelines[0]?.id;
           
         if (initialPipeline) {
+          console.log('📍 Definindo pipeline inicial:', initialPipeline);
           setSelectedPipelineId(initialPipeline);
 
           // Encontrar card do pipeline inicial
           const initialCard = cards.find(card => card.pipeline_id === initialPipeline);
           if (initialCard) {
+            console.log('🎯 Card encontrado para pipeline inicial:', initialCard);
             setCurrentColumnId(initialCard.column_id);
           }
         }
-      } else {
+        } else {
         console.log('📭 Nenhum card encontrado para este contato');
         setContactPipelines([]);
         setPipelineCardsCount(0);
+        
+        // Se não há cards mas o modal foi aberto via card, usar o pipeline selecionado do contexto
+        if (selectedPipeline) {
+          console.log('🔄 Usando pipeline do contexto mesmo sem cards:', selectedPipeline);
+          setContactPipelines([selectedPipeline]);
+          setSelectedPipelineId(selectedPipeline.id);
+          setPipelineCardsCount(0); // Nenhum card ativo, mas mostra o pipeline
+        }
       }
 
       // Buscar tags do contato
@@ -445,23 +456,17 @@ export function DealDetailsModal({
                   <span className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
                     {isLoadingData ? 'Carregando...' : `${pipelineCardsCount} ${pipelineCardsCount === 1 ? 'Negócio' : 'Negócios'}`}
                   </span>
-                  {contactPipelines.length > 0 && (
+                  {(contactPipelines.length > 0 || selectedPipeline) && (
                   <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
                     <SelectTrigger className={cn("w-full max-w-md", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")}>
                       <SelectValue placeholder="Selecione um pipeline" />
                     </SelectTrigger>
                     <SelectContent>
                       {contactPipelines.map(pipeline => <SelectItem key={pipeline.id} value={pipeline.id}>
-                          {pipeline.name}
+                          {pipeline.name} {pipeline.id === selectedPipeline?.id ? "(atual)" : ""}
                         </SelectItem>)}
                     </SelectContent>
                   </Select>
-                  )}
-                  
-                  {contactPipelines.length === 0 && !isLoadingData && (
-                    <span className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
-                      Nenhum negócio encontrado para este contato
-                    </span>
                   )}
                 </div>
               </div>
