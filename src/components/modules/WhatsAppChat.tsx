@@ -149,20 +149,24 @@ export function WhatsAppChat({
 
   const tabs = getUserTabs();
 
-  // Filtrar conversas baseado na aba ativa e filtros
+  // Filtrar conversas baseado no conversationFilter (novo sistema de filtros laterais)
   const getFilteredConversations = () => {
     let filtered = [];
     
-    // Filtrar por aba
-    switch (activeTab) {
+    // Aplicar filtro baseado no conversationFilter (barra lateral)
+    switch (conversationFilter) {
       case 'all':
         filtered = conversations.filter(c => c.status !== 'closed');
         break;
-      case 'mine':
+      case 'assigned_to_me':
         filtered = conversations.filter(c => c.assigned_user_id === user?.id && c.status !== 'closed');
         break;
       case 'unassigned':
         filtered = conversations.filter(c => !c.assigned_user_id && c.status !== 'closed');
+        break;
+      case 'groups':
+        // Para grupos, filtrar conversas que são grupos (lógica simplificada por enquanto)
+        filtered = conversations.filter(c => c.status !== 'closed');
         break;
       default:
         filtered = conversations.filter(c => c.status !== 'closed');
