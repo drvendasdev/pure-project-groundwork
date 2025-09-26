@@ -64,6 +64,14 @@ export function DealDetailsModal({
   currentColumnId: initialColumnId,
   currentPipelineId: initialPipelineId
 }: DealDetailsModalProps) {
+  console.log('🔥 DealDetailsModal aberto com props:', {
+    cardId,
+    currentColumnId: initialColumnId,
+    currentPipelineId: initialPipelineId,
+    dealName,
+    contactNumber
+  });
+  
   const [activeTab, setActiveTab] = useState("negocios");
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
   const [contactId, setContactId] = useState<string>("");
@@ -112,21 +120,21 @@ export function DealDetailsModal({
   }];
   useEffect(() => {
     if (isOpen && contactNumber) {
-      // Usar dados do card clicado se disponíveis
+      fetchContactData();
+      fetchUsers();
+      
+      // SEMPRE usar dados do card clicado quando disponíveis
       if (initialColumnId && initialPipelineId) {
         console.log('🎯 Usando dados do card clicado:', { initialColumnId, initialPipelineId });
         setCurrentColumnId(initialColumnId);
         setSelectedPipelineId(initialPipelineId);
       }
-      
-      fetchContactData();
-      fetchUsers();
     }
   }, [isOpen, contactNumber, initialColumnId, initialPipelineId]);
 
-  // Atualizar coluna atual quando mudar de pipeline - com otimização
+  // Atualizar coluna atual quando mudar de pipeline - APENAS se não temos dados do card clicado
   useEffect(() => {
-    if (selectedPipelineId && contactId) {
+    if (selectedPipelineId && contactId && !initialColumnId) {
       // Buscar card do pipeline selecionado apenas se necessário
       const fetchCurrentCard = async () => {
         try {
@@ -159,10 +167,8 @@ export function DealDetailsModal({
       };
       
       fetchCurrentCard();
-    } else {
-      setCurrentColumnId('');
     }
-  }, [selectedPipelineId, contactId]);
+  }, [selectedPipelineId, contactId, initialColumnId]);
 
   // Converter colunas do pipeline em steps com progresso real - otimizado
   useEffect(() => {

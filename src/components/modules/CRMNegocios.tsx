@@ -382,6 +382,13 @@ export function CRMNegocios({
   }, [cards, moveCard]);
   const openCardDetails = (card: any) => {
     console.log('🔍 Abrindo detalhes do card:', card);
+    console.log('📋 Card completo:', {
+      id: card.id,
+      title: card.title,
+      column_id: card.column_id,
+      pipeline_id: card.pipeline_id,
+      contact: card.contact
+    });
     setSelectedCard(card);
     setIsDealDetailsModalOpen(true);
   };
