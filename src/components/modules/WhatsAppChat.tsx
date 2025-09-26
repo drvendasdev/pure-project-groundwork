@@ -158,11 +158,19 @@ export function WhatsAppChat({
 
     // Filtrar por tag se selecionada
     if (selectedTag) {
+      console.log('🏷️ Filtro por tag ativo:', selectedTag);
+      console.log('📋 Conversas antes do filtro:', filtered.length);
+      console.log('🔍 Primeira conversa estrutura:', filtered[0]?.conversation_tags);
+      
       filtered = filtered.filter(conv => {
-        // Verificar se a conversa tem uma tag que corresponde à selecionada
-        // Assumindo que as conversas têm um relacionamento com tags
-        return conv.conversation_tags?.some((ct: any) => ct.tag_id === selectedTag) || false;
+        const hasTag = conv.conversation_tags?.some((ct: any) => ct.tag_id === selectedTag);
+        if (hasTag) {
+          console.log('✅ Conversa com tag encontrada:', conv.contact.name);
+        }
+        return hasTag || false;
       });
+      
+      console.log('📋 Conversas após filtro:', filtered.length);
     }
 
     // Filtrar por termo de busca
