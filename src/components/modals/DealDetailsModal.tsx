@@ -501,7 +501,7 @@ export function DealDetailsModal({
                 </div>
               </div>
 
-              {/* Pipeline Timeline - Melhorado */}
+              {/* Pipeline Timeline - Baseado na imagem de referência */}
               <div className="space-y-6">
                 {isLoadingColumns ? (
                   <div className="flex justify-center py-8">
@@ -518,79 +518,74 @@ export function DealDetailsModal({
                     </div>
                   </div>
                 ) : pipelineSteps.length > 0 ? (
-                  <div className="w-full">
+                  <div className="w-full space-y-4">
                     {/* Informação da posição atual */}
                     {currentColumnId && (
-                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm text-blue-700">
-                          <strong>Posição atual:</strong> {pipelineSteps.find(s => s.isActive)?.name || 'Não definida'}
+                      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          <strong>Etapa atual:</strong> {pipelineSteps.find(s => s.isActive)?.name || 'Não definida'}
                         </p>
                       </div>
                     )}
                     
-                    {/* Timeline Container */}
-                    <div className="relative">
-                      {/* Background Progress Line */}
-                      <div className={cn("absolute top-6 left-0 right-0 h-0.5", isDarkMode ? "bg-gray-600" : "bg-gray-300")} />
+                    {/* Pipeline Visual */}
+                    <div className="relative py-8">
+                      {/* Linha de fundo */}
+                      <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-300 transform -translate-y-1/2 z-0"></div>
                       
-                      {/* Active Progress Line */}
-                      {currentColumnId && (
+                      {/* Linha de progresso */}
+                      {pipelineSteps.length > 1 && (
                         <div 
-                          className="absolute top-6 left-0 h-0.5 bg-gradient-to-r from-yellow-400 to-green-400 transition-all duration-500"
+                          className="absolute top-1/2 left-0 h-1 bg-yellow-400 transform -translate-y-1/2 z-10 transition-all duration-500"
                           style={{ 
-                            width: `${Math.max(0, Math.min(100, ((pipelineSteps.findIndex(step => step.isActive)) / Math.max(1, pipelineSteps.length - 1)) * 100))}%`
+                            width: `${Math.max(0, Math.min(100, ((pipelineSteps.findIndex(step => step.isActive) + 0.5) / Math.max(1, pipelineSteps.length - 1)) * 100))}%`
                           }}
-                        />
+                        ></div>
                       )}
                       
-                      {/* Timeline Steps Container */}
-                      <div className="flex justify-between">
+                      {/* Etapas do Pipeline */}
+                      <div className="relative flex justify-between items-center z-20">
                         {pipelineSteps.map((step, index) => {
                           const currentStepIndex = pipelineSteps.findIndex(s => s.isActive);
-                          const isCompleted = index < currentStepIndex;
+                          const isCompleted = currentStepIndex >= 0 && index < currentStepIndex;
                           const isActive = index === currentStepIndex;
+                          const isFuture = currentStepIndex >= 0 && index > currentStepIndex;
                           
                           return (
                             <div 
                               key={step.id} 
-                              className="flex flex-col items-center cursor-pointer group"
-                              style={{ width: '100%' }}
+                              className="flex flex-col items-center relative"
+                              style={{ flex: '1' }}
                             >
-                              {/* Circle with number */}
+                              {/* Círculo da etapa */}
                               <div 
                                 className={cn(
-                                  "w-12 h-12 rounded-full flex items-center justify-center text-sm font-medium border-2 transition-all duration-300 relative z-10 group-hover:scale-105",
-                                  isCompleted && "bg-green-500 border-green-500 text-white shadow-lg",
-                                  isActive && `border-2 text-black shadow-xl ring-2 ring-yellow-300`,
-                                  !isActive && !isCompleted && (isDarkMode ? "bg-gray-600 border-gray-600 text-gray-300" : "bg-gray-200 border-gray-300 text-gray-600")
+                                  "w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 relative",
+                                  isCompleted && "bg-green-500 border-green-500 text-white",
+                                  isActive && "bg-yellow-400 border-yellow-400 text-black",
+                                  isFuture && "bg-gray-200 border-gray-300 text-gray-500"
                                 )}
-                                style={{ 
-                                  backgroundColor: isActive ? step.color : undefined,
-                                  borderColor: isActive ? step.color : undefined,
-                                  transform: isActive ? 'scale(1.1)' : 'scale(1)'
-                                }}
                               >
                                 {isCompleted ? (
                                   <Check className="w-5 h-5" />
                                 ) : (
-                                  <span className="text-xs font-bold">{index + 1}</span>
+                                  <span className="font-bold">{index + 1}</span>
                                 )}
                               </div>
                               
-                              {/* Step Label */}
-                              <p 
-                                className="text-xs text-center mt-2"
-                                style={{ 
-                                  textAlign: 'center', 
-                                  width: '100%', 
-                                  fontWeight: isActive ? 'bold' : 'normal',
-                                  color: isActive ? (isDarkMode ? '#FCD34D' : '#D97706') : 
-                                        isCompleted ? (isDarkMode ? '#10B981' : '#059669') : 
-                                        (isDarkMode ? '#9CA3AF' : '#6B7280')
-                                }}
-                              >
-                                {step.name}
-                              </p>
+                              {/* Nome da etapa */}
+                              <div className="mt-3 text-center max-w-20">
+                                <p 
+                                  className={cn(
+                                    "text-xs font-medium leading-tight",
+                                    isActive && "text-yellow-600 font-bold",
+                                    isCompleted && "text-green-600 font-semibold", 
+                                    isFuture && "text-gray-500"
+                                  )}
+                                >
+                                  {step.name}
+                                </p>
+                              </div>
                             </div>
                           );
                         })}
