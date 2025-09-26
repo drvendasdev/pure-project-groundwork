@@ -88,6 +88,15 @@ export function DealDetailsModal({
   const [currentColumnId, setCurrentColumnId] = useState<string>("");
   const [contactPipelines, setContactPipelines] = useState<any[]>([]);
   const [pipelineCardsCount, setPipelineCardsCount] = useState(0);
+  
+  // Inicializar imediatamente com dados do card clicado
+  useEffect(() => {
+    if (initialColumnId && initialPipelineId) {
+      console.log('🚀 Inicializando com dados do card:', { initialColumnId, initialPipelineId });
+      setCurrentColumnId(initialColumnId);
+      setSelectedPipelineId(initialPipelineId);
+    }
+  }, [initialColumnId, initialPipelineId]);
   const [contactData, setContactData] = useState<{
     name: string;
     email: string | null;
@@ -103,7 +112,15 @@ export function DealDetailsModal({
   const {
     columns,
     isLoading: isLoadingColumns
-  } = usePipelineColumns(selectedPipelineId || null);
+  } = usePipelineColumns(selectedPipelineId || initialPipelineId || null);
+  
+  console.log('🔧 Hook usePipelineColumns:', {
+    selectedPipelineId,
+    initialPipelineId,
+    pipelineIdUsed: selectedPipelineId || initialPipelineId || null,
+    columnsLength: columns.length,
+    isLoadingColumns
+  });
   // A aba "negócio" sempre deve aparecer quando o modal é aberto via card
   const tabs = [{
     id: "negocios",
@@ -120,8 +137,8 @@ export function DealDetailsModal({
   }];
   useEffect(() => {
     if (isOpen && contactNumber) {
+      // Carregar apenas dados essenciais inicialmente
       fetchContactData();
-      fetchUsers();
       
       // SEMPRE usar dados do card clicado quando disponíveis
       if (initialColumnId && initialPipelineId) {
@@ -359,16 +376,27 @@ export function DealDetailsModal({
   };
   const fetchUsers = async () => {
     try {
-      const {
-        data,
-        error
-      } = await supabase.from('system_users').select('id, name').order('name');
+      // Carregar apenas usuários básicos para performance
+      const { data, error } = await supabase
+        .from('system_users')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
+        .limit(50); // Limitar para melhor performance
+        
       if (error) throw error;
       setUsers(data || []);
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
     }
   };
+  
+  // Carregar usuários apenas quando necessário (tab atividades)
+  useEffect(() => {
+    if (activeTab === 'atividades' && users.length === 0) {
+      fetchUsers();
+    }
+  }, [activeTab, users.length]);
   const handleTagAdded = (tag: Tag) => {
     setContactTags(prev => [...prev, tag]);
   };
@@ -431,15 +459,25 @@ export function DealDetailsModal({
             </Button>
             
             <Avatar className="w-12 h-12">
-              {contactData?.profile_image_url && (
-                <AvatarImage 
-                  src={contactData.profile_image_url} 
-                  alt={contactData.name || "Contato"} 
-                />
+              {isLoadingData ? (
+                <div className="w-full h-full bg-gray-300 animate-pulse rounded-full"></div>
+              ) : (
+                <>
+                  {contactData?.profile_image_url && (
+                    <AvatarImage 
+                      src={contactData.profile_image_url} 
+                      alt={contactData.name || "Contato"}
+                      onError={(e) => {
+                        console.log('🖼️ Erro ao carregar imagem:', contactData.profile_image_url);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <AvatarFallback className="bg-gray-500 text-white font-semibold text-lg">
+                    {contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"}
+                  </AvatarFallback>
+                </>
               )}
-              <AvatarFallback className="bg-gray-500 text-white font-semibold text-lg">
-                {contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"}
-              </AvatarFallback>
             </Avatar>
             
             <div className="flex items-start gap-4">
@@ -541,10 +579,28 @@ export function DealDetailsModal({
                   </div>
                 ) : pipelineSteps.length > 0 ? (
                   <div className="w-full space-y-4">
+                    {/* Debug: renderização dos steps */}
+                    {(() => {
+                      console.log('🎨 Renderizando pipeline steps:', {
+                        currentColumnId,
+                        stepsLength: pipelineSteps.length,
+                        steps: pipelineSteps.map(s => ({ 
+                          name: s.name, 
+                          isActive: s.isActive, 
+                          isCompleted: s.isCompleted 
+                        }))
+                      });
+                      return null;
+                    })()}
+                    
                     {/* Informação da posição atual */}
                     {currentColumnId && (
-                      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-sm text-yellow-800">
+                      <div className={cn("mb-4 p-3 rounded-lg border", 
+                        isDarkMode 
+                          ? "bg-yellow-900/30 border-yellow-700 text-yellow-300" 
+                          : "bg-yellow-50 border-yellow-200 text-yellow-800"
+                      )}>
+                        <p className="text-sm">
                           <strong>Etapa atual:</strong> {pipelineSteps.find(s => s.isActive)?.name || 'Não definida'}
                         </p>
                       </div>
@@ -553,7 +609,9 @@ export function DealDetailsModal({
                     {/* Pipeline Visual */}
                     <div className="relative py-8">
                       {/* Linha de fundo */}
-                      <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-300 transform -translate-y-1/2 z-0"></div>
+                      <div className={cn("absolute top-1/2 left-0 right-0 h-1 transform -translate-y-1/2 z-0", 
+                        isDarkMode ? "bg-gray-600" : "bg-gray-300"
+                      )}></div>
                       
                       {/* Linha de progresso */}
                       {pipelineSteps.length > 1 && (
