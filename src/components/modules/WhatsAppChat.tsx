@@ -872,9 +872,9 @@ export function WhatsAppChat({
                       </SelectTrigger>
                       <SelectContent>
                         {queuesLoading ? (
-                          <SelectItem value="" disabled>Carregando agentes...</SelectItem>
+                          <SelectItem value="__loading__" disabled>Carregando agentes...</SelectItem>
                         ) : queues.length === 0 ? (
-                          <SelectItem value="" disabled>Nenhum agente encontrado</SelectItem>
+                          <SelectItem value="__empty__" disabled>Nenhum agente encontrado</SelectItem>
                         ) : (
                           queues
                             .filter(queue => queue.ai_agent_id && queue.ai_agent)
