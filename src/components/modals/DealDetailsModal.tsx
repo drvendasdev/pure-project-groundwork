@@ -64,16 +64,9 @@ export function DealDetailsModal({
   currentColumnId: initialColumnId,
   currentPipelineId: initialPipelineId
 }: DealDetailsModalProps) {
-  console.log('🔥 DealDetailsModal aberto com props:', {
-    cardId,
-    currentColumnId: initialColumnId,
-    currentPipelineId: initialPipelineId,
-    dealName,
-    contactNumber
-  });
   
   const [activeTab, setActiveTab] = useState("negocios");
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string>(initialPipelineId || "");
   const [contactId, setContactId] = useState<string>("");
   const [contactTags, setContactTags] = useState<Tag[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -85,18 +78,9 @@ export function DealDetailsModal({
   const [showCreateActivityModal, setShowCreateActivityModal] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
-  const [currentColumnId, setCurrentColumnId] = useState<string>("");
+  const [currentColumnId, setCurrentColumnId] = useState<string>(initialColumnId || "");
   const [contactPipelines, setContactPipelines] = useState<any[]>([]);
   const [pipelineCardsCount, setPipelineCardsCount] = useState(0);
-  
-  // Inicializar imediatamente com dados do card clicado
-  useEffect(() => {
-    if (initialColumnId && initialPipelineId) {
-      console.log('🚀 Inicializando com dados do card:', { initialColumnId, initialPipelineId });
-      setCurrentColumnId(initialColumnId);
-      setSelectedPipelineId(initialPipelineId);
-    }
-  }, [initialColumnId, initialPipelineId]);
   const [contactData, setContactData] = useState<{
     name: string;
     email: string | null;
@@ -135,71 +119,18 @@ export function DealDetailsModal({
     id: "contato",
     label: "Contato"
   }];
+  // Carregar dados essenciais quando modal abrir
   useEffect(() => {
     if (isOpen && contactNumber) {
-      // Carregar apenas dados essenciais inicialmente
       fetchContactData();
-      
-      // SEMPRE usar dados do card clicado quando disponíveis
-      if (initialColumnId && initialPipelineId) {
-        console.log('🎯 Usando dados do card clicado:', { initialColumnId, initialPipelineId });
-        setCurrentColumnId(initialColumnId);
-        setSelectedPipelineId(initialPipelineId);
-      }
     }
-  }, [isOpen, contactNumber, initialColumnId, initialPipelineId]);
+  }, [isOpen, contactNumber]);
 
-  // Atualizar coluna atual quando mudar de pipeline - APENAS se não temos dados do card clicado
+  // Converter colunas em steps de progresso
   useEffect(() => {
-    if (selectedPipelineId && contactId && !initialColumnId) {
-      // Buscar card do pipeline selecionado apenas se necessário
-      const fetchCurrentCard = async () => {
-        try {
-          console.log('🔍 Buscando card para pipeline:', selectedPipelineId, 'contato:', contactId);
-          
-          const { data: card, error } = await supabase
-            .from('pipeline_cards')
-            .select('column_id, id, title')
-            .eq('contact_id', contactId)
-            .eq('pipeline_id', selectedPipelineId)
-            .eq('status', 'aberto')
-            .maybeSingle();
-          
-          if (error) {
-            console.error('❌ Erro ao buscar card:', error);
-            return;
-          }
-          
-          if (card) {
-            console.log('✅ Card encontrado:', card);
-            setCurrentColumnId(card.column_id);
-          } else {
-            console.log('⚠️ Nenhum card encontrado para este pipeline');
-            setCurrentColumnId('');
-          }
-        } catch (error) {
-          console.error('💥 Erro ao buscar card:', error);
-          setCurrentColumnId('');
-        }
-      };
-      
-      fetchCurrentCard();
-    }
-  }, [selectedPipelineId, contactId, initialColumnId]);
-
-  // Converter colunas do pipeline em steps com progresso real - otimizado
-  useEffect(() => {
-    if (columns.length > 0) {
-      console.log('🎯 Processando colunas:', columns.length, 'coluna atual:', currentColumnId);
-      
+    if (columns.length > 0 && currentColumnId) {
       const sortedColumns = [...columns].sort((a, b) => a.order_position - b.order_position);
-      let currentIndex = -1;
-      
-      // Se temos currentColumnId, encontrar o índice correto
-      if (currentColumnId) {
-        currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
-        console.log('📍 Índice da coluna atual:', currentIndex, 'de', sortedColumns.length);
-      }
+      const currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
       
       const steps: PipelineStep[] = sortedColumns.map((column, index) => ({
         id: column.id,
@@ -209,38 +140,23 @@ export function DealDetailsModal({
         isCompleted: currentIndex >= 0 && index < currentIndex
       }));
       
-      console.log('🎨 Steps gerados:', steps.map(s => ({ name: s.name, isActive: s.isActive, isCompleted: s.isCompleted })));
       setPipelineSteps(steps);
-    } else {
-      setPipelineSteps([]);
     }
   }, [columns, currentColumnId]);
   const fetchContactData = async () => {
     setIsLoadingData(true);
     try {
-      console.log('🔍 Buscando contato por telefone:', contactNumber);
-      
-      // Buscar contato pelo número de telefone com todos os dados
-      const {
-        data: contact,
-        error: contactError
-      } = await supabase
+      // Buscar contato pelo número de telefone
+      const { data: contact, error: contactError } = await supabase
         .from('contacts')
         .select('id, name, email, phone, profile_image_url')
         .eq('phone', contactNumber)
         .maybeSingle();
         
-      if (contactError) {
-        console.error('❌ Erro ao buscar contato:', contactError);
+      if (contactError || !contact) {
+        console.error('Erro ao buscar contato:', contactError);
         return;
       }
-      
-      if (!contact) {
-        console.warn('⚠️ Nenhum contato encontrado com o telefone:', contactNumber);
-        return;
-      }
-
-      console.log('✅ Contato encontrado:', contact);
       
       setContactId(contact.id);
       setContactData({
@@ -250,28 +166,19 @@ export function DealDetailsModal({
         profile_image_url: contact.profile_image_url
       });
 
-      // Buscar TODOS os cards do contato em diferentes pipelines
-      const {
-        data: cards,
-        error: cardsError
-      } = await supabase
+      // Buscar cards do contato
+      const { data: cards, error: cardsError } = await supabase
         .from('pipeline_cards')
         .select(`
           column_id, 
           id, 
           title,
           pipeline_id,
-          pipelines (
-            id,
-            name,
-            type
-          )
+          pipelines (id, name, type)
         `)
         .eq('contact_id', contact.id)
         .eq('status', 'aberto');
         
-      console.log('📊 Cards encontrados:', cards);
-      
       if (!cardsError && cards && cards.length > 0) {
         // Extrair pipelines únicos
         const uniquePipelines = cards.reduce((acc, card) => {
@@ -282,53 +189,28 @@ export function DealDetailsModal({
           return acc;
         }, []);
         
-        console.log('🔄 Pipelines únicos:', uniquePipelines);
-        
         setContactPipelines(uniquePipelines);
         setPipelineCardsCount(cards.length);
 
-        // Definir pipeline inicial - prioriza dados do card clicado, depois contexto, depois primeiro da lista
-        const initialPipeline = initialPipelineId 
-          || (selectedPipeline ? selectedPipeline.id : null)
-          || uniquePipelines[0]?.id;
-          
-        if (initialPipeline) {
-          console.log('📍 Definindo pipeline inicial:', initialPipeline);
-          setSelectedPipelineId(initialPipeline);
-
-          // Encontrar card do pipeline inicial apenas se não temos dados do card clicado
-          if (!initialColumnId) {
-            const initialCard = cards.find(card => card.pipeline_id === initialPipeline);
-            if (initialCard) {
-              console.log('🎯 Card encontrado para pipeline inicial:', initialCard);
-              setCurrentColumnId(initialCard.column_id);
-            }
-          }
+        // Se não temos dados do card clicado, usar o primeiro card disponível
+        if (!initialPipelineId && !initialColumnId) {
+          const firstCard = cards[0];
+          setSelectedPipelineId(firstCard.pipeline_id);
+          setCurrentColumnId(firstCard.column_id);
         }
-        } else {
-        console.log('📭 Nenhum card encontrado para este contato');
+      } else {
         setContactPipelines([]);
         setPipelineCardsCount(0);
-        
-        // Se não há cards mas o modal foi aberto via card, usar o pipeline selecionado do contexto
-        if (selectedPipeline) {
-          console.log('🔄 Usando pipeline do contexto mesmo sem cards:', selectedPipeline);
-          setContactPipelines([selectedPipeline]);
-          setSelectedPipelineId(selectedPipeline.id);
-          setPipelineCardsCount(0); // Nenhum card ativo, mas mostra o pipeline
-        }
       }
 
-      // Buscar tags do contato
-      console.log('🏷️ Buscando tags do contato...');
-      await fetchContactTags(contact.id);
-
-      // Buscar atividades do contato
-      console.log('📅 Buscando atividades do contato...');
-      await fetchActivities(contact.id);
+      // Carregar tags e atividades em paralelo
+      await Promise.all([
+        fetchContactTags(contact.id),
+        fetchActivities(contact.id)
+      ]);
       
     } catch (error) {
-      console.error('💥 Erro geral ao buscar dados do contato:', error);
+      console.error('Erro ao buscar dados do contato:', error);
     } finally {
       setIsLoadingData(false);
     }
@@ -374,29 +256,28 @@ export function DealDetailsModal({
       console.error('Erro ao buscar atividades:', error);
     }
   };
-  const fetchUsers = async () => {
-    try {
-      // Carregar apenas usuários básicos para performance
-      const { data, error } = await supabase
-        .from('system_users')
-        .select('id, name')
-        .eq('status', 'active')
-        .order('name')
-        .limit(50); // Limitar para melhor performance
-        
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar usuários:', error);
-    }
-  };
-  
   // Carregar usuários apenas quando necessário (tab atividades)
   useEffect(() => {
     if (activeTab === 'atividades' && users.length === 0) {
+      const fetchUsers = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('system_users')
+            .select('id, name')
+            .eq('status', 'active')
+            .order('name')
+            .limit(50);
+            
+          if (error) throw error;
+          setUsers(data || []);
+        } catch (error) {
+          console.error('Erro ao buscar usuários:', error);
+        }
+      };
+      
       fetchUsers();
     }
-  }, [activeTab, users.length]);
+  }, [activeTab]);
   const handleTagAdded = (tag: Tag) => {
     setContactTags(prev => [...prev, tag]);
   };
