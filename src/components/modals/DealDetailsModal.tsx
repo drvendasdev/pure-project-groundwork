@@ -235,10 +235,10 @@ export function DealDetailsModal({
       .maybeSingle();
       
     if (cardError || !card) {
-      console.error('❌ Erro ao buscar card:', cardError);
+      console.error('❌ Erro ao buscar card:', cardError || 'Card não encontrado');
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os dados do card.",
+        title: "Erro", 
+        description: cardError?.message || "Card não encontrado ou não foi possível carregar os dados.",
         variant: "destructive",
       });
       return;
