@@ -168,81 +168,31 @@ export function DealDetailsModal({
     try {
       console.log('🔍 Buscando dados do card:', cardId);
       
-      // Buscar dados do card específico com contato relacionado
-      const { data: card, error: cardError } = await supabase
-        .from('pipeline_cards')
-        .select(`
-          id,
-          title,
-          column_id,
-          pipeline_id,
-          contact_id,
-          contacts (
-            id,
-            name,
-            email,
-            phone,
-            profile_image_url
-          ),
-          pipelines (
-            id,
-            name,
-            type
-          )
-        `)
-        .eq('id', cardId)
-        .maybeSingle();
-        
-      if (cardError || !card) {
-        console.error('❌ Erro ao buscar card:', cardError);
-        toast({
-          title: "Erro",
-          description: "Não foi possível carregar os dados do card.",
-          variant: "destructive",
+      // Se já temos dados do contato, usar eles diretamente para acelerar
+      if (initialContactData) {
+        setContactId(initialContactData.id);
+        setContactData({
+          name: initialContactData.name,
+          email: null, // Será carregado depois se necessário
+          phone: initialContactData.phone || contactNumber,
+          profile_image_url: initialContactData.profile_image_url
         });
+        
+        // Carregar dados adicionais em paralelo (não bloquear a UI)
+        Promise.all([
+          fetchContactTags(initialContactData.id),
+          fetchActivities(initialContactData.id),
+          fetchAdditionalCardData()
+        ]).catch(error => {
+          console.error('Erro ao carregar dados adicionais:', error);
+        });
+        
+        setIsLoadingData(false);
         return;
       }
-
-      console.log('✅ Card encontrado:', card);
       
-      // Definir dados do contato
-      const contact = card.contacts;
-      if (contact) {
-        setContactId(contact.id);
-        setContactData({
-          name: contact.name || 'Nome não informado',
-          email: contact.email,
-          phone: contact.phone,
-          profile_image_url: contact.profile_image_url
-        });
-
-        // Buscar todos os cards deste contato para contar
-        const { data: allCards } = await supabase
-          .from('pipeline_cards')
-          .select('id, pipeline_id, pipelines (id, name, type)')
-          .eq('contact_id', contact.id)
-          .eq('status', 'aberto');
-
-        if (allCards && allCards.length > 0) {
-          // Extrair pipelines únicos
-          const uniquePipelines = allCards.reduce((acc, cardItem) => {
-            const pipeline = cardItem.pipelines;
-            if (pipeline && !acc.find(p => p.id === pipeline.id)) {
-              acc.push(pipeline);
-            }
-            return acc;
-          }, []);
-          
-          setContactPipelines(uniquePipelines);
-          setPipelineCardsCount(allCards.length);
-        }
-
-        // Carregar tags e atividades em paralelo
-        await Promise.all([
-          fetchContactTags(contact.id),
-          fetchActivities(contact.id)
-        ]);
-      }
+      // Fallback: buscar todos os dados se não tivermos dados iniciais
+      await fetchAdditionalCardData();
       
     } catch (error) {
       console.error('❌ Erro ao buscar dados do card:', error);
@@ -253,6 +203,84 @@ export function DealDetailsModal({
       });
     } finally {
       setIsLoadingData(false);
+    }
+  };
+
+  const fetchAdditionalCardData = async () => {
+    // Buscar dados do card específico com contato relacionado
+    const { data: card, error: cardError } = await supabase
+      .from('pipeline_cards')
+      .select(`
+        id,
+        title,
+        column_id,
+        pipeline_id,
+        contact_id,
+        contacts (
+          id,
+          name,
+          email,
+          phone,
+          profile_image_url
+        ),
+        pipelines (
+          id,
+          name,
+          type
+        )
+      `)
+      .eq('id', cardId)
+      .maybeSingle();
+      
+    if (cardError || !card) {
+      console.error('❌ Erro ao buscar card:', cardError);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os dados do card.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    console.log('✅ Card encontrado:', card);
+    
+    // Definir dados do contato
+    const contact = card.contacts;
+    if (contact) {
+      setContactId(contact.id);
+      setContactData({
+        name: contact.name || 'Nome não informado',
+        email: contact.email,
+        phone: contact.phone,
+        profile_image_url: contact.profile_image_url
+      });
+
+      // Buscar todos os cards deste contato para contar
+      const { data: allCards } = await supabase
+        .from('pipeline_cards')
+        .select('id, pipeline_id, pipelines (id, name, type)')
+        .eq('contact_id', contact.id)
+        .eq('status', 'aberto');
+
+      if (allCards && allCards.length > 0) {
+        // Extrair pipelines únicos
+        const uniquePipelines = allCards.reduce((acc, cardItem) => {
+          const pipeline = cardItem.pipelines;
+          if (pipeline && !acc.find(p => p.id === pipeline.id)) {
+            acc.push(pipeline);
+          }
+          return acc;
+        }, []);
+        
+        setContactPipelines(uniquePipelines);
+        setPipelineCardsCount(allCards.length);
+      }
+
+      // Carregar tags e atividades em paralelo
+      await Promise.all([
+        fetchContactTags(contact.id),
+        fetchActivities(contact.id)
+      ]);
     }
   };
   const fetchContactTags = async (contactId: string) => {
