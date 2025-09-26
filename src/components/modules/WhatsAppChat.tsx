@@ -851,23 +851,71 @@ export function WhatsAppChat({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64 p-4" align="end">
-                <div className="space-y-4">
+                <div className="space-y-3">
+                  {/* Filtro por Agente */}
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Selecionar agente</label>
                     <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os agentes" />
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="Filtre pelo agente" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos os agentes</SelectItem>
+                        <SelectItem value="">Todos os agentes</SelectItem>
+                        {queuesLoading ? (
+                          <SelectItem value="__loading__" disabled>Carregando agentes...</SelectItem>
+                        ) : queues.length === 0 ? (
+                          <SelectItem value="__empty__" disabled>Nenhum agente encontrado</SelectItem>
+                        ) : (
+                          queues.filter(queue => queue.ai_agent_id && queue.ai_agent).map(queue => (
+                            <SelectItem key={queue.ai_agent!.id} value={queue.ai_agent!.id}>
+                              {queue.ai_agent!.name}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Filtro por Tag */}
+                  <div>
+                    <Select value={selectedTag} onValueChange={setSelectedTag}>
+                      <SelectTrigger className="w-full h-10">
+                        <SelectValue placeholder="Filtre pela tag" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todas as tags</SelectItem>
+                        {tags.map(tag => (
+                          <SelectItem key={tag.id} value={tag.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: tag.color || '#808080' }}
+                              />
+                              {tag.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Botão Limpar */}
+                  <div className="pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setSelectedAgent("");
+                        setSelectedTag("");
+                      }}
+                      className="w-full"
+                    >
+                      Limpar
+                    </Button>
                   </div>
                 </div>
               </PopoverContent>
             </Popover>
           </div>
-          
           
           {/* Abas baseadas no papel do usuário */}
           <div className="border-b border-border">
