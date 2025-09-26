@@ -13,6 +13,7 @@ import { useProfileImages } from "@/hooks/useProfileImages";
 import { useInstanceAssignments } from "@/hooks/useInstanceAssignments";
 import { useWorkspaceConnections } from "@/hooks/useWorkspaceConnections";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useQueues } from "@/hooks/useQueues";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parsePhoneNumber } from 'libphonenumber-js';
@@ -84,6 +85,10 @@ export function WhatsAppChat({
     isLoading: connectionsLoading
   } = useWorkspaceConnections(selectedWorkspace?.workspace_id);
   const {
+    queues,
+    loading: queuesLoading
+  } = useQueues();
+  const {
     toast
   } = useToast();
   const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
@@ -101,46 +106,19 @@ export function WhatsAppChat({
   // Estados para as abas baseadas no papel
   const [activeTab, setActiveTab] = useState<string>('all');
 
-  // Definir abas baseado no papel do usuário
+  // Definir abas baseado no papel do usuário  
   const getUserTabs = () => {
     const userProfile = user?.profile;
-    if (userProfile === 'master') {
-      // MentorMaster: mesmas vistas do Admin
+    if (userProfile === 'master' || userProfile === 'admin') {
+      // Master e Admin: apenas "Todas" e "Não designadas"
       return [{
         id: 'all',
-        label: 'Todas',
+        label: 'Todas as conversas',
         count: conversations.filter(c => c.status !== 'closed').length
       }, {
         id: 'unassigned',
-        label: 'Não designadas',
+        label: 'Conversas não atribuídas',
         count: conversations.filter(c => !c.assigned_user_id && c.status !== 'closed').length
-      }, {
-        id: 'in_progress',
-        label: 'Em atendimento',
-        count: conversations.filter(c => c.status === 'em_atendimento').length
-      }, {
-        id: 'closed',
-        label: 'Finalizadas',
-        count: conversations.filter(c => c.status === 'closed').length
-      }];
-    } else if (userProfile === 'admin') {
-      // Admin: todas as abas do workspace
-      return [{
-        id: 'all',
-        label: 'Todas',
-        count: conversations.filter(c => c.status !== 'closed').length
-      }, {
-        id: 'unassigned',
-        label: 'Não designadas',
-        count: conversations.filter(c => !c.assigned_user_id && c.status !== 'closed').length
-      }, {
-        id: 'in_progress',
-        label: 'Em atendimento',
-        count: conversations.filter(c => c.status === 'em_atendimento').length
-      }, {
-        id: 'closed',
-        label: 'Finalizadas',
-        count: conversations.filter(c => c.status === 'closed').length
       }];
     } else {
       // User: apenas suas conversas e não designadas (excluindo encerradas)
@@ -152,7 +130,7 @@ export function WhatsAppChat({
         count: myConversations.length
       }, {
         id: 'unassigned',
-        label: 'Não designadas',
+        label: 'Conversas não atribuídas',
         count: unassignedConversations.length
       }];
     }
@@ -163,19 +141,11 @@ export function WhatsAppChat({
   const getFilteredConversations = () => {
     switch (activeTab) {
       case 'all':
-        // Para "Todas", exclui conversas encerradas (exceto para masters/admins que têm aba específica)
-        if (user?.profile === 'master' || user?.profile === 'admin') {
-          return conversations.filter(c => c.status !== 'closed');
-        }
         return conversations.filter(c => c.status !== 'closed');
       case 'mine':
         return conversations.filter(c => c.assigned_user_id === user?.id && c.status !== 'closed');
       case 'unassigned':
         return conversations.filter(c => !c.assigned_user_id && c.status !== 'closed');
-      case 'in_progress':
-        return conversations.filter(c => c.status === 'em_atendimento');
-      case 'closed':
-        return conversations.filter(c => c.status === 'closed');
       default:
         return conversations.filter(c => c.status !== 'closed');
     }
@@ -895,15 +865,25 @@ export function WhatsAppChat({
               <PopoverContent className="w-64 p-4" align="end">
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Filtre pelo agente</label>
+                    <label className="text-sm font-medium mb-2 block">Selecionar agente</label>
                     <Select value={selectedAgent} onValueChange={setSelectedAgent}>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Selecionar agente" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="vendas">Agente Vendas</SelectItem>
-                        <SelectItem value="suporte">Agente Suporte</SelectItem>
-                        <SelectItem value="comercial">Agente Comercial</SelectItem>
+                        {queuesLoading ? (
+                          <SelectItem value="" disabled>Carregando agentes...</SelectItem>
+                        ) : queues.length === 0 ? (
+                          <SelectItem value="" disabled>Nenhum agente encontrado</SelectItem>
+                        ) : (
+                          queues
+                            .filter(queue => queue.ai_agent_id && queue.ai_agent)
+                            .map(queue => (
+                              <SelectItem key={queue.ai_agent!.id} value={queue.ai_agent!.id}>
+                                {queue.ai_agent!.name}
+                              </SelectItem>
+                            ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
