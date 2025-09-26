@@ -127,6 +127,15 @@ serve(async (req) => {
           name,
           phone,
           profile_image_url
+        ),
+        conversation_tags (
+          id,
+          tag_id,
+          tags (
+            id,
+            name,
+            color
+          )
         )
       `)
       .eq('workspace_id', workspaceId);

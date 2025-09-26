@@ -137,18 +137,43 @@ export function WhatsAppChat({
   };
   const tabs = getUserTabs();
 
-  // Filtrar conversas baseado na aba ativa
+  // Filtrar conversas baseado na aba ativa e filtros
   const getFilteredConversations = () => {
+    let filtered = [];
+    
+    // Filtrar por aba
     switch (activeTab) {
       case 'all':
-        return conversations.filter(c => c.status !== 'closed');
+        filtered = conversations.filter(c => c.status !== 'closed');
+        break;
       case 'mine':
-        return conversations.filter(c => c.assigned_user_id === user?.id && c.status !== 'closed');
+        filtered = conversations.filter(c => c.assigned_user_id === user?.id && c.status !== 'closed');
+        break;
       case 'unassigned':
-        return conversations.filter(c => !c.assigned_user_id && c.status !== 'closed');
+        filtered = conversations.filter(c => !c.assigned_user_id && c.status !== 'closed');
+        break;
       default:
-        return conversations.filter(c => c.status !== 'closed');
+        filtered = conversations.filter(c => c.status !== 'closed');
     }
+
+    // Filtrar por tag se selecionada
+    if (selectedTag) {
+      filtered = filtered.filter(conv => {
+        // Verificar se a conversa tem uma tag que corresponde à selecionada
+        // Assumindo que as conversas têm um relacionamento com tags
+        return conv.conversation_tags?.some((ct: any) => ct.tag_id === selectedTag) || false;
+      });
+    }
+
+    // Filtrar por termo de busca
+    if (searchTerm) {
+      filtered = filtered.filter(conv => 
+        conv.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (conv.contact.phone && conv.contact.phone.includes(searchTerm))
+      );
+    }
+
+    return filtered;
   };
   const [peekModalOpen, setPeekModalOpen] = useState(false);
   const [peekConversationId, setPeekConversationId] = useState<string | null>(null);
@@ -159,8 +184,8 @@ export function WhatsAppChat({
   const [isRecording, setIsRecording] = useState(false);
   const [quickItemsModalOpen, setQuickItemsModalOpen] = useState(false);
 
-  // Filtrar conversas baseado no termo de busca
-  const filteredConversations = conversations.filter(conv => conv.contact.name.toLowerCase().includes(searchTerm.toLowerCase()) || conv.contact.phone && conv.contact.phone.includes(searchTerm));
+  // Usar a função de filtro unificada
+  const filteredConversations = getFilteredConversations();
 
   // ✅ Enviar mensagem usando o hook de mensagens
   const handleSendMessage = async () => {
