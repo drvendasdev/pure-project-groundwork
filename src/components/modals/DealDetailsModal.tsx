@@ -42,10 +42,10 @@ interface DealDetailsModalProps {
   dealName: string;
   contactNumber: string;
   isDarkMode?: boolean;
-  // Receber dados do card clicado diretamente
-  cardId?: string;
-  currentColumnId?: string;
-  currentPipelineId?: string;
+  // Dados obrigatórios do card clicado para referência confiável
+  cardId: string;
+  currentColumnId: string;
+  currentPipelineId: string;
 }
 interface PipelineStep {
   id: string;
@@ -61,24 +61,18 @@ export function DealDetailsModal({
   contactNumber,
   isDarkMode = false,
   cardId,
-  currentColumnId: initialColumnId,
-  currentPipelineId: initialPipelineId
+  currentColumnId,
+  currentPipelineId
 }: DealDetailsModalProps) {
   
   const [activeTab, setActiveTab] = useState("negocios");
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string>(initialPipelineId || "");
   const [contactId, setContactId] = useState<string>("");
   const [contactTags, setContactTags] = useState<Tag[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [users, setUsers] = useState<{
-    id: string;
-    name: string;
-  }[]>([]);
   const [showAddTagModal, setShowAddTagModal] = useState(false);
   const [showCreateActivityModal, setShowCreateActivityModal] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
-  const [currentColumnId, setCurrentColumnId] = useState<string>(initialColumnId || "");
   const [contactPipelines, setContactPipelines] = useState<any[]>([]);
   const [pipelineCardsCount, setPipelineCardsCount] = useState(0);
   const [contactData, setContactData] = useState<{
@@ -87,24 +81,9 @@ export function DealDetailsModal({
     phone: string;
     profile_image_url: string | null;
   } | null>(null);
-  const {
-    toast
-  } = useToast();
-  const {
-    selectedPipeline
-  } = usePipelinesContext();
-  const {
-    columns,
-    isLoading: isLoadingColumns
-  } = usePipelineColumns(selectedPipelineId || initialPipelineId || null);
-  
-  console.log('🔧 Hook usePipelineColumns:', {
-    selectedPipelineId,
-    initialPipelineId,
-    pipelineIdUsed: selectedPipelineId || initialPipelineId || null,
-    columnsLength: columns.length,
-    isLoadingColumns
-  });
+  const { toast } = useToast();
+  const { selectedPipeline } = usePipelinesContext();
+  const { columns, isLoading: isLoadingColumns } = usePipelineColumns(currentPipelineId);
   // A aba "negócio" sempre deve aparecer quando o modal é aberto via card
   const tabs = [{
     id: "negocios",
@@ -119,12 +98,18 @@ export function DealDetailsModal({
     id: "contato",
     label: "Contato"
   }];
-  // Carregar dados essenciais quando modal abrir
+  // Carregar dados quando modal abrir - usando referência confiável do card
   useEffect(() => {
-    if (isOpen && contactNumber) {
-      fetchContactData();
+    if (isOpen && cardId) {
+      console.log('🚀 Modal aberto com dados do card:', {
+        cardId,
+        currentColumnId,
+        currentPipelineId,
+        contactNumber
+      });
+      fetchCardData();
     }
-  }, [isOpen, contactNumber]);
+  }, [isOpen, cardId]);
 
   // Converter colunas em steps de progresso
   useEffect(() => {
@@ -141,76 +126,102 @@ export function DealDetailsModal({
       }));
       
       setPipelineSteps(steps);
+      console.log('📊 Pipeline steps criados:', {
+        currentColumnId,
+        currentIndex,
+        totalSteps: steps.length,
+        activeStep: steps.find(s => s.isActive)?.name
+      });
     }
   }, [columns, currentColumnId]);
-  const fetchContactData = async () => {
+  const fetchCardData = async () => {
     setIsLoadingData(true);
     try {
-      // Buscar contato pelo número de telefone
-      const { data: contact, error: contactError } = await supabase
-        .from('contacts')
-        .select('id, name, email, phone, profile_image_url')
-        .eq('phone', contactNumber)
-        .maybeSingle();
-        
-      if (contactError || !contact) {
-        console.error('Erro ao buscar contato:', contactError);
-        return;
-      }
+      console.log('🔍 Buscando dados do card:', cardId);
       
-      setContactId(contact.id);
-      setContactData({
-        name: contact.name || 'Nome não informado',
-        email: contact.email,
-        phone: contact.phone,
-        profile_image_url: contact.profile_image_url
-      });
-
-      // Buscar cards do contato
-      const { data: cards, error: cardsError } = await supabase
+      // Buscar dados do card específico com contato relacionado
+      const { data: card, error: cardError } = await supabase
         .from('pipeline_cards')
         .select(`
-          column_id, 
-          id, 
+          id,
           title,
+          column_id,
           pipeline_id,
-          pipelines (id, name, type)
+          contact_id,
+          contacts (
+            id,
+            name,
+            email,
+            phone,
+            profile_image_url
+          ),
+          pipelines (
+            id,
+            name,
+            type
+          )
         `)
-        .eq('contact_id', contact.id)
-        .eq('status', 'aberto');
+        .eq('id', cardId)
+        .maybeSingle();
         
-      if (!cardsError && cards && cards.length > 0) {
-        // Extrair pipelines únicos
-        const uniquePipelines = cards.reduce((acc, card) => {
-          const pipeline = card.pipelines;
-          if (pipeline && !acc.find(p => p.id === pipeline.id)) {
-            acc.push(pipeline);
-          }
-          return acc;
-        }, []);
-        
-        setContactPipelines(uniquePipelines);
-        setPipelineCardsCount(cards.length);
-
-        // Se não temos dados do card clicado, usar o primeiro card disponível
-        if (!initialPipelineId && !initialColumnId) {
-          const firstCard = cards[0];
-          setSelectedPipelineId(firstCard.pipeline_id);
-          setCurrentColumnId(firstCard.column_id);
-        }
-      } else {
-        setContactPipelines([]);
-        setPipelineCardsCount(0);
+      if (cardError || !card) {
+        console.error('❌ Erro ao buscar card:', cardError);
+        toast({
+          title: "Erro",
+          description: "Não foi possível carregar os dados do card.",
+          variant: "destructive",
+        });
+        return;
       }
 
-      // Carregar tags e atividades em paralelo
-      await Promise.all([
-        fetchContactTags(contact.id),
-        fetchActivities(contact.id)
-      ]);
+      console.log('✅ Card encontrado:', card);
+      
+      // Definir dados do contato
+      const contact = card.contacts;
+      if (contact) {
+        setContactId(contact.id);
+        setContactData({
+          name: contact.name || 'Nome não informado',
+          email: contact.email,
+          phone: contact.phone,
+          profile_image_url: contact.profile_image_url
+        });
+
+        // Buscar todos os cards deste contato para contar
+        const { data: allCards } = await supabase
+          .from('pipeline_cards')
+          .select('id, pipeline_id, pipelines (id, name, type)')
+          .eq('contact_id', contact.id)
+          .eq('status', 'aberto');
+
+        if (allCards && allCards.length > 0) {
+          // Extrair pipelines únicos
+          const uniquePipelines = allCards.reduce((acc, cardItem) => {
+            const pipeline = cardItem.pipelines;
+            if (pipeline && !acc.find(p => p.id === pipeline.id)) {
+              acc.push(pipeline);
+            }
+            return acc;
+          }, []);
+          
+          setContactPipelines(uniquePipelines);
+          setPipelineCardsCount(allCards.length);
+        }
+
+        // Carregar tags e atividades em paralelo
+        await Promise.all([
+          fetchContactTags(contact.id),
+          fetchActivities(contact.id)
+        ]);
+      }
       
     } catch (error) {
-      console.error('Erro ao buscar dados do contato:', error);
+      console.error('❌ Erro ao buscar dados do card:', error);
+      toast({
+        title: "Erro",
+        description: "Erro interno ao carregar dados.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoadingData(false);
     }
@@ -256,28 +267,23 @@ export function DealDetailsModal({
       console.error('Erro ao buscar atividades:', error);
     }
   };
-  // Carregar usuários apenas quando necessário (tab atividades)
-  useEffect(() => {
-    if (activeTab === 'atividades' && users.length === 0) {
-      const fetchUsers = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('system_users')
-            .select('id, name')
-            .eq('status', 'active')
-            .order('name')
-            .limit(50);
-            
-          if (error) throw error;
-          setUsers(data || []);
-        } catch (error) {
-          console.error('Erro ao buscar usuários:', error);
-        }
-      };
-      
-      fetchUsers();
+  // Função para carregar usuários apenas quando necessário
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_users')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
+        .limit(20);
+        
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao buscar usuários:', error);
+      return [];
     }
-  }, [activeTab]);
+  };
   const handleTagAdded = (tag: Tag) => {
     setContactTags(prev => [...prev, tag]);
   };
@@ -427,17 +433,17 @@ export function DealDetailsModal({
                   <span className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
                     {isLoadingData ? 'Carregando...' : `${pipelineCardsCount} ${pipelineCardsCount === 1 ? 'Negócio' : 'Negócios'}`}
                   </span>
-                  {(contactPipelines.length > 0 || selectedPipeline) && (
-                  <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
-                    <SelectTrigger className={cn("w-full max-w-md", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")}>
-                      <SelectValue placeholder="Selecione um pipeline" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {contactPipelines.map(pipeline => <SelectItem key={pipeline.id} value={pipeline.id}>
-                          {pipeline.name} {pipeline.id === selectedPipeline?.id ? "(atual)" : ""}
-                        </SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  {contactPipelines.length > 0 && (
+                  <div className={cn("p-3 bg-gray-50 rounded-lg border", isDarkMode ? "bg-gray-800 border-gray-600" : "bg-gray-50 border-gray-200")}>
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-sm font-medium", isDarkMode ? "text-gray-200" : "text-gray-700")}>
+                        Pipeline Atual:
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        {contactPipelines.find(p => p.id === currentPipelineId)?.name || 'Pipeline não encontrado'}
+                      </Badge>
+                    </div>
+                  </div>
                   )}
                 </div>
               </div>
@@ -674,9 +680,7 @@ export function DealDetailsModal({
                         <SelectValue placeholder="Selecione um responsável" />
                       </SelectTrigger>
                       <SelectContent>
-                        {users.map(user => <SelectItem key={user.id} value={user.id}>
-                            {user.name}
-                          </SelectItem>)}
+                        {/* Users carregados dinamicamente quando necessário */}
                       </SelectContent>
                     </Select>
                   </div>

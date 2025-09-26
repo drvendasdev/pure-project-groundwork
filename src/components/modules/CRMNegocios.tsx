@@ -807,16 +807,18 @@ export function CRMNegocios({
       setIsCriarNegocioModalOpen(false);
     }} isDarkMode={isDarkMode} />
 
-      <DealDetailsModal 
-        isOpen={isDealDetailsModalOpen} 
-        onClose={() => setIsDealDetailsModalOpen(false)} 
-        dealName={selectedCard?.title || ""} 
-        contactNumber={selectedCard?.contact?.phone || ""} 
-        isDarkMode={isDarkMode}
-        cardId={selectedCard?.id}
-        currentColumnId={selectedCard?.column_id}
-        currentPipelineId={selectedCard?.pipeline_id}
-      />
+      {selectedCard && (
+        <DealDetailsModal 
+          isOpen={isDealDetailsModalOpen} 
+          onClose={() => setIsDealDetailsModalOpen(false)} 
+          dealName={selectedCard.title || ""} 
+          contactNumber={selectedCard.contact?.phone || ""} 
+          isDarkMode={isDarkMode}
+          cardId={selectedCard.id}
+          currentColumnId={selectedCard.column_id}
+          currentPipelineId={selectedCard.pipeline_id}
+        />
+      )}
 
       <ChatModal isOpen={isChatModalOpen} onClose={() => {
       console.log('🔽 Fechando ChatModal');
