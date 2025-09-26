@@ -83,8 +83,8 @@ export function WhatsAppChat({
   const [quickPhoneNumber, setQuickPhoneNumber] = useState("");
   const [isCreatingQuickConversation, setIsCreatingQuickConversation] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<string>("");
-  const [selectedTag, setSelectedTag] = useState<string>("");
-  const [selectedConnection, setSelectedConnection] = useState<string>("");
+  const [selectedTag, setSelectedTag] = useState<string>("all-tags");
+  const [selectedConnection, setSelectedConnection] = useState<string>("all");
   const [isUpdatingProfileImages, setIsUpdatingProfileImages] = useState(false);
   
   // Estado para o painel lateral de filtros
@@ -163,7 +163,7 @@ export function WhatsAppChat({
     }
 
     // Filtrar por tag se selecionada
-    if (selectedTag) {
+    if (selectedTag && selectedTag !== "all-tags") {
       filtered = filtered.filter(conv => {
         const hasTag = conv.conversation_tags?.some((ct: any) => ct.tag_id === selectedTag);
         return hasTag || false;
@@ -171,7 +171,7 @@ export function WhatsAppChat({
     }
 
     // Filtrar por conexão se selecionada
-    if (selectedConnection) {
+    if (selectedConnection && selectedConnection !== "all") {
       filtered = filtered.filter(conv => 
         conv.connection_id === selectedConnection
       );
@@ -560,7 +560,7 @@ export function WhatsAppChat({
                   <SelectValue placeholder="Todas as conexões" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas as conexões</SelectItem>
+                  <SelectItem value="all">Todas as conexões</SelectItem>
                   {workspaceConnections.map(connection => (
                     <SelectItem key={connection.id} value={connection.id}>
                       <div className="flex items-center gap-2">
@@ -586,7 +586,7 @@ export function WhatsAppChat({
                   <SelectValue placeholder="Todas as tags" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas as tags</SelectItem>
+                  <SelectItem value="all-tags">Todas as tags</SelectItem>
                   {tags.map(tag => (
                     <SelectItem key={tag.id} value={tag.id}>
                       <div className="flex items-center gap-2">
@@ -605,8 +605,8 @@ export function WhatsAppChat({
               size="sm"
               className="w-full"
               onClick={() => {
-                setSelectedConnection("");
-                setSelectedTag("");
+                setSelectedConnection("all");
+                setSelectedTag("all-tags");
               }}
             >
               Limpar filtros
@@ -955,15 +955,6 @@ export function WhatsAppChat({
         isOpen={contactPanelOpen}
         onClose={() => setContactPanelOpen(false)}
         contact={selectedConversation?.contact}
-      />
-
-      <QuickItemsModal
-        isOpen={quickItemsModalOpen}
-        onClose={() => setQuickItemsModalOpen(false)}
-        onSendQuickMessage={(content) => console.log('Quick message:', content)}
-        onSendQuickAudio={(file, content) => console.log('Quick audio:', file, content)}
-        onSendQuickMedia={(file, content, type) => console.log('Quick media:', file, content, type)}
-        onSendQuickDocument={(file, content) => console.log('Quick document:', file, content)}
       />
     </div>
   );
