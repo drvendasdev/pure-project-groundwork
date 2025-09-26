@@ -26,7 +26,7 @@ import { EndConversationButton } from "@/components/chat/EndConversationButton";
 import { AddTagButton } from "@/components/chat/AddTagButton";
 import { ContactSidePanel } from "@/components/ContactSidePanel";
 import { ContactTags } from "@/components/chat/ContactTags";
-import { Search, Send, Bot, Phone, MoreVertical, Circle, MessageCircle, ArrowRight, Settings, Users, Trash2, ChevronDown, Filter, Eye, RefreshCw, Mic, Square, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Send, Bot, Phone, MoreVertical, Circle, MessageCircle, ArrowRight, Settings, Users, Trash2, ChevronDown, Filter, Eye, RefreshCw, Mic, Square, ChevronLeft, ChevronRight, Inbox, PanelLeftClose, PanelRightOpen, Plus, SquareUserRound, UserRoundMinus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -92,6 +92,12 @@ export function WhatsAppChat({
     const saved = localStorage.getItem('conversations-sidebar-expanded');
     return saved ? JSON.parse(saved) : true;
   });
+  
+  // Estado para filtros de conversação
+  const [conversationFilter, setConversationFilter] = useState<'all' | 'assigned_to_me' | 'unassigned' | 'groups'>('all');
+  
+  // Obter role do usuário - assumindo 'user' por padrão já que não temos acesso ao role específico
+  const userRole = 'user';
 
   // Estados para as abas baseadas no papel
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -520,44 +526,39 @@ export function WhatsAppChat({
     <div className="flex h-full bg-background overflow-hidden">
       {/* Painel lateral de filtros - Estilo Slack */}
       <div className={cn(
-        "flex-shrink-0 bg-card border-r border-border transition-all duration-300 ease-in-out",
+        "flex-shrink-0 bg-background border-r border-border transition-all duration-300 ease-in-out",
         sidebarExpanded ? "w-64" : "w-16"
       )}>
         {/* Header do painel de filtros */}
-        <div className="p-3 border-b border-border">
-          <div className="flex items-center justify-between">
-            <h2 className={cn(
-              "font-semibold text-foreground transition-opacity duration-200",
-              !sidebarExpanded && "opacity-0 w-0 overflow-hidden"
-            )}>
-              Conversas
-            </h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSidebarExpanded(!sidebarExpanded)}
-              className="h-8 w-8 p-0"
-            >
-              {sidebarExpanded ? (
-                <ChevronLeft className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+        <div className="flex items-center justify-between p-3 border-b border-border">
+          {sidebarExpanded && (
+            <h2 className="font-medium text-base">Conversas</h2>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSidebarExpanded(!sidebarExpanded)}
+            className="p-1 h-7 w-7 shrink-0"
+          >
+            {sidebarExpanded ? (
+              <PanelRightOpen className="h-[18px] w-[18px]" />
+            ) : (
+              <PanelLeftClose className="h-[18px] w-[18px]" />
+            )}
+          </Button>
         </div>
 
-        {/* Filtros */}
         {sidebarExpanded && (
-          <div className="p-3 space-y-4">
-            {/* Conexões */}
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-2">
-                Conexões
-              </label>
+          <div className="flex-1 flex flex-col">
+            {/* Select de Canais/Conexões */}
+            <div className="px-2 pt-2 pb-1">
               <Select value={selectedConnection} onValueChange={setSelectedConnection}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Todas as conexões" />
+                <SelectTrigger className="w-full h-9 text-sm border-border">
+                  <SelectValue>
+                    <div className="flex items-center">
+                      <span className="text-xs text-muted-foreground">Canais</span>
+                    </div>
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as conexões</SelectItem>
@@ -576,51 +577,98 @@ export function WhatsAppChat({
               </Select>
             </div>
 
-            {/* Tags */}
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-2">
-                Tags
-              </label>
-              <Select value={selectedTag} onValueChange={setSelectedTag}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Todas as tags" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-tags">Todas as tags</SelectItem>
-                  {tags.map(tag => (
-                    <SelectItem key={tag.id} value={tag.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }} />
-                        {tag.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Lista de filtros principais */}
+            <div className="flex-1">
+              <ul className="space-y-0">
+                <li 
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                    conversationFilter === 'all' && "bg-muted text-primary font-medium"
+                  )}
+                  onClick={() => setConversationFilter('all')}
+                >
+                  <Inbox className="h-[18px] w-[18px] shrink-0" />
+                  <span className="text-sm">Todos</span>
+                </li>
+
+                {userRole !== 'user' ? (
+                  <li 
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                      conversationFilter === 'unassigned' && "bg-muted text-primary font-medium"
+                    )}
+                    onClick={() => setConversationFilter('unassigned')}
+                  >
+                    <UserRoundMinus className="h-[18px] w-[18px] shrink-0" />
+                    <span className="text-sm">Não atribuídas</span>
+                  </li>
+                ) : (
+                  <li 
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                      conversationFilter === 'assigned_to_me' && "bg-muted text-primary font-medium"
+                    )}
+                    onClick={() => setConversationFilter('assigned_to_me')}
+                  >
+                    <SquareUserRound className="h-[18px] w-[18px] shrink-0" />
+                    <span className="text-sm">Minhas conversas</span>
+                  </li>
+                )}
+
+                <li 
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                    conversationFilter === 'groups' && "bg-muted text-primary font-medium"
+                  )}
+                  onClick={() => setConversationFilter('groups')}
+                >
+                  <Users className="h-[18px] w-[18px] shrink-0" />
+                  <span className="text-sm">Grupos</span>
+                </li>
+              </ul>
             </div>
 
-            {/* Botão limpar filtros */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                setSelectedConnection("all");
-                setSelectedTag("all-tags");
-              }}
-            >
-              Limpar filtros
-            </Button>
+            {/* Seção Customizado */}
+            <div className="mt-1 border-t border-border">
+              <div className="flex items-center justify-between px-4 py-2">
+                <span className="text-xs font-medium text-muted-foreground">Customizado</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-primary"
+                    title="Adicionar aba customizada"
+                  >
+                    <Plus className="h-[18px] w-[18px]" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                  >
+                    <ChevronDown className="h-[18px] w-[18px]" />
+                  </Button>
+                </div>
+              </div>
+              {/* Lista customizada vazia por enquanto */}
+              <ul className="pb-2">
+                {/* Futuras abas customizadas aqui */}
+              </ul>
+            </div>
           </div>
         )}
 
         {/* Ícones retraídos */}
         {!sidebarExpanded && (
-          <div className="p-2 space-y-2">
+          <div className="flex flex-col items-center py-4 space-y-4">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full h-10">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="p-2 h-8 w-8"
+                  >
                     <Filter className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
