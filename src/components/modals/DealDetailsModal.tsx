@@ -110,31 +110,58 @@ export function DealDetailsModal({
     }
   }, [isOpen, contactNumber]);
 
-  // Atualizar coluna atual quando mudar de pipeline
+  // Atualizar coluna atual quando mudar de pipeline - com otimização
   useEffect(() => {
     if (selectedPipelineId && contactId) {
-      // Buscar card do pipeline selecionado
+      // Buscar card do pipeline selecionado apenas se necessário
       const fetchCurrentCard = async () => {
-        const {
-          data: card
-        } = await supabase.from('pipeline_cards').select('column_id').eq('contact_id', contactId).eq('pipeline_id', selectedPipelineId).eq('status', 'aberto').single();
-        if (card) {
-          setCurrentColumnId(card.column_id);
+        try {
+          console.log('🔍 Buscando card para pipeline:', selectedPipelineId, 'contato:', contactId);
+          
+          const { data: card, error } = await supabase
+            .from('pipeline_cards')
+            .select('column_id, id, title')
+            .eq('contact_id', contactId)
+            .eq('pipeline_id', selectedPipelineId)
+            .eq('status', 'aberto')
+            .maybeSingle();
+          
+          if (error) {
+            console.error('❌ Erro ao buscar card:', error);
+            return;
+          }
+          
+          if (card) {
+            console.log('✅ Card encontrado:', card);
+            setCurrentColumnId(card.column_id);
+          } else {
+            console.log('⚠️ Nenhum card encontrado para este pipeline');
+            setCurrentColumnId('');
+          }
+        } catch (error) {
+          console.error('💥 Erro ao buscar card:', error);
+          setCurrentColumnId('');
         }
       };
+      
       fetchCurrentCard();
+    } else {
+      setCurrentColumnId('');
     }
   }, [selectedPipelineId, contactId]);
 
-  // Converter colunas do pipeline em steps com progresso real
+  // Converter colunas do pipeline em steps com progresso real - otimizado
   useEffect(() => {
     if (columns.length > 0) {
-      const sortedColumns = columns.sort((a, b) => a.order_position - b.order_position);
+      console.log('🎯 Processando colunas:', columns.length, 'coluna atual:', currentColumnId);
+      
+      const sortedColumns = [...columns].sort((a, b) => a.order_position - b.order_position);
       let currentIndex = -1;
       
       // Se temos currentColumnId, encontrar o índice correto
       if (currentColumnId) {
         currentIndex = sortedColumns.findIndex(col => col.id === currentColumnId);
+        console.log('📍 Índice da coluna atual:', currentIndex, 'de', sortedColumns.length);
       }
       
       const steps: PipelineStep[] = sortedColumns.map((column, index) => ({
@@ -145,9 +172,12 @@ export function DealDetailsModal({
         isCompleted: currentIndex >= 0 && index < currentIndex
       }));
       
+      console.log('🎨 Steps gerados:', steps.map(s => ({ name: s.name, isActive: s.isActive, isCompleted: s.isCompleted })));
       setPipelineSteps(steps);
+    } else {
+      setPipelineSteps([]);
     }
-  }, [columns, currentColumnId, isLoadingColumns]);
+  }, [columns, currentColumnId]);
   const fetchContactData = async () => {
     setIsLoadingData(true);
     try {
@@ -471,23 +501,47 @@ export function DealDetailsModal({
                 </div>
               </div>
 
-              {/* Pipeline Timeline */}
+              {/* Pipeline Timeline - Melhorado */}
               <div className="space-y-6">
-                {isLoadingColumns ? <div className="flex justify-center py-8">
-                    <div className="text-gray-500">Carregando colunas do pipeline...</div>
-                  </div> : pipelineSteps.length > 0 ? <div className="w-full">
-                    {/* Timeline Container - Estrutura baseada no HTML fornecido */}
+                {isLoadingColumns ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-pulse space-y-4 w-full">
+                      <div className="h-4 bg-gray-300 rounded w-1/4"></div>
+                      <div className="flex justify-between">
+                        {[1,2,3,4].map(i => (
+                          <div key={i} className="flex flex-col items-center space-y-2">
+                            <div className="w-12 h-12 bg-gray-300 rounded-full"></div>
+                            <div className="h-3 bg-gray-300 rounded w-16"></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : pipelineSteps.length > 0 ? (
+                  <div className="w-full">
+                    {/* Informação da posição atual */}
+                    {currentColumnId && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-700">
+                          <strong>Posição atual:</strong> {pipelineSteps.find(s => s.isActive)?.name || 'Não definida'}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Timeline Container */}
                     <div className="relative">
                       {/* Background Progress Line */}
                       <div className={cn("absolute top-6 left-0 right-0 h-0.5", isDarkMode ? "bg-gray-600" : "bg-gray-300")} />
                       
                       {/* Active Progress Line */}
-                      <div 
-                        className="absolute top-6 left-0 h-0.5 bg-yellow-400 transition-all duration-300"
-                        style={{ 
-                          width: `${Math.max(0, Math.min(100, ((pipelineSteps.findIndex(step => step.isActive)) / Math.max(1, pipelineSteps.length - 1)) * 100))}%`
-                        }}
-                      />
+                      {currentColumnId && (
+                        <div 
+                          className="absolute top-6 left-0 h-0.5 bg-gradient-to-r from-yellow-400 to-green-400 transition-all duration-500"
+                          style={{ 
+                            width: `${Math.max(0, Math.min(100, ((pipelineSteps.findIndex(step => step.isActive)) / Math.max(1, pipelineSteps.length - 1)) * 100))}%`
+                          }}
+                        />
+                      )}
                       
                       {/* Timeline Steps Container */}
                       <div className="flex justify-between">
@@ -499,25 +553,27 @@ export function DealDetailsModal({
                           return (
                             <div 
                               key={step.id} 
-                              className="flex flex-col items-center cursor-pointer"
+                              className="flex flex-col items-center cursor-pointer group"
                               style={{ width: '100%' }}
                             >
                               {/* Circle with number */}
                               <div 
                                 className={cn(
-                                  "w-12 h-12 rounded-full flex items-center justify-center text-sm font-medium border-2 bg-background transition-all duration-300 relative z-10",
-                                  isCompleted && "bg-green-500 border-green-500 text-white",
-                                  isActive && "bg-yellow-400 border-yellow-400 text-black",
+                                  "w-12 h-12 rounded-full flex items-center justify-center text-sm font-medium border-2 transition-all duration-300 relative z-10 group-hover:scale-105",
+                                  isCompleted && "bg-green-500 border-green-500 text-white shadow-lg",
+                                  isActive && `border-2 text-black shadow-xl ring-2 ring-yellow-300`,
                                   !isActive && !isCompleted && (isDarkMode ? "bg-gray-600 border-gray-600 text-gray-300" : "bg-gray-200 border-gray-300 text-gray-600")
                                 )}
                                 style={{ 
-                                  transform: isActive ? 'scale(1)' : 'scale(0.8)'
+                                  backgroundColor: isActive ? step.color : undefined,
+                                  borderColor: isActive ? step.color : undefined,
+                                  transform: isActive ? 'scale(1.1)' : 'scale(1)'
                                 }}
                               >
                                 {isCompleted ? (
-                                  <Check className="w-4 h-4" />
+                                  <Check className="w-5 h-5" />
                                 ) : (
-                                  <span className="text-xs font-medium">{index + 1}</span>
+                                  <span className="text-xs font-bold">{index + 1}</span>
                                 )}
                               </div>
                               
@@ -540,11 +596,14 @@ export function DealDetailsModal({
                         })}
                       </div>
                     </div>
-                  </div> : <div className="text-center py-8">
-                    <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-500")}>
                       Nenhuma coluna encontrada no pipeline
                     </p>
-                  </div>}
+                  </div>
+                )}
               </div>
 
               {/* Cadência de Tarefas */}
