@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
 import { usePipelineColumns } from "@/hooks/usePipelineColumns";
+import { useUsersCache } from "@/hooks/useUsersCache";
 interface Tag {
   id: string;
   name: string;
@@ -90,11 +91,12 @@ export function DealDetailsModal({
   });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedTime, setSelectedTime] = useState("13:00");
-  const [users, setUsers] = useState<{ id: string; name: string; }[]>([]);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isCreatingActivity, setIsCreatingActivity] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  
+  // Hook otimizado para usuários com cache
+  const { users, isLoading: isLoadingUsers, loadUsers } = useUsersCache();
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
   const [contactPipelines, setContactPipelines] = useState<any[]>([]);
@@ -324,29 +326,6 @@ export function DealDetailsModal({
       console.error('Erro ao buscar atividades:', error);
     }
   };
-  // Função para carregar usuários
-  const fetchUsers = async () => {
-    setIsLoadingUsers(true);
-    try {
-      const { data, error } = await supabase
-        .from('system_users')
-        .select('id, name')
-        .eq('status', 'active')
-        .order('name');
-        
-      if (error) throw error;
-      setUsers(data?.map(user => ({ id: user.id, name: user.name })) || []);
-    } catch (error) {
-      console.error('Erro ao buscar usuários:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os usuários.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
   const handleTagAdded = (tag: Tag) => {
     setContactTags(prev => [...prev, tag]);
   };
@@ -481,12 +460,12 @@ export function DealDetailsModal({
     }
   };
 
-  // Carregar usuários quando necessário
+  // Carregar usuários quando necessário usando cache otimizado
   useEffect(() => {
     if (activeTab === "atividades" && users.length === 0) {
-      fetchUsers();
+      loadUsers();
     }
-  }, [activeTab]);
+  }, [activeTab, users.length, loadUsers]);
   const handleCompleteActivity = async (activityId: string) => {
     try {
       const {
