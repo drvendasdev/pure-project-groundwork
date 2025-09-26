@@ -511,13 +511,17 @@ export const useWhatsAppConversations = () => {
     }
   }, []);
 
-  // Real-time subscriptions and workspace dependency
+  // Single effect for workspace changes and realtime subscriptions
   useEffect(() => {
     // Get current user from localStorage
     const userData = localStorage.getItem('currentUser');
     const currentUserData = userData ? JSON.parse(userData) : null;
     
-    if (currentUserData?.id && selectedWorkspace?.workspace_id) {
+    if (!currentUserData?.id) {
+      return;
+    }
+
+    if (selectedWorkspace?.workspace_id) {
       const DEBUG_CONVERSATIONS = false;
       if (DEBUG_CONVERSATIONS) {
         console.log('🏢 Workspace mudou para:', selectedWorkspace?.workspace_id, '- Recarregando conversas');
@@ -531,19 +535,10 @@ export const useWhatsAppConversations = () => {
       setTimeout(() => {
         fetchConversations();
       }, 200);
-    } else if (currentUserData?.id && !selectedWorkspace?.workspace_id) {
+    } else {
       console.log('🏢 Aguardando seleção de workspace...');
       setLoading(true);
-    }
-  }, [selectedWorkspace?.workspace_id]); // Re-fetch when workspace changes
-
-  useEffect(() => {
-    // Get current user from localStorage
-    const userData = localStorage.getItem('currentUser');
-    const currentUserData = userData ? JSON.parse(userData) : null;
-    
-    if (!currentUserData?.id) {
-      return;
+      return; // Não configurar subscriptions sem workspace
     }
 
     // Subscription para novas mensagens  
@@ -904,7 +899,7 @@ export const useWhatsAppConversations = () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, [selectedWorkspace?.workspace_id]); // ✅ CORREÇÃO: Adicionar dependency para recriar subscriptions quando workspace muda
+  }, [selectedWorkspace?.workspace_id]); // Re-fetch and setup subscriptions when workspace changes
 
   return {
     conversations,
