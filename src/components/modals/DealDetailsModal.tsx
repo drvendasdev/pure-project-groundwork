@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { AddTagModal } from "./AddTagModal";
+import { AddContactTagButton } from "@/components/chat/AddContactTagButton";
 import { CreateActivityModal } from "./CreateActivityModal";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -335,8 +336,14 @@ export function DealDetailsModal({
             </Button>
             
             <Avatar className="w-12 h-12">
+              {contactData?.profile_image_url && (
+                <AvatarImage 
+                  src={contactData.profile_image_url} 
+                  alt={contactData.name || "Contato"} 
+                />
+              )}
               <AvatarFallback className="bg-gray-500 text-white font-semibold text-lg">
-                L
+                {contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"}
               </AvatarFallback>
             </Avatar>
             
@@ -366,9 +373,19 @@ export function DealDetailsModal({
                     </Button>
                   </Badge>)}
                 
-                <Button size="icon" variant="ghost" className="w-6 h-6" onClick={() => setShowAddTagModal(true)} disabled={!contactId}>
-                  <Plus className="w-4 h-4" />
-                </Button>
+                {/* Botão "mais" para adicionar tags - funcional */}
+                {contactId && (
+                  <AddContactTagButton 
+                    contactId={contactId} 
+                    isDarkMode={isDarkMode}
+                    onTagAdded={() => {
+                      // Recarregar tags do contato após adicionar
+                      if (contactId) {
+                        fetchContactTags(contactId);
+                      }
+                    }} 
+                  />
+                )}
               </div>
             </div>
             

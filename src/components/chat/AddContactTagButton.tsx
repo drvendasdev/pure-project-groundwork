@@ -1,0 +1,151 @@
+import { useState } from "react";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useContactTags } from "@/hooks/useContactTags";
+import { cn } from "@/lib/utils";
+
+interface AddContactTagButtonProps {
+  contactId: string;
+  isDarkMode?: boolean;
+  onTagAdded?: () => void;
+}
+
+export function AddContactTagButton({ contactId, isDarkMode = false, onTagAdded }: AddContactTagButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedTagId, setSelectedTagId] = useState<string>("");
+  const [isHovered, setIsHovered] = useState(false);
+
+  const { 
+    availableTags,
+    contactTags,
+    addTagToContact, 
+    isLoading 
+  } = useContactTags(contactId);
+
+  // Verificar quais tags já estão atribuídas ao contato
+  const assignedTagIds = contactTags.map(tag => tag.id);
+
+  const handleAddTag = async () => {
+    if (!selectedTagId) return;
+    
+    const success = await addTagToContact(selectedTagId);
+    if (success) {
+      setIsOpen(false);
+      setSelectedTagId("");
+      onTagAdded?.();
+    }
+  };
+
+  const handleTagSelect = (tagId: string) => {
+    setSelectedTagId(tagId);
+  };
+
+  const handleCancel = () => {
+    setIsOpen(false);
+    setSelectedTagId("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      handleCancel();
+    }
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <div 
+          className="relative flex items-center"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {/* Botão circular com + */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 rounded-full border border-border hover:bg-accent"
+          >
+            <Plus className="w-3 h-3" />
+          </Button>
+          
+          {/* Pill hover */}
+          {isHovered && (
+            <div className="absolute left-8 top-0 flex items-center h-6 px-2 bg-popover border border-dashed border-border rounded-full text-xs text-muted-foreground whitespace-nowrap z-10">
+              + Adicionar tag
+            </div>
+          )}
+        </div>
+      </PopoverTrigger>
+      
+      <PopoverContent 
+        className="w-80 p-4" 
+        align="start"
+        onKeyDown={handleKeyDown}
+      >
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-foreground">Selecione uma tag:</p>
+          
+          {/* Lista de tags disponíveis */}
+          <ScrollArea className="max-h-40">
+            <div className="space-y-2">
+              {availableTags.map((tag) => {
+                const isAssigned = assignedTagIds.includes(tag.id);
+                return (
+                  <div 
+                    key={tag.id} 
+                    className={cn(
+                      "relative",
+                      isAssigned && "opacity-50"
+                    )}
+                  >
+                    <Badge
+                      variant="outline"
+                      style={{ 
+                        backgroundColor: tag.color, 
+                        borderColor: tag.color,
+                        color: 'white'
+                      }}
+                      className={cn(
+                        "cursor-pointer hover:opacity-80 transition-opacity text-xs px-2 py-1 w-full justify-start",
+                        selectedTagId === tag.id && "ring-2 ring-offset-2 ring-blue-500",
+                        isAssigned && "cursor-not-allowed"
+                      )}
+                      onClick={() => !isAssigned && handleTagSelect(tag.id)}
+                    >
+                      {tag.name}
+                      {isAssigned && <span className="ml-2 text-xs">(já atribuída)</span>}
+                    </Badge>
+                  </div>
+                );
+              })}
+              {availableTags.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhuma tag disponível</p>
+              )}
+            </div>
+          </ScrollArea>
+          
+          {/* Botões */}
+          <div className="flex gap-2">
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAddTag}
+              disabled={!selectedTagId || isLoading}
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+            >
+              {isLoading ? "Adicionando..." : "Adicionar"}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
