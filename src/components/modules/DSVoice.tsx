@@ -16,9 +16,9 @@ const categories = [
   { id: "audios", label: "Áudios", icon: Mic },
   { id: "midias", label: "Mídias", icon: Image },
   { id: "documentos", label: "Documentos", icon: FileText },
-  { id: "funis", label: "Funis", icon: Filter },
-  { id: "gatilhos", label: "Gatilhos", icon: Play },
-  { id: "configuracoes", label: "Configurações", icon: Settings },
+  // Ocultado temporariamente - { id: "funis", label: "Funis", icon: Filter },
+  // Ocultado temporariamente - { id: "gatilhos", label: "Gatilhos", icon: Play },
+  // Ocultado temporariamente - { id: "configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export function DSVoice() {
