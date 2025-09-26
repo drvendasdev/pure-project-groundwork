@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AddTagModal } from "./AddTagModal";
 import { AddContactTagButton } from "@/components/chat/AddContactTagButton";
 import { CreateActivityModal } from "./CreateActivityModal";
+import { ActivityForm } from "./ActivityForm";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePipelinesContext } from "@/contexts/PipelinesContext";
@@ -630,122 +631,11 @@ export function DealDetailsModal({
               </div>
 
               {/* Formulário Criar Atividade */}
-              <div className="space-y-4">
-                <h3 className={cn("text-lg font-semibold mb-4", isDarkMode ? "text-white" : "text-gray-900")}>
-                  Criar atividade
-                </h3>
-                
-                <div className="space-y-4">
-                  {/* Tipo */}
-                  <div className="space-y-2">
-                    <label className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
-                      Tipo
-                    </label>
-                    <Select>
-                      <SelectTrigger className={cn("w-full", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")}>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          <span>Lembrete</span>
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="lembrete">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            <span>Lembrete</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="ligacao">
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4" />
-                            <span>Ligação</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="mensagem">
-                          <div className="flex items-center gap-2">
-                            <MessageSquare className="w-4 h-4" />
-                            <span>Mensagem</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Responsável */}
-                  <div className="space-y-2">
-                    <label className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
-                      Responsável
-                    </label>
-                    <Select>
-                      <SelectTrigger className={cn("w-full", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")}>
-                        <SelectValue placeholder="Selecione um responsável" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {/* Users carregados dinamicamente quando necessário */}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Assunto */}
-                  <div className="space-y-2">
-                    <label className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
-                      Assunto
-                    </label>
-                    <Input placeholder="Digite o assunto da atividade" className={cn(isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")} />
-                  </div>
-
-                  {/* Data e Duração em linha */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <label className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
-                        Agendar para
-                      </label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className={cn("w-full justify-start text-left font-normal", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white hover:bg-gray-700" : "bg-white")}>
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {format(new Date(), "dd/MM/yyyy 'às' HH:mm")}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar mode="single" selected={new Date()} onSelect={() => {}} initialFocus className="pointer-events-auto" />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
-                        Duração (minutos)
-                      </label>
-                      <Input type="number" defaultValue="30" className={cn(isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")} />
-                    </div>
-                  </div>
-
-                  {/* Upload de arquivo */}
-                  <div className="space-y-2">
-                    <div className={cn("border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors", isDarkMode ? "border-gray-600 hover:border-gray-500 bg-[#1f1f1f]" : "border-gray-300 hover:border-gray-400 bg-gray-50")}>
-                      <Upload className={cn("w-8 h-8 mx-auto mb-2", isDarkMode ? "text-gray-400" : "text-gray-500")} />
-                      <p className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
-                        Clique aqui ou arraste o documento a ser salvo
-                      </p>
-                      <input type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.odt,.ods,.odp,.csv,.json,.xml,.jpg,.jpeg,.png,.gif,.webp,.svg" />
-                    </div>
-                  </div>
-
-                  {/* Descrição */}
-                  <div className="space-y-2">
-                    <label className={cn("text-sm font-medium", isDarkMode ? "text-gray-300" : "text-gray-700")}>
-                      Descrição
-                    </label>
-                    <Textarea placeholder="Descrição" rows={4} className={cn(isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")} />
-                  </div>
-
-                  {/* Botão Criar Atividade */}
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setShowCreateActivityModal(true)} disabled={!contactId}>
-                    Criar Atividade
-                  </Button>
-                </div>
-              </div>
+              <ActivityForm 
+                contactId={contactId} 
+                isDarkMode={isDarkMode} 
+                onActivityCreated={handleActivityCreated}
+              />
             </div>}
 
           {activeTab === "historico" && <div className="space-y-4">
