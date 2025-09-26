@@ -127,6 +127,15 @@ serve(async (req) => {
           name,
           phone,
           profile_image_url
+        ),
+        conversation_tags (
+          id,
+          tag_id,
+          tags (
+            id,
+            name,
+            color
+          )
         )
       `)
       .eq('workspace_id', workspaceId);
@@ -199,19 +208,20 @@ serve(async (req) => {
         // Buscar nome do usuário responsável se existe assigned_user_id
         let assignedUserName = null;
         if (conv.assigned_user_id) {
-          const { data: assignedUser } = await supabaseService
+          const { data: userData } = await supabaseService
             .from('system_users')
             .select('name')
             .eq('id', conv.assigned_user_id)
             .single();
           
-          assignedUserName = assignedUser?.name || null;
+          assignedUserName = userData?.name || null;
         }
 
         return {
           ...conv,
           last_message: lastMessage || [],
-          assigned_user_name: assignedUserName
+          assigned_user_name: assignedUserName,
+          conversation_tags: conv.conversation_tags || []
         };
       })
     );
