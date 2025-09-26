@@ -150,18 +150,33 @@ export function DealDetailsModal({
   const fetchContactData = async () => {
     setIsLoadingData(true);
     try {
+      console.log('🔍 Buscando contato por telefone:', contactNumber);
+      
       // Buscar contato pelo número de telefone com todos os dados
       const {
         data: contact,
         error: contactError
-      } = await supabase.from('contacts').select('id, name, email, phone, profile_image_url').eq('phone', contactNumber).single();
+      } = await supabase
+        .from('contacts')
+        .select('id, name, email, phone, profile_image_url')
+        .eq('phone', contactNumber)
+        .maybeSingle();
+        
       if (contactError) {
-        console.error('Contato não encontrado:', contactError);
+        console.error('❌ Erro ao buscar contato:', contactError);
         return;
       }
+      
+      if (!contact) {
+        console.warn('⚠️ Nenhum contato encontrado com o telefone:', contactNumber);
+        return;
+      }
+
+      console.log('✅ Contato encontrado:', contact);
+      
       setContactId(contact.id);
       setContactData({
-        name: contact.name,
+        name: contact.name || 'Nome não informado',
         email: contact.email,
         phone: contact.phone,
         profile_image_url: contact.profile_image_url
@@ -171,7 +186,9 @@ export function DealDetailsModal({
       const {
         data: cards,
         error: cardsError
-      } = await supabase.from('pipeline_cards').select(`
+      } = await supabase
+        .from('pipeline_cards')
+        .select(`
           column_id, 
           id, 
           title,
@@ -181,7 +198,12 @@ export function DealDetailsModal({
             name,
             type
           )
-        `).eq('contact_id', contact.id).eq('status', 'aberto');
+        `)
+        .eq('contact_id', contact.id)
+        .eq('status', 'aberto');
+        
+      console.log('📊 Cards encontrados:', cards);
+      
       if (!cardsError && cards && cards.length > 0) {
         // Extrair pipelines únicos
         const uniquePipelines = cards.reduce((acc, card) => {
@@ -191,11 +213,17 @@ export function DealDetailsModal({
           }
           return acc;
         }, []);
+        
+        console.log('🔄 Pipelines únicos:', uniquePipelines);
+        
         setContactPipelines(uniquePipelines);
         setPipelineCardsCount(cards.length);
 
         // Definir pipeline inicial (primeiro pipeline ou pipeline selecionado)
-        const initialPipeline = selectedPipeline && uniquePipelines.find(p => p.id === selectedPipeline.id) ? selectedPipeline.id : uniquePipelines[0]?.id;
+        const initialPipeline = selectedPipeline && uniquePipelines.find(p => p.id === selectedPipeline.id) 
+          ? selectedPipeline.id 
+          : uniquePipelines[0]?.id;
+          
         if (initialPipeline) {
           setSelectedPipelineId(initialPipeline);
 
@@ -206,17 +234,21 @@ export function DealDetailsModal({
           }
         }
       } else {
+        console.log('📭 Nenhum card encontrado para este contato');
         setContactPipelines([]);
         setPipelineCardsCount(0);
       }
 
       // Buscar tags do contato
+      console.log('🏷️ Buscando tags do contato...');
       await fetchContactTags(contact.id);
 
       // Buscar atividades do contato
+      console.log('📅 Buscando atividades do contato...');
       await fetchActivities(contact.id);
+      
     } catch (error) {
-      console.error('Erro ao buscar dados do contato:', error);
+      console.error('💥 Erro geral ao buscar dados do contato:', error);
     } finally {
       setIsLoadingData(false);
     }
@@ -350,10 +382,10 @@ export function DealDetailsModal({
             <div className="flex items-start gap-4">
               <div className="flex flex-col">
                 <DialogTitle className={cn("text-xl font-semibold text-left", isDarkMode ? "text-white" : "text-gray-900")}>
-                  {dealName}
+                  {contactData?.name || dealName}
                 </DialogTitle>
                 <p className={cn("text-sm text-left", isDarkMode ? "text-gray-400" : "text-gray-600")}>
-                  {contactNumber}
+                  {contactData?.phone || contactNumber}
                 </p>
               </div>
               
@@ -411,8 +443,9 @@ export function DealDetailsModal({
                 </label>
                 <div className="flex items-center gap-2">
                   <span className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
-                    {pipelineCardsCount} {pipelineCardsCount === 1 ? 'Negócio' : 'Negócios'}
+                    {isLoadingData ? 'Carregando...' : `${pipelineCardsCount} ${pipelineCardsCount === 1 ? 'Negócio' : 'Negócios'}`}
                   </span>
+                  {contactPipelines.length > 0 && (
                   <Select value={selectedPipelineId} onValueChange={setSelectedPipelineId}>
                     <SelectTrigger className={cn("w-full max-w-md", isDarkMode ? "bg-[#2d2d2d] border-gray-600 text-white" : "bg-white")}>
                       <SelectValue placeholder="Selecione um pipeline" />
@@ -423,6 +456,13 @@ export function DealDetailsModal({
                         </SelectItem>)}
                     </SelectContent>
                   </Select>
+                  )}
+                  
+                  {contactPipelines.length === 0 && !isLoadingData && (
+                    <span className={cn("text-sm", isDarkMode ? "text-gray-400" : "text-gray-600")}>
+                      Nenhum negócio encontrado para este contato
+                    </span>
+                  )}
                 </div>
               </div>
 
