@@ -346,25 +346,23 @@ export function DealDetailsModal({
             </Button>
             
             <Avatar className="w-12 h-12">
-              {isLoadingData ? (
-                <div className="w-full h-full bg-gray-300 animate-pulse rounded-full"></div>
-              ) : (
-                <>
-                  {contactData?.profile_image_url && (
-                    <AvatarImage 
-                      src={contactData.profile_image_url} 
-                      alt={contactData.name || "Contato"}
-                      onError={(e) => {
-                        console.log('🖼️ Erro ao carregar imagem:', contactData.profile_image_url);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  )}
-                  <AvatarFallback className="bg-gray-500 text-white font-semibold text-lg">
-                    {contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"}
-                  </AvatarFallback>
-                </>
-              )}
+              <AvatarImage 
+                src={contactData?.profile_image_url || undefined} 
+                alt={contactData?.name || "Contato"}
+                className={cn("transition-opacity duration-200", 
+                  isLoadingData ? "opacity-0" : "opacity-100"
+                )}
+              />
+              <AvatarFallback className={cn(
+                "bg-primary text-primary-foreground font-semibold text-lg transition-opacity duration-200",
+                isLoadingData ? "animate-pulse bg-muted" : ""
+              )}>
+                {isLoadingData ? (
+                  <div className="w-6 h-6 bg-muted-foreground/20 rounded animate-pulse" />
+                ) : (
+                  contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"
+                )}
+              </AvatarFallback>
             </Avatar>
             
             <div className="flex items-start gap-4">
