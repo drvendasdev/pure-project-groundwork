@@ -38,8 +38,7 @@ export function usePeekConversation() {
       const headers = getHeaders();
       
       // Buscar mensagens da conversa
-      const { data, error } = await supabase.functions.invoke('get-chat-data', {
-        body: JSON.stringify({ conversation_id: conversationId }),
+      const { data, error } = await supabase.functions.invoke(`get-chat-data?conversation_id=${conversationId}`, {
         headers
       });
 
