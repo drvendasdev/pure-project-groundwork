@@ -859,7 +859,7 @@ export function WhatsAppChat({
                         <SelectValue placeholder="Filtre pelo agente" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todos os agentes</SelectItem>
+                        <SelectItem value="all">Todos os agentes</SelectItem>
                         {queuesLoading ? (
                           <SelectItem value="__loading__" disabled>Carregando agentes...</SelectItem>
                         ) : queues.length === 0 ? (
@@ -882,7 +882,7 @@ export function WhatsAppChat({
                         <SelectValue placeholder="Filtre pela tag" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todas as tags</SelectItem>
+                        <SelectItem value="all">Todas as tags</SelectItem>
                         {tags.map(tag => (
                           <SelectItem key={tag.id} value={tag.id}>
                             <div className="flex items-center gap-2">
@@ -904,8 +904,8 @@ export function WhatsAppChat({
                       variant="outline" 
                       size="sm" 
                       onClick={() => {
-                        setSelectedAgent("");
-                        setSelectedTag("");
+                        setSelectedAgent("all");
+                        setSelectedTag("all");
                       }}
                       className="w-full"
                     >
