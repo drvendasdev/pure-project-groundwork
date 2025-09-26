@@ -219,7 +219,6 @@ export function WhatsAppChat({
   // Funções para enviar itens rápidos
   const handleSendQuickMessage = async (content: string, type: 'text') => {
     if (!selectedConversation) return;
-    
     try {
       const optimisticMessage = {
         id: `temp-quick-${Date.now()}`,
@@ -232,10 +231,11 @@ export function WhatsAppChat({
         status: 'sending' as const,
         workspace_id: selectedWorkspace?.workspace_id || ''
       };
-      
       addMessage(optimisticMessage);
-      
-      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
         body: {
           conversation_id: selectedConversation.id,
           content: content,
@@ -249,11 +249,9 @@ export function WhatsAppChat({
           'x-workspace-id': selectedWorkspace?.workspace_id || ''
         }
       });
-      
       if (error || !sendResult?.success) {
         throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
       }
-      
       if (sendResult.message?.id) {
         updateMessage(optimisticMessage.id, {
           id: sendResult.message.id,
@@ -265,10 +263,11 @@ export function WhatsAppChat({
       console.error('Erro ao enviar mensagem rápida:', error);
     }
   };
-
-  const handleSendQuickAudio = async (file: { name: string; url: string }, content: string) => {
+  const handleSendQuickAudio = async (file: {
+    name: string;
+    url: string;
+  }, content: string) => {
     if (!selectedConversation) return;
-    
     try {
       const optimisticMessage = {
         id: `temp-quick-audio-${Date.now()}`,
@@ -283,10 +282,11 @@ export function WhatsAppChat({
         status: 'sending' as const,
         workspace_id: selectedWorkspace?.workspace_id || ''
       };
-      
       addMessage(optimisticMessage);
-      
-      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
         body: {
           conversation_id: selectedConversation.id,
           content: content || '[ÁUDIO]',
@@ -302,11 +302,9 @@ export function WhatsAppChat({
           'x-workspace-id': selectedWorkspace?.workspace_id || ''
         }
       });
-      
       if (error || !sendResult?.success) {
         throw new Error(sendResult?.error || 'Erro ao enviar áudio');
       }
-      
       if (sendResult.message?.id) {
         updateMessage(optimisticMessage.id, {
           id: sendResult.message.id,
@@ -318,10 +316,11 @@ export function WhatsAppChat({
       console.error('Erro ao enviar áudio rápido:', error);
     }
   };
-
-  const handleSendQuickMedia = async (file: { name: string; url: string }, content: string, type: 'image' | 'video') => {
+  const handleSendQuickMedia = async (file: {
+    name: string;
+    url: string;
+  }, content: string, type: 'image' | 'video') => {
     if (!selectedConversation) return;
-    
     try {
       const optimisticMessage = {
         id: `temp-quick-media-${Date.now()}`,
@@ -336,10 +335,11 @@ export function WhatsAppChat({
         status: 'sending' as const,
         workspace_id: selectedWorkspace?.workspace_id || ''
       };
-      
       addMessage(optimisticMessage);
-      
-      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
         body: {
           conversation_id: selectedConversation.id,
           content: content || `[${type.toUpperCase()}]`,
@@ -355,11 +355,9 @@ export function WhatsAppChat({
           'x-workspace-id': selectedWorkspace?.workspace_id || ''
         }
       });
-      
       if (error || !sendResult?.success) {
         throw new Error(sendResult?.error || 'Erro ao enviar mídia');
       }
-      
       if (sendResult.message?.id) {
         updateMessage(optimisticMessage.id, {
           id: sendResult.message.id,
@@ -371,10 +369,11 @@ export function WhatsAppChat({
       console.error('Erro ao enviar mídia rápida:', error);
     }
   };
-
-  const handleSendQuickDocument = async (file: { name: string; url: string }, content: string) => {
+  const handleSendQuickDocument = async (file: {
+    name: string;
+    url: string;
+  }, content: string) => {
     if (!selectedConversation) return;
-    
     try {
       const optimisticMessage = {
         id: `temp-quick-doc-${Date.now()}`,
@@ -389,10 +388,11 @@ export function WhatsAppChat({
         status: 'sending' as const,
         workspace_id: selectedWorkspace?.workspace_id || ''
       };
-      
       addMessage(optimisticMessage);
-      
-      const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
         body: {
           conversation_id: selectedConversation.id,
           content: content || '[DOCUMENTO]',
@@ -408,11 +408,9 @@ export function WhatsAppChat({
           'x-workspace-id': selectedWorkspace?.workspace_id || ''
         }
       });
-      
       if (error || !sendResult?.success) {
         throw new Error(sendResult?.error || 'Erro ao enviar documento');
       }
-      
       if (sendResult.message?.id) {
         updateMessage(optimisticMessage.id, {
           id: sendResult.message.id,
@@ -471,7 +469,8 @@ export function WhatsAppChat({
       case 'failed':
         return 'failed';
       default:
-        return 'sent'; // fallback
+        return 'sent';
+      // fallback
     }
   };
 
@@ -818,18 +817,11 @@ export function WhatsAppChat({
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-2" align="end">
                   <div className="space-y-1">
-                    {connectionsLoading ? (
-                      <div className="flex items-center justify-center p-4">
+                    {connectionsLoading ? <div className="flex items-center justify-center p-4">
                         <RefreshCw className="w-4 h-4 animate-spin" />
                         <span className="ml-2 text-sm text-muted-foreground">Carregando...</span>
-                      </div>
-                    ) : workspaceConnections.length > 0 ? (
-                      workspaceConnections.map((connection) => (
-                        <div key={connection.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
-                          <div className={cn(
-                            "w-2 h-2 rounded-full",
-                            connection.status === 'connected' ? 'bg-green-500' : 'bg-gray-400'
-                          )} />
+                      </div> : workspaceConnections.length > 0 ? workspaceConnections.map(connection => <div key={connection.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
+                          <div className={cn("w-2 h-2 rounded-full", connection.status === 'connected' ? 'bg-green-500' : 'bg-gray-400')} />
                           <svg className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z" />
                           </svg>
@@ -839,13 +831,9 @@ export function WhatsAppChat({
                               {connection.phone_number || 'Sem número'}
                             </span>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex items-center justify-center p-4">
+                        </div>) : <div className="flex items-center justify-center p-4">
                         <span className="text-sm text-muted-foreground">Nenhuma conexão encontrada</span>
-                      </div>
-                    )}
+                      </div>}
                   </div>
                 </PopoverContent>
               </Popover>
@@ -871,19 +859,9 @@ export function WhatsAppChat({
                         <SelectValue placeholder="Selecionar agente" />
                       </SelectTrigger>
                       <SelectContent>
-                        {queuesLoading ? (
-                          <SelectItem value="__loading__" disabled>Carregando agentes...</SelectItem>
-                        ) : queues.length === 0 ? (
-                          <SelectItem value="__empty__" disabled>Nenhum agente encontrado</SelectItem>
-                        ) : (
-                          queues
-                            .filter(queue => queue.ai_agent_id && queue.ai_agent)
-                            .map(queue => (
-                              <SelectItem key={queue.ai_agent!.id} value={queue.ai_agent!.id}>
+                        {queuesLoading ? <SelectItem value="__loading__" disabled>Carregando agentes...</SelectItem> : queues.length === 0 ? <SelectItem value="__empty__" disabled>Nenhum agente encontrado</SelectItem> : queues.filter(queue => queue.ai_agent_id && queue.ai_agent).map(queue => <SelectItem key={queue.ai_agent!.id} value={queue.ai_agent!.id}>
                                 {queue.ai_agent!.name}
-                              </SelectItem>
-                            ))
-                        )}
+                              </SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -919,11 +897,7 @@ export function WhatsAppChat({
                     </Select>
                   </div>
                   
-                  <div className="flex gap-2 flex-wrap">
-                    {tags.map(tag => <div key={tag.id} className="w-6 h-6 rounded cursor-pointer" style={{
-                    backgroundColor: tag.color
-                  }} title={tag.name} onClick={() => setSelectedTag(tag.id)}></div>)}
-                  </div>
+                  
                   
                   <Button className="w-full bg-yellow-400 hover:bg-yellow-500 text-black" onClick={() => {
                   setSelectedAgent("");
@@ -1093,10 +1067,7 @@ export function WhatsAppChat({
             <div className="p-4 border-b border-border bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                   <Avatar 
-                    className="w-10 h-10 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-2 transition-all"
-                    onClick={() => setContactPanelOpen(true)}
-                  >
+                   <Avatar className="w-10 h-10 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-2 transition-all" onClick={() => setContactPanelOpen(true)}>
                     {selectedConversation.contact.profile_image_url && <AvatarImage src={selectedConversation.contact.profile_image_url} alt={selectedConversation.contact.name} className="object-cover" />}
                     <AvatarFallback style={{
                   backgroundColor: getAvatarColor(selectedConversation.contact.name)
@@ -1110,22 +1081,14 @@ export function WhatsAppChat({
                       {selectedConversation.contact.name}
                     </h3>
                     <div className="flex items-center">
-                      <AddTagButton 
-                        conversationId={selectedConversation.id} 
-                        isDarkMode={isDarkMode} 
-                        onTagAdded={() => {
-                          // Refresh conversations after adding tag
-                          fetchConversations();
-                        }} 
-                      />
-                      <ContactTags 
-                        contactId={selectedConversation.contact.id}
-                        isDarkMode={isDarkMode}
-                        onTagRemoved={() => {
-                          // Refresh conversations after removing tag
-                          fetchConversations();
-                        }}
-                      />
+                      <AddTagButton conversationId={selectedConversation.id} isDarkMode={isDarkMode} onTagAdded={() => {
+                    // Refresh conversations after adding tag
+                    fetchConversations();
+                  }} />
+                      <ContactTags contactId={selectedConversation.contact.id} isDarkMode={isDarkMode} onTagRemoved={() => {
+                    // Refresh conversations after removing tag
+                    fetchConversations();
+                  }} />
                     </div>
                   </div>
                 </div>
@@ -1192,10 +1155,7 @@ export function WhatsAppChat({
               
               <div className="space-y-4">
                 {messages.map(message => <div key={message.id} className={cn("flex items-start gap-3 max-w-[80%]", message.sender_type === 'contact' ? "flex-row" : "flex-row-reverse ml-auto")}>
-                    {message.sender_type === 'contact' && <Avatar 
-                      className="w-8 h-8 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1 transition-all"
-                      onClick={() => setContactPanelOpen(true)}
-                    >
+                    {message.sender_type === 'contact' && <Avatar className="w-8 h-8 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary hover:ring-offset-1 transition-all" onClick={() => setContactPanelOpen(true)}>
                         {selectedConversation.contact.profile_image_url && <AvatarImage src={selectedConversation.contact.profile_image_url} alt={selectedConversation.contact.name} className="object-cover" />}
                         <AvatarFallback className={cn("text-white text-xs", getAvatarColor(selectedConversation.contact.name))}>
                           {getInitials(selectedConversation.contact.name)}
@@ -1214,12 +1174,7 @@ export function WhatsAppChat({
                       minute: '2-digit'
                     })}
                         </span>
-                        {message.sender_type !== 'contact' && (
-                          <MessageStatusIndicator 
-                            status={mapEvolutionStatusToComponent(message.status)} 
-                            className="ml-1"
-                          />
-                        )}
+                        {message.sender_type !== 'contact' && <MessageStatusIndicator status={mapEvolutionStatusToComponent(message.status)} className="ml-1" />}
                       </div>
                     </div>
                   </div>)}
@@ -1253,7 +1208,10 @@ export function WhatsAppChat({
 
               // 🚀 CRÍTICO: Enviar mídia para N8N via test-send-msg
               try {
-                const { data: sendResult, error } = await supabase.functions.invoke('test-send-msg', {
+                const {
+                  data: sendResult,
+                  error
+                } = await supabase.functions.invoke('test-send-msg', {
                   body: {
                     conversation_id: selectedConversation.id,
                     content: caption || `[${mediaType.toUpperCase()}]`,
@@ -1269,7 +1227,6 @@ export function WhatsAppChat({
                     'x-system-user-email': user?.email || ''
                   }
                 });
-
                 if (error) {
                   console.error('Erro ao enviar mídia:', error);
                   toast({
@@ -1293,7 +1250,7 @@ export function WhatsAppChat({
               } catch (err) {
                 console.error('Erro ao enviar mídia:', err);
                 toast({
-                  title: "Erro ao enviar mídia", 
+                  title: "Erro ao enviar mídia",
                   description: "Erro de conexão",
                   variant: "destructive"
                 });
@@ -1305,12 +1262,7 @@ export function WhatsAppChat({
             }} />
             
             {/* Botão com ícone personalizado */}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              title="Mensagens Rápidas"
-              onClick={() => setQuickItemsModalOpen(true)}
-            >
+            <Button variant="ghost" size="sm" title="Mensagens Rápidas" onClick={() => setQuickItemsModalOpen(true)}>
               <svg className="w-4 h-4" focusable="false" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
                 <circle cx="9" cy="9" r="4"></circle>
                 <path d="M9 15c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm7.76-9.64l-1.68 1.69c.84 1.18.84 2.71 0 3.89l1.68 1.69c2.02-2.02 2.02-5.07 0-7.27zM20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z"></path>
@@ -1349,20 +1301,9 @@ export function WhatsAppChat({
         setPeekConversationId(null);
       }} conversationId={peekConversationId} />
       
-      <ContactSidePanel 
-        isOpen={contactPanelOpen}
-        onClose={() => setContactPanelOpen(false)}
-        contact={selectedConversation?.contact || null}
-      />
+      <ContactSidePanel isOpen={contactPanelOpen} onClose={() => setContactPanelOpen(false)} contact={selectedConversation?.contact || null} />
       
-      <QuickItemsModal
-        open={quickItemsModalOpen}
-        onOpenChange={setQuickItemsModalOpen}
-        onSendMessage={handleSendQuickMessage}
-        onSendAudio={handleSendQuickAudio}
-        onSendMedia={handleSendQuickMedia}
-        onSendDocument={handleSendQuickDocument}
-      />
+      <QuickItemsModal open={quickItemsModalOpen} onOpenChange={setQuickItemsModalOpen} onSendMessage={handleSendQuickMessage} onSendAudio={handleSendQuickAudio} onSendMedia={handleSendQuickMedia} onSendDocument={handleSendQuickDocument} />
       </div>
 
     </div>;
