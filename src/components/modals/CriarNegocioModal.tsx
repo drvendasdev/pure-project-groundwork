@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { useSystemUsers } from "@/hooks/useSystemUsers";
+import { useUsersCache } from "@/hooks/useUsersCache";
 
 interface CriarNegocioModalProps {
   isOpen: boolean;
@@ -25,8 +25,7 @@ export function CriarNegocioModal({ isOpen, onClose, onCreateBusiness, isDarkMod
   const [products, setProducts] = useState<any[]>([]);
   
   const { selectedWorkspace } = useWorkspace();
-  const { listUsers } = useSystemUsers();
-  const [users, setUsers] = useState<any[]>([]);
+  const { users, loadUsers } = useUsersCache();
 
   // Buscar contatos
   useEffect(() => {
@@ -47,17 +46,10 @@ export function CriarNegocioModal({ isOpen, onClose, onCreateBusiness, isDarkMod
     fetchContacts();
   }, [selectedWorkspace]);
 
-  // Buscar usuários
+  // Carregar usuários do cache
   useEffect(() => {
-    const fetchUsers = async () => {
-      const { data } = await listUsers();
-      if (data) {
-        setUsers(data);
-      }
-    };
-    
-    fetchUsers();
-  }, [listUsers]);
+    loadUsers();
+  }, [loadUsers]);
 
   // Buscar produtos (placeholder - será implementado quando criar a aba)
   useEffect(() => {
