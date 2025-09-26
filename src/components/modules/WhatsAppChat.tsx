@@ -845,7 +845,9 @@ export function WhatsAppChat({
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="sm" className="ml-2 h-10 w-10 p-0">
-                  <Filter className="w-5 h-5" />
+                  <svg className="w-5 h-5" focusable="false" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" fill="currentColor"></path>
+                  </svg>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64 p-4" align="end">
