@@ -26,7 +26,7 @@ import { EndConversationButton } from "@/components/chat/EndConversationButton";
 import { AddTagButton } from "@/components/chat/AddTagButton";
 import { ContactSidePanel } from "@/components/ContactSidePanel";
 import { ContactTags } from "@/components/chat/ContactTags";
-import { Search, Send, Bot, Phone, MoreVertical, Circle, MessageCircle, ArrowRight, Settings, Users, Trash2, ChevronDown, Filter, Eye, RefreshCw, Mic, Square, ChevronLeft, ChevronRight, Inbox, PanelLeftClose, PanelRightOpen, Plus, SquareUserRound, UserRoundMinus, MessageSquare, PaperclipIcon, User } from "lucide-react";
+import { Search, Send, Bot, Phone, MoreVertical, Circle, MessageCircle, ArrowRight, Settings, Users, Trash2, ChevronDown, Filter, Eye, RefreshCw, Mic, Square, ChevronLeft, ChevronRight, Inbox, PanelLeftClose, PanelRightOpen, Plus, SquareUserRound, UserRoundMinus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -104,13 +104,17 @@ export function WhatsAppChat({
 
   // Estados para modais
   const [peekModalOpen, setPeekModalOpen] = useState(false);
-  const [quickItemsModalOpen, setQuickItemsModalOpen] = useState(false);
+  const [peekConversationId, setPeekConversationId] = useState<string | null>(null);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [quickItemsModalOpen, setQuickItemsModalOpen] = useState(false);
 
-  // Refs
+  // Estados para gravação de áudio
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
 
-  // Salvar estado do sidebar no localStorage
+  // Persistir estado do sidebar
   useEffect(() => {
     localStorage.setItem('conversations-sidebar-expanded', JSON.stringify(sidebarExpanded));
   }, [sidebarExpanded]);
@@ -199,159 +203,307 @@ export function WhatsAppChat({
   // ✅ Enviar mensagem usando o hook de mensagens
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedConversation) return;
-
     try {
-      const tempId = `temp-${Date.now()}`;
-      const tempMessage = {
-        id: tempId,
-        content: messageText.trim(),
-        sender_type: 'agent' as const,
-        created_at: new Date().toISOString(),
+      // Criar mensagem local otimista
+      const optimisticMessage = {
+        id: `temp-${Date.now()}`,
         conversation_id: selectedConversation.id,
+        content: messageText,
         message_type: 'text' as const,
-        status: 'pending' as const
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
       };
-
-      addMessage(tempMessage);
-      setMessageText("");
-
-      const { data, error } = await supabase.functions.invoke('send-whatsapp-message', {
+      addMessage(optimisticMessage);
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
         body: {
-          conversationId: selectedConversation.id,
-          message: messageText.trim(),
-          phone: selectedConversation.contact.phone,
-          contactName: selectedConversation.contact.name
+          conversation_id: selectedConversation.id,
+          content: messageText,
+          message_type: 'text',
+          sender_id: user?.id,
+          sender_type: 'agent'
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
         }
       });
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
+      }
 
-      if (error) throw error;
-
-      updateMessage(tempId, {
-        ...tempMessage,
-        id: data?.messageId || tempId,
-        status: 'sent'
-      });
-
+      // Atualizar mensagem temporária com ID real
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+      setMessageText("");
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
-      toast({
-        title: "Erro ao enviar mensagem",
-        description: "Não foi possível enviar a mensagem. Tente novamente.",
-        variant: "destructive"
-      });
-      updateMessage(`temp-${Date.now()}`, { status: 'failed' });
     }
   };
 
-  // ✅ Selecionar conversa e carregar mensagens
-  const handleSelectConversation = async (conversation: WhatsAppConversation) => {
-    if (selectedConversation?.id === conversation.id) return;
-    
-    setSelectedConversation(conversation);
-    clearMessages();
-    
+  // Funções para enviar itens rápidos
+  const handleSendQuickMessage = async (content: string, type: 'text') => {
+    if (!selectedConversation) return;
     try {
-      await loadMessages(conversation.id);
-      await markAsRead(conversation.id);
-    } catch (error) {
-      console.error('Erro ao carregar mensagens:', error);
-      toast({
-        title: "Erro ao carregar mensagens",
-        description: "Não foi possível carregar as mensagens da conversa.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // ✅ Criar conversa rápida
-  const handleCreateQuickConversation = async () => {
-    if (!quickPhoneNumber.trim()) return;
-    
-    setIsCreatingQuickConversation(true);
-    
-    try {
-      let cleanPhone = quickPhoneNumber.replace(/\D/g, '');
-      
-      if (!cleanPhone.startsWith('55')) {
-        cleanPhone = '55' + cleanPhone;
-      }
-      
-      const { data, error } = await supabase.functions.invoke('create-quick-conversation', {
+      const optimisticMessage = {
+        id: `temp-quick-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content,
+        message_type: type as any,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      addMessage(optimisticMessage);
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
         body: {
-          phone: cleanPhone,
-          workspaceId: selectedWorkspace?.workspace_id
+          conversation_id: selectedConversation.id,
+          content: content,
+          message_type: type,
+          sender_id: user?.id,
+          sender_type: 'agent'
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
         }
       });
-      
-      if (error) throw error;
-      
-      setQuickPhoneNumber("");
-      toast({
-        title: "Conversa criada",
-        description: "Conversa criada com sucesso!",
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mensagem');
+      }
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mensagem rápida:', error);
+    }
+  };
+  const handleSendQuickAudio = async (file: {
+    name: string;
+    url: string;
+  }, content: string) => {
+    if (!selectedConversation) return;
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-audio-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content || '[ÁUDIO]',
+        message_type: 'audio' as const,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        file_url: file.url,
+        file_name: file.name,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      addMessage(optimisticMessage);
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content || '[ÁUDIO]',
+          message_type: 'audio',
+          sender_id: user?.id,
+          sender_type: 'agent',
+          file_url: file.url,
+          file_name: file.name
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
       });
-      
-      await fetchConversations();
-      
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar áudio');
+      }
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao enviar áudio rápido:', error);
+    }
+  };
+  const handleSendQuickMedia = async (file: {
+    name: string;
+    url: string;
+  }, content: string, type: 'image' | 'video') => {
+    if (!selectedConversation) return;
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-media-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content || `[${type.toUpperCase()}]`,
+        message_type: type as any,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        file_url: file.url,
+        file_name: file.name,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      addMessage(optimisticMessage);
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content || `[${type.toUpperCase()}]`,
+          message_type: type,
+          sender_id: user?.id,
+          sender_type: 'agent',
+          file_url: file.url,
+          file_name: file.name
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar mídia');
+      }
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mídia rápida:', error);
+    }
+  };
+  const handleSendQuickDocument = async (file: {
+    name: string;
+    url: string;
+  }, content: string) => {
+    if (!selectedConversation) return;
+    try {
+      const optimisticMessage = {
+        id: `temp-quick-doc-${Date.now()}`,
+        conversation_id: selectedConversation.id,
+        content: content || '[DOCUMENTO]',
+        message_type: 'document' as any,
+        sender_type: 'agent' as const,
+        sender_id: user?.id,
+        file_url: file.url,
+        file_name: file.name,
+        created_at: new Date().toISOString(),
+        status: 'sending' as const,
+        workspace_id: selectedWorkspace?.workspace_id || ''
+      };
+      addMessage(optimisticMessage);
+      const {
+        data: sendResult,
+        error
+      } = await supabase.functions.invoke('test-send-msg', {
+        body: {
+          conversation_id: selectedConversation.id,
+          content: content || '[DOCUMENTO]',
+          message_type: 'document',
+          sender_id: user?.id,
+          sender_type: 'agent',
+          file_url: file.url,
+          file_name: file.name
+        },
+        headers: {
+          'x-system-user-id': user?.id || '',
+          'x-system-user-email': user?.email || '',
+          'x-workspace-id': selectedWorkspace?.workspace_id || ''
+        }
+      });
+      if (error || !sendResult?.success) {
+        throw new Error(sendResult?.error || 'Erro ao enviar documento');
+      }
+      if (sendResult.message?.id) {
+        updateMessage(optimisticMessage.id, {
+          id: sendResult.message.id,
+          status: 'sent',
+          created_at: sendResult.message.created_at
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao enviar documento rápido:', error);
+    }
+  };
+
+  // ✅ Selecionar conversa e carregar mensagens lazy
+  const handleSelectConversation = async (conversation: WhatsAppConversation) => {
+    setSelectedConversation(conversation);
+    clearMessages();
+    await loadMessages(conversation.id);
+    if (conversation.unread_count > 0) {
+      markAsRead(conversation.id);
+    }
+  };
+
+  // Obter horário da última atividade
+  const getActivityTime = (conv: WhatsAppConversation) => {
+    const time = new Date(conv.last_activity_at);
+    return time.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Criar conversa rápida
+  const handleCreateQuickConversation = async () => {
+    if (!quickPhoneNumber.trim()) return;
+    setIsCreatingQuickConversation(true);
+    try {
+      // Implementar lógica de criação de conversa rápida
+      console.log('Creating quick conversation for:', quickPhoneNumber);
+      setQuickPhoneNumber("");
     } catch (error) {
       console.error('Erro ao criar conversa:', error);
-      toast({
-        title: "Erro ao criar conversa",
-        description: "Não foi possível criar a conversa. Verifique o número e tente novamente.",
-        variant: "destructive"
-      });
     } finally {
       setIsCreatingQuickConversation(false);
     }
   };
 
-  // ✅ Auto-scroll mensagens
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // ✅ Carregamento inicial das conversas
-  useEffect(() => {
-    if (selectedWorkspace?.workspace_id) {
-      fetchConversations();
-    }
-  }, [selectedWorkspace?.workspace_id, fetchConversations]);
-
-  // ✅ Selecionar conversa por ID (quando passado como prop)
-  useEffect(() => {
-    if (selectedConversationId && conversations.length > 0) {
-      const conversation = conversations.find(c => c.id === selectedConversationId);
-      if (conversation) {
-        handleSelectConversation(conversation);
-      }
-    }
-  }, [selectedConversationId, conversations]);
-
-  // ✅ Utilitários para cores e formatação
-  const formatMessageTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffInDays === 0) {
-      return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInDays === 1) {
-      return 'Ontem';
-    } else if (diffInDays < 7) {
-      return date.toLocaleDateString('pt-BR', { weekday: 'short' });
-    } else {
-      return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    }
+  // Helper functions
+  const getInitials = (name: string): string => {
+    if (!name) return 'U';
+    return name.split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
   };
 
-  const getQueueColor = (queueId?: string) => {
-    const queue = queues.find(q => q.id === queueId);
-    return queue?.color || '#B0BC00'; // Cor padrão VENDAS
-  };
-
-  const getAvatarColor = (name: string) => {
+  const getAvatarColor = (name: string): string => {
     const colors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
@@ -376,15 +528,15 @@ export function WhatsAppChat({
 
   return (
     <div className="flex h-full bg-background overflow-hidden">
-      {/* Painel lateral de filtros - Estrutura exata do HTML fornecido */}
+      {/* Painel lateral de filtros - Estilo Slack */}
       <div className={cn(
-        "flex-shrink-0 bg-background border border-border rounded-lg transition-all duration-300 ease-in-out",
+        "flex-shrink-0 bg-background border-r border-border transition-all duration-300 ease-in-out",
         sidebarExpanded ? "w-64" : "w-16"
       )}>
-        {/* Header - Conversas + botão collapse */}
+        {/* Header do painel de filtros */}
         <div className="flex items-center justify-between p-3 border-b border-border">
           {sidebarExpanded && (
-            <h2 className="text-lg font-medium">Conversas</h2>
+            <h2 className="font-medium text-base">Conversas</h2>
           )}
           <Button
             variant="ghost"
@@ -392,16 +544,20 @@ export function WhatsAppChat({
             onClick={() => setSidebarExpanded(!sidebarExpanded)}
             className="p-1 h-7 w-7 shrink-0"
           >
-            <PanelRightOpen className="h-[18px] w-[18px]" />
+            {sidebarExpanded ? (
+              <PanelRightOpen className="h-[18px] w-[18px]" />
+            ) : (
+              <PanelLeftClose className="h-[18px] w-[18px]" />
+            )}
           </Button>
         </div>
 
         {sidebarExpanded && (
           <div className="flex-1 flex flex-col">
-            {/* Select de Canais - conforme HTML */}
-            <div className="px-2 pt-2 pb-1 -mt-1">
+            {/* Select de Canais/Conexões */}
+            <div className="px-2 pt-2 pb-1">
               <Select value={selectedConnection} onValueChange={setSelectedConnection}>
-                <SelectTrigger className="w-full h-9 border-border">
+                <SelectTrigger className="w-full h-9 text-sm border-border">
                   <SelectValue>
                     <div className="flex items-center">
                       <span className="text-xs text-muted-foreground">Canais</span>
@@ -425,14 +581,13 @@ export function WhatsAppChat({
               </Select>
             </div>
 
-            {/* Lista de filtros principais - conforme HTML */}
-            <div className="flex-1 p-2">
-              <ul className="space-y-0 p-0">
-                {/* Todos */}
+            {/* Lista de filtros principais */}
+            <div className="flex-1">
+              <ul className="space-y-0">
                 <li 
                   className={cn(
-                    "flex items-center gap-3 px-4 py-2 rounded cursor-pointer transition-colors",
-                    conversationFilter === 'all' ? "bg-yellow-100 text-yellow-800 font-medium" : "hover:bg-muted"
+                    "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                    conversationFilter === 'all' && "bg-muted text-primary font-medium"
                   )}
                   onClick={() => setConversationFilter('all')}
                 >
@@ -440,35 +595,34 @@ export function WhatsAppChat({
                   <span className="text-sm">Todos</span>
                 </li>
 
-                {/* Minhas conversas */}
-                <li 
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2 rounded cursor-pointer transition-colors",
-                    conversationFilter === 'assigned_to_me' ? "bg-blue-100 text-blue-800 font-medium" : "hover:bg-muted"
-                  )}
-                  onClick={() => setConversationFilter('assigned_to_me')}
-                >
-                  <SquareUserRound className="h-[18px] w-[18px] shrink-0" />
-                  <span className="text-sm">Minhas conversas</span>
-                </li>
+                {userRole !== 'user' ? (
+                  <li 
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                      conversationFilter === 'unassigned' && "bg-muted text-primary font-medium"
+                    )}
+                    onClick={() => setConversationFilter('unassigned')}
+                  >
+                    <UserRoundMinus className="h-[18px] w-[18px] shrink-0" />
+                    <span className="text-sm">Não atribuídas</span>
+                  </li>
+                ) : (
+                  <li 
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                      conversationFilter === 'assigned_to_me' && "bg-muted text-primary font-medium"
+                    )}
+                    onClick={() => setConversationFilter('assigned_to_me')}
+                  >
+                    <SquareUserRound className="h-[18px] w-[18px] shrink-0" />
+                    <span className="text-sm">Minhas conversas</span>
+                  </li>
+                )}
 
-                {/* Não atribuídas */}
                 <li 
                   className={cn(
-                    "flex items-center gap-3 px-4 py-2 rounded cursor-pointer transition-colors",
-                    conversationFilter === 'unassigned' ? "bg-red-100 text-red-800 font-medium" : "hover:bg-muted"
-                  )}
-                  onClick={() => setConversationFilter('unassigned')}
-                >
-                  <UserRoundMinus className="h-[18px] w-[18px] shrink-0" />
-                  <span className="text-sm">Não atribuídas</span>
-                </li>
-
-                {/* Grupos */}
-                <li 
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2 rounded cursor-pointer transition-colors",
-                    conversationFilter === 'groups' ? "bg-purple-100 text-purple-800 font-medium" : "hover:bg-muted"
+                    "flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-muted transition-colors",
+                    conversationFilter === 'groups' && "bg-muted text-primary font-medium"
                   )}
                   onClick={() => setConversationFilter('groups')}
                 >
@@ -478,9 +632,9 @@ export function WhatsAppChat({
               </ul>
             </div>
 
-            {/* Seção Customizado - conforme HTML */}
-            <div className="mt-1 border-t border-border p-2">
-              <div className="flex items-center justify-between px-2 py-1">
+            {/* Seção Customizado */}
+            <div className="mt-1 border-t border-border">
+              <div className="flex items-center justify-between px-4 py-2">
                 <span className="text-xs font-medium text-muted-foreground">Customizado</span>
                 <div className="flex items-center gap-1">
                   <Button
@@ -500,6 +654,10 @@ export function WhatsAppChat({
                   </Button>
                 </div>
               </div>
+              {/* Lista customizada vazia por enquanto */}
+              <ul className="pb-2">
+                {/* Futuras abas customizadas aqui */}
+              </ul>
             </div>
           </div>
         )}
@@ -527,291 +685,297 @@ export function WhatsAppChat({
         )}
       </div>
 
-      {/* Lista de conversas - Área central - seguindo HTML */}
-      <div className="w-80 min-w-80 border border-l-0 border-border rounded-r-none rounded-lg flex flex-col bg-background">
-        {/* Header da lista com busca e filtros - conforme HTML */}
-        <div className="border-b border-border bg-background">
+      {/* Lista de conversas */}
+      <div className="w-80 min-w-80 border-r border-border flex flex-col bg-background">
+        {/* Header da lista de conversas */}
+        <div className="p-4 border-b border-border">
           {/* Barra de busca */}
-          <div className="p-3 pb-1">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                <Input
-                  placeholder="Buscar"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-0 bg-muted/30"
-                />
-              </div>
-              <Button variant="ghost" size="sm" className="p-2">
-                <Filter className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="p-2">
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Buscar conversas..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
 
-          {/* Filtros adicionais - conforme HTML */}
-          <div className="px-3 pb-2">
-            <div className="flex items-center justify-between mb-2">
-              <Select defaultValue="todas">
-                <SelectTrigger className="w-auto border-0 bg-transparent text-sm h-6">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas, Mais novas</SelectItem>
-                  <SelectItem value="nao-lidas">Não lidas primeiro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Switch id="nao-lidas" />
-                <label htmlFor="nao-lidas" className="text-sm">Não lidas</label>
-              </div>
-              <Button variant="ghost" size="sm" className="p-2 text-primary">
-                <MessageSquare className="h-4 w-4" />
-              </Button>
+          {/* Abas baseadas no papel do usuário */}
+          <div className="border-b border-border">
+            <div className="flex">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+                    activeTab === tab.id
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className={cn(
+                      "ml-2 px-2 py-1 text-xs rounded-full",
+                      activeTab === tab.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Lista de conversas - seguindo estrutura exata do HTML */}
+        {/* Lista de conversas */}
         <ScrollArea className="flex-1">
-          <div className="p-0">
-            {filteredConversations.map((conversation, index) => {
-              const isSelected = selectedConversation?.id === conversation.id;
-              const queueColor = getQueueColor(conversation.queue_id);
-              const avatarColor = getAvatarColor(conversation.contact.name);
-              const initials = conversation.contact.name
-                .split(' ')
-                .map(n => n[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2);
-
-              return (
-                <div
-                  key={conversation.id}
-                  className={cn(
-                    "border-b border-border last:border-b-0 cursor-pointer transition-colors",
-                    isSelected ? "bg-muted" : "hover:bg-muted/50"
-                  )}
-                  onClick={() => handleSelectConversation(conversation)}
-                >
-                  <div className="flex items-start gap-3 p-3 relative">
-                    {/* Indicador de fila (barra colorida) - conforme HTML */}
-                    <div 
-                      className="absolute left-0 top-3 bottom-3 w-1 rounded-r"
-                      style={{ backgroundColor: queueColor }}
-                      title={conversation.queue?.name || 'VENDAS'}
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Carregando conversas...</p>
+              </div>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-center space-y-2">
+                <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">Nenhuma conversa encontrada</p>
+                <p className="text-xs text-muted-foreground">Configure conexões WhatsApp para ver conversas</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {filteredConversations.map(conversation => {
+                const lastActivity = getActivityTime(conversation);
+                const initials = getInitials(conversation.contact?.name || conversation.contact?.phone || 'U');
+                const avatarColor = getAvatarColor(conversation.contact?.name || conversation.contact?.phone || 'U');
+                
+                return (
+                  <div
+                    key={conversation.id}
+                    className={cn(
+                      "relative flex items-center px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors border-b border-border/50",
+                      selectedConversation?.id === conversation.id && "bg-muted"
+                    )}
+                    onClick={() => handleSelectConversation(conversation)}
+                  >
+                    {/* Status indicator bar */}
+                    <span
+                      className="absolute left-0 top-0 bottom-0 w-1 rounded-r"
+                      style={{
+                        backgroundColor: conversation.agente_ativo ? 'rgb(83, 0, 235)' : 'rgb(76, 175, 80)'
+                      }}
+                      title={conversation.agente_ativo ? 'DS AGENTE' : 'ATIVO'}
                     />
-
-                    {/* Avatar e WhatsApp icon - conforme HTML */}
-                    <div className="relative ml-2">
-                      <Avatar className="w-10 h-10">
-                        {conversation.contact.profile_image_url ? (
-                          <AvatarImage
-                            src={conversation.contact.profile_image_url}
-                            alt={conversation.contact.name}
-                            className="object-cover"
-                          />
-                        ) : (
+                    
+                    {/* Avatar */}
+                    <div className="flex-shrink-0 mr-3 ml-2">
+                      <div className="relative w-10 h-10">
+                        <Avatar className="h-10 w-10">
+                          {conversation.contact?.profile_image_url && (
+                            <AvatarImage
+                              src={conversation.contact.profile_image_url}
+                              alt={conversation.contact?.name || conversation.contact?.phone}
+                              className="object-cover"
+                            />
+                          )}
                           <AvatarFallback
                             className="text-white font-medium text-sm"
                             style={{ backgroundColor: avatarColor }}
                           >
                             {initials}
                           </AvatarFallback>
-                        )}
-                      </Avatar>
-                      {/* WhatsApp icon pequeno no canto */}
-                      <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                        <MessageSquare className="w-3 h-3 text-white" />
+                        </Avatar>
+                        {/* WhatsApp icon */}
+                        <svg className="absolute -bottom-1 -right-1 w-5 h-5 text-green-500 bg-white rounded-full p-0.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z" />
+                        </svg>
                       </div>
                     </div>
-
-                    {/* Conteúdo da conversa - conforme HTML */}
+                    
+                    {/* Conteúdo principal */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-medium text-sm truncate text-foreground">
-                          {conversation.contact.name}
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {formatMessageTime(conversation.updated_at)}
-                          </span>
-                          {conversation.unread_count > 0 && (
-                            <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[18px] text-center">
-                              {conversation.unread_count}
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-sm font-medium text-foreground truncate">
+                          {conversation.contact?.name || conversation.contact?.phone}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {lastActivity}
+                        </span>
                       </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <p className="text-xs text-muted-foreground truncate">
-                            {conversation.last_message_content || "Sem mensagens"}
-                          </p>
-                          {/* Tags do contato - conforme HTML */}
-                          {conversation.conversation_tags && conversation.conversation_tags.length > 0 && (
-                            <div className="flex gap-1">
-                              {conversation.conversation_tags.slice(0, 2).map((ct: any) => (
-                                <div 
-                                  key={ct.tag_id}
-                                  className="w-3 h-3 rounded-full border border-white"
-                                  style={{ backgroundColor: ct.tag?.color || '#666' }}
-                                  title={ct.tag?.name}
-                                />
-                              ))}
-                            </div>
+                      
+                      <div className="flex items-center">
+                        <span className="text-xs text-muted-foreground truncate">
+                          {conversation.last_message?.[0] ? (
+                            <>
+                              {conversation.last_message[0].sender_type === 'contact' ? '' : 'Você: '}
+                              {conversation.last_message[0].message_type === 'text' 
+                                ? conversation.last_message[0].content 
+                                : `${conversation.last_message[0].message_type === 'image' ? '📷' : 
+                                    conversation.last_message[0].message_type === 'video' ? '🎥' : 
+                                    conversation.last_message[0].message_type === 'audio' ? '🎵' : '📄'} ${
+                                    conversation.last_message[0].message_type.charAt(0).toUpperCase() + 
+                                    conversation.last_message[0].message_type.slice(1)}`}
+                            </>
+                          ) : conversation.unread_count > 0 ? (
+                            `${conversation.unread_count} mensagem${conversation.unread_count > 1 ? 's' : ''} não lida${conversation.unread_count > 1 ? 's' : ''}`
+                          ) : (
+                            'Clique para ver mensagens'
                           )}
-                        </div>
-                        {/* Avatar do agente responsável - conforme HTML */}
-                        {conversation.assigned_user_id && (
-                          <div className="ml-2">
-                            <Avatar className="w-4 h-4">
-                              <AvatarFallback className="text-[8px] bg-gray-500 text-white">
-                                {conversation.assigned_user?.name?.slice(0, 2).toUpperCase() || 'LU'}
-                              </AvatarFallback>
-                            </Avatar>
-                          </div>
-                        )}
+                        </span>
                       </div>
                     </div>
+
+                    {/* Unread count badge */}
+                    {conversation.unread_count > 0 && (
+                      <div className="ml-2">
+                        <span className="bg-primary text-primary-foreground text-xs font-medium px-2 py-1 rounded-full">
+                          {conversation.unread_count}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </ScrollArea>
 
-        {/* Área para nova conversa - conforme HTML */}
-        <div className="border-t border-border p-3">
-          <div className="flex items-center gap-2">
-            <Select value="BR">
-              <SelectTrigger className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="BR">BR +55</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Telefone"
-              value={quickPhoneNumber}
-              onChange={(e) => setQuickPhoneNumber(e.target.value)}
-              className="flex-1"
-            />
-            <Button 
-              size="sm"
-              onClick={handleCreateQuickConversation}
-              disabled={isCreatingQuickConversation || !quickPhoneNumber.trim()}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+        {/* Campo para nova conversa */}
+        <div className="p-4 border-t border-border">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Input
+                placeholder="Digite o número do telefone"
+                value={quickPhoneNumber}
+                onChange={(e) => setQuickPhoneNumber(e.target.value)}
+                className="pr-10"
+                disabled={isCreatingQuickConversation}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8"
+                disabled={!quickPhoneNumber.trim() || isCreatingQuickConversation}
+                onClick={handleCreateQuickConversation}
+              >
+                {isCreatingQuickConversation ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Área de chat */}
-      <div className="flex-1 flex flex-col bg-background border border-l-0 border-border rounded-l-none rounded-lg">
+      {/* Área principal de chat */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         {selectedConversation ? (
           <>
             {/* Header do chat */}
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                {selectedConversation.contact.profile_image_url ? (
-                  <AvatarImage
-                    src={selectedConversation.contact.profile_image_url}
-                    alt={selectedConversation.contact.name}
-                    />
-                  ) : (
+            <div className="p-4 border-b border-border bg-card">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    {selectedConversation.contact?.profile_image_url && (
+                      <AvatarImage
+                        src={selectedConversation.contact.profile_image_url}
+                        alt={selectedConversation.contact?.name || selectedConversation.contact?.phone}
+                      />
+                    )}
                     <AvatarFallback>
-                      {selectedConversation.contact.name.slice(0, 2).toUpperCase()}
+                      {getInitials(selectedConversation.contact?.name || selectedConversation.contact?.phone || 'U')}
                     </AvatarFallback>
-                  )}
-                </Avatar>
-                <div>
-                  <h3 className="font-semibold">{selectedConversation.contact.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedConversation.contact.phone}
-                  </p>
+                  </Avatar>
+                  <div>
+                    <h3 className="font-semibold text-foreground">
+                      {selectedConversation.contact?.name || selectedConversation.contact?.phone}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedConversation.contact?.phone}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm">
-                  <Phone className="h-4 w-4" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setContactPanelOpen(true)}
-                >
-                  <User className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+                
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm">
+                    <Phone className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
             {/* Área de mensagens */}
-            <ScrollArea className="flex-1 p-4" ref={messagesEndRef}>
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "flex max-w-[80%]",
-                      message.sender_type === 'agent' ? "ml-auto" : "mr-auto"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "rounded-lg px-3 py-2 text-sm",
-                        message.sender_type === 'agent'
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted"
-                      )}
-                    >
-                      {message.content}
-                      <div className="text-xs opacity-70 mt-1">
-                        {formatMessageTime(message.created_at)}
+            <ScrollArea className="flex-1 p-4">
+              {messagesLoading && messages.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Carregando mensagens...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((message, index) => {
+                    const isFromContact = message.sender_type === 'contact';
+                    return (
+                      <div
+                        key={message.id}
+                        className={cn(
+                          "flex",
+                          isFromContact ? "justify-start" : "justify-end"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "max-w-[70%] rounded-lg px-3 py-2",
+                            isFromContact
+                              ? "bg-muted text-foreground"
+                              : "bg-primary text-primary-foreground"
+                          )}
+                        >
+                          <p className="text-sm">{message.content}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {new Date(message.created_at).toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-                {messagesLoading && (
-                  <div className="flex justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                  </div>
-                )}
-              </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
             </ScrollArea>
 
-            {/* Input de mensagem */}
-            <div className="p-4 border-t border-border">
+            {/* Campo de entrada de mensagem */}
+            <div className="p-4 border-t border-border bg-card">
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm">
-                  <PaperclipIcon className="h-4 w-4" />
-                </Button>
                 <Input
-                  placeholder="Digite uma mensagem..."
+                  placeholder="Digite sua mensagem..."
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
                   className="flex-1"
                 />
-                <Button 
-                  size="sm" 
-                  onClick={handleSendMessage}
-                  disabled={!messageText.trim()}
-                >
+                <Button onClick={handleSendMessage} disabled={!messageText.trim()}>
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
@@ -819,16 +983,26 @@ export function WhatsAppChat({
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <h3 className="font-semibold mb-2">Selecione uma conversa</h3>
-              <p>Escolha uma conversa da lista para começar a conversar</p>
+            <div className="text-center">
+              <MessageCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                Selecione uma conversa
+              </h3>
+              <p className="text-muted-foreground">
+                Escolha uma conversa da lista para começar a conversar
+              </p>
             </div>
           </div>
         )}
       </div>
 
       {/* Modais */}
+      <PeekConversationModal
+        isOpen={peekModalOpen}
+        onClose={() => setPeekModalOpen(false)}
+        conversationId={peekConversationId}
+      />
+
       <ContactSidePanel
         isOpen={contactPanelOpen}
         onClose={() => setContactPanelOpen(false)}

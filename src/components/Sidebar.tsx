@@ -78,7 +78,12 @@ export function Sidebar({ activeModule, onModuleChange, isDarkMode, onToggleDark
   const { workspaces, isLoading } = useWorkspaces();
   const { selectedWorkspace, setSelectedWorkspace } = useWorkspace();
 
-  // Removido useEffect - auto-seleção já é feita no WorkspaceContext
+  // Auto-select first workspace for master users
+  useEffect(() => {
+    if (userRole === 'master' && !selectedWorkspace && workspaces.length > 0 && !isLoading) {
+      setSelectedWorkspace(workspaces[0]);
+    }
+  }, [userRole, selectedWorkspace, workspaces, isLoading, setSelectedWorkspace]);
 
   // Garantir que o grupo "administracao" fique expandido quando os módulos de administração estiverem ativos
   useEffect(() => {
