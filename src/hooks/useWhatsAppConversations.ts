@@ -37,14 +37,10 @@ export interface WhatsAppConversation {
   assigned_at?: string | null;
   connection_id?: string;
   workspace_id?: string;
-  conversation_tags?: Array<{
+  tags?: Array<{
     id: string;
-    tag_id: string;
-    tags: {
-      id: string;
-      name: string;
-      color: string;
-    };
+    name: string;
+    color: string;
   }>;
   last_message?: Array<{
     content: string;
@@ -134,7 +130,6 @@ export const useWhatsAppConversations = () => {
         assigned_user_name: conv.assigned_user_name,
         priority: conv.priority,
         last_message: conv.last_message, // ✅ Adicionado para exibir última mensagem
-        conversation_tags: conv.conversation_tags || [], // ✅ Incluir tags da conversa
         messages: [] // ✅ VAZIO - mensagens carregadas sob demanda
       }));
       
