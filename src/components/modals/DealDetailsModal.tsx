@@ -42,6 +42,10 @@ interface DealDetailsModalProps {
   dealName: string;
   contactNumber: string;
   isDarkMode?: boolean;
+  // Receber dados do card clicado diretamente
+  cardId?: string;
+  currentColumnId?: string;
+  currentPipelineId?: string;
 }
 interface PipelineStep {
   id: string;
@@ -55,7 +59,10 @@ export function DealDetailsModal({
   onClose,
   dealName,
   contactNumber,
-  isDarkMode = false
+  isDarkMode = false,
+  cardId,
+  currentColumnId: initialColumnId,
+  currentPipelineId: initialPipelineId
 }: DealDetailsModalProps) {
   const [activeTab, setActiveTab] = useState("negocios");
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
@@ -105,10 +112,17 @@ export function DealDetailsModal({
   }];
   useEffect(() => {
     if (isOpen && contactNumber) {
+      // Usar dados do card clicado se disponíveis
+      if (initialColumnId && initialPipelineId) {
+        console.log('🎯 Usando dados do card clicado:', { initialColumnId, initialPipelineId });
+        setCurrentColumnId(initialColumnId);
+        setSelectedPipelineId(initialPipelineId);
+      }
+      
       fetchContactData();
       fetchUsers();
     }
-  }, [isOpen, contactNumber]);
+  }, [isOpen, contactNumber, initialColumnId, initialPipelineId]);
 
   // Atualizar coluna atual quando mudar de pipeline - com otimização
   useEffect(() => {
@@ -250,20 +264,22 @@ export function DealDetailsModal({
         setContactPipelines(uniquePipelines);
         setPipelineCardsCount(cards.length);
 
-        // Definir pipeline inicial - prioriza o pipeline do contexto se disponível
-        const initialPipeline = selectedPipeline 
-          ? selectedPipeline.id 
-          : uniquePipelines[0]?.id;
+        // Definir pipeline inicial - prioriza dados do card clicado, depois contexto, depois primeiro da lista
+        const initialPipeline = initialPipelineId 
+          || (selectedPipeline ? selectedPipeline.id : null)
+          || uniquePipelines[0]?.id;
           
         if (initialPipeline) {
           console.log('📍 Definindo pipeline inicial:', initialPipeline);
           setSelectedPipelineId(initialPipeline);
 
-          // Encontrar card do pipeline inicial
-          const initialCard = cards.find(card => card.pipeline_id === initialPipeline);
-          if (initialCard) {
-            console.log('🎯 Card encontrado para pipeline inicial:', initialCard);
-            setCurrentColumnId(initialCard.column_id);
+          // Encontrar card do pipeline inicial apenas se não temos dados do card clicado
+          if (!initialColumnId) {
+            const initialCard = cards.find(card => card.pipeline_id === initialPipeline);
+            if (initialCard) {
+              console.log('🎯 Card encontrado para pipeline inicial:', initialCard);
+              setCurrentColumnId(initialCard.column_id);
+            }
           }
         }
         } else {
