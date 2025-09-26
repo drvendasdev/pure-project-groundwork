@@ -817,6 +817,7 @@ export function CRMNegocios({
           cardId={selectedCard.id}
           currentColumnId={selectedCard.column_id}
           currentPipelineId={selectedCard.pipeline_id}
+          contactData={selectedCard.contact}
         />
       )}
 

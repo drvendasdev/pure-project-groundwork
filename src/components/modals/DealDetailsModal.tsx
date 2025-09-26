@@ -46,6 +46,13 @@ interface DealDetailsModalProps {
   cardId: string;
   currentColumnId: string;
   currentPipelineId: string;
+  // Dados do contato já disponíveis no card
+  contactData?: {
+    id: string;
+    name: string;
+    phone?: string;
+    profile_image_url?: string;
+  };
 }
 interface PipelineStep {
   id: string;
@@ -62,7 +69,8 @@ export function DealDetailsModal({
   isDarkMode = false,
   cardId,
   currentColumnId,
-  currentPipelineId
+  currentPipelineId,
+  contactData: initialContactData
 }: DealDetailsModalProps) {
   
   const [activeTab, setActiveTab] = useState("negocios");
@@ -80,7 +88,12 @@ export function DealDetailsModal({
     email: string | null;
     phone: string;
     profile_image_url: string | null;
-  } | null>(null);
+  } | null>(initialContactData ? {
+    name: initialContactData.name,
+    email: null,
+    phone: initialContactData.phone || contactNumber,
+    profile_image_url: initialContactData.profile_image_url || null
+  } : null);
   const { toast } = useToast();
   const { selectedPipeline } = usePipelinesContext();
   const { columns, isLoading: isLoadingColumns } = usePipelineColumns(currentPipelineId);
@@ -347,21 +360,11 @@ export function DealDetailsModal({
             
             <Avatar className="w-12 h-12">
               <AvatarImage 
-                src={contactData?.profile_image_url || undefined} 
+                src={contactData?.profile_image_url} 
                 alt={contactData?.name || "Contato"}
-                className={cn("transition-opacity duration-200", 
-                  isLoadingData ? "opacity-0" : "opacity-100"
-                )}
               />
-              <AvatarFallback className={cn(
-                "bg-primary text-primary-foreground font-semibold text-lg transition-opacity duration-200",
-                isLoadingData ? "animate-pulse bg-muted" : ""
-              )}>
-                {isLoadingData ? (
-                  <div className="w-6 h-6 bg-muted-foreground/20 rounded animate-pulse" />
-                ) : (
-                  contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"
-                )}
+              <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-lg">
+                {contactData?.name ? contactData.name.charAt(0).toUpperCase() : "?"}
               </AvatarFallback>
             </Avatar>
             
