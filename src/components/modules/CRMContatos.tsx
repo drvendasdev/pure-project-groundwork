@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Phone, MessageCircle, Edit, Trash2, User } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ProfileImageDebug } from "@/components/debug/ProfileImageDebug";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -507,18 +508,23 @@ export function CRMContatos() {
                     </Avatar>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{contact.name}</span>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-6 w-6 p-0 border-dashed border-muted-foreground/30 rounded-full hover:border-muted-foreground/50" 
-                        aria-label="Adicionar tag"
-                        onClick={() => {
-                          setSelectedContactForTag(contact.id);
-                          setIsTagModalOpen(true);
-                        }}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-6 w-6 p-0 border-dashed border-muted-foreground/30 rounded-full hover:border-muted-foreground/50" 
+                            aria-label="Adicionar tag"
+                            onClick={() => setSelectedContactForTag(contact.id)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </PopoverTrigger>
+                        <AdicionarTagModal
+                          contactId={contact.id}
+                          onAddTag={handleAddTagToContact}
+                        />
+                      </Popover>
                     </div>
                     {contact.tags.length > 0 && <div className="flex items-center gap-2 mt-1">
                         {contact.tags.map((tag, index) => <Badge key={index} variant="secondary" className="text-xs" style={{
@@ -660,15 +666,5 @@ export function CRMContatos() {
           </DialogContent>
         </Dialog>}
 
-      {/* Tag Modal */}
-      <AdicionarTagModal
-        isOpen={isTagModalOpen}
-        onClose={() => {
-          setIsTagModalOpen(false);
-          setSelectedContactForTag(null);
-        }}
-        onAddTag={handleAddTagToContact}
-        contactId={selectedContactForTag || undefined}
-      />
     </div>;
 }

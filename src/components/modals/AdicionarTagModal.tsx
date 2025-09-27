@@ -10,15 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 interface AdicionarTagModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  contactId: string;
   onAddTag: (tag: string) => void;
   isDarkMode?: boolean;
-  contactId?: string;
-  triggerRef?: React.RefObject<HTMLButtonElement>;
 }
 
-export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = false, contactId }: AdicionarTagModalProps) {
+export function AdicionarTagModal({ contactId, onAddTag, isDarkMode = false }: AdicionarTagModalProps) {
   const [newTag, setNewTag] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { tags } = useTags();
@@ -32,13 +29,6 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
     : tags;
 
   const handleAddTag = async (tagName: string, tagId?: string) => {
-    if (!contactId) {
-      onAddTag(tagName);
-      setNewTag("");
-      onClose();
-      return;
-    }
-
     setIsLoading(true);
     try {
       let finalTagId = tagId;
@@ -88,7 +78,6 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
 
       onAddTag(tagName);
       setNewTag("");
-      onClose();
     } catch (error: any) {
       console.error('Erro ao adicionar tag:', error);
       toast({
@@ -108,12 +97,11 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
   };
 
   return (
-    <Popover open={isOpen} onOpenChange={onClose}>
-      <PopoverContent 
-        className="w-80 p-4 bg-white border rounded-lg shadow-lg"
-        align="start"
-        sideOffset={5}
-      >
+    <PopoverContent 
+      className="w-80 p-4 bg-white border rounded-lg shadow-lg"
+      align="start"
+      sideOffset={5}
+    >
         {/* Campo de entrada autocomplete */}
         <div className="relative">
           <div className="relative">
@@ -170,23 +158,14 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
         {/* Botões de ação */}
         <div className="flex gap-2 mt-4">
           <Button
-            variant="outline"
-            onClick={onClose}
-            className="flex-1 text-sm h-8"
-            disabled={isLoading}
-          >
-            Cancelar
-          </Button>
-          <Button
             onClick={handleCreateNew}
-            className="flex-1 text-sm h-8"
+            className="w-full text-sm h-8"
             disabled={!newTag.trim() || isLoading}
           >
-            Adicionar
+            {isLoading ? "Adicionando..." : "Adicionar"}
           </Button>
         </div>
 
       </PopoverContent>
-    </Popover>
   );
 }
