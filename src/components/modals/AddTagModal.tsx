@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -161,19 +161,21 @@ export function AddTagModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={cn(
-        "max-w-md",
-        isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white"
-      )}>
-        <DialogHeader>
-          <DialogTitle className={cn(
-            "text-lg font-semibold",
-            isDarkMode ? "text-white" : "text-gray-900"
-          )}>
-            Adicionar Tag
-          </DialogTitle>
-        </DialogHeader>
+    <Popover open={isOpen} onOpenChange={onClose}>
+      <PopoverContent 
+        className={cn(
+          "w-96 p-4",
+          isDarkMode ? "bg-[#2d2d2d] border-gray-600" : "bg-white"
+        )}
+        align="start"
+        sideOffset={5}
+      >
+        <div className={cn(
+          "text-lg font-semibold mb-4",
+          isDarkMode ? "text-white" : "text-gray-900"
+        )}>
+          Adicionar Tag
+        </div>
 
         <div className="space-y-4">
           <div className="relative space-y-2">
@@ -274,7 +276,7 @@ export function AddTagModal({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </PopoverContent>
+    </Popover>
   );
 }
