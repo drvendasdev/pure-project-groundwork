@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,18 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
   const { tags } = useTags();
   const { toast } = useToast();
   const { selectedWorkspace } = useWorkspace();
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Buscar sugestões baseadas no input
+  // Auto-focus no input quando o modal abrir
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
+
+  // Mostrar todas as tags por padrão, filtrar quando digitar
   useEffect(() => {
     if (newTag.trim().length > 0) {
       const filtered = tags.filter(tag => 
@@ -34,7 +44,8 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
       );
       setSuggestions(filtered);
     } else {
-      setSuggestions(tags.slice(0, 8)); // Mostrar primeiras 8 tags quando vazio
+      // Mostrar todas as tags disponíveis quando não há filtro
+      setSuggestions(tags);
     }
   }, [newTag, tags]);
 
@@ -117,7 +128,7 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={cn(
-        "max-w-md",
+        "max-w-lg",
         isDarkMode 
           ? "bg-gray-800 border-gray-600 text-white" 
           : "bg-white border-gray-200 text-gray-900"
@@ -138,13 +149,14 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
               "text-sm font-medium",
               isDarkMode ? "text-gray-200" : "text-gray-700"
             )}>
-              Digite o nome da tag
+              Pesquisar ou criar nova tag
             </Label>
             <Input
+              ref={inputRef}
               id="newTag"
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
-              placeholder="Nome da tag..."
+              placeholder="Digite para pesquisar ou criar uma nova tag..."
               className={cn(
                 "mt-1",
                 isDarkMode 
@@ -154,30 +166,50 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
             />
           </div>
 
-          {/* Tags sugeridas */}
+          {/* Lista de tags */}
           <div>
             <Label className={cn(
-              "text-sm font-medium",
+              "text-sm font-medium mb-2 block",
               isDarkMode ? "text-gray-200" : "text-gray-700"
             )}>
-              Tags sugeridas
+              {newTag.trim() ? "Tags encontradas" : "Tags disponíveis"}
             </Label>
-            <div className="flex flex-wrap gap-2 mt-2 max-h-32 overflow-y-auto">
-              {suggestions.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant="outline"
-                  style={{ 
-                    borderColor: tag.color, 
-                    color: tag.color,
-                    backgroundColor: `${tag.color}20`
-                  }}
-                  className="cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => handleAddTag(tag.name, tag.id)}
-                >
-                  {tag.name}
-                </Badge>
-              ))}
+            <div className="border rounded-lg p-3 max-h-64 overflow-y-auto bg-gray-50/50">
+              {suggestions.length > 0 ? (
+                <div className="space-y-2">
+                  {suggestions.map((tag) => (
+                    <div
+                      key={tag.id}
+                      className="flex items-center justify-between p-2 rounded-md hover:bg-gray-100 cursor-pointer transition-colors group"
+                      onClick={() => handleAddTag(tag.name, tag.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-4 h-4 rounded-full border-2" 
+                          style={{ 
+                            backgroundColor: tag.color,
+                            borderColor: tag.color 
+                          }}
+                        />
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                          {tag.name}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        Adicionar
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  <p className="text-sm">Nenhuma tag encontrada</p>
+                </div>
+              )}
             </div>
           </div>
 
