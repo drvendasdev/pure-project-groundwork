@@ -16,7 +16,7 @@ interface Cargo {
 interface EditarCargoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onEditCargo: (cargo: Cargo) => void;
+  onEditCargo: (cargo: { nome: string; tipo: string; funcao?: string; permissions?: Record<string, any> }) => void;
   cargo?: Cargo;
 }
 
@@ -109,10 +109,10 @@ export function EditarCargoModal({ isOpen, onClose, onEditCargo, cargo }: Editar
     e.preventDefault();
     if (nome && tipo && cargo) {
       onEditCargo({
-        ...cargo,
         nome,
         tipo,
-        funcao: cargo.funcao
+        funcao: cargo.funcao,
+        permissions: selectedPermissions
       });
       setNome("");
       setTipo("");
@@ -236,6 +236,9 @@ export function EditarCargoModal({ isOpen, onClose, onEditCargo, cargo }: Editar
                 <option value="Vendedor(CLOSER)">Vendedor(CLOSER)</option>
                 <option value="Suporte">Suporte</option>
                 <option value="Atendente">Atendente</option>
+                <option value="Sucesso do Cliente">Sucesso do Cliente</option>
+                <option value="Coordenador">Coordenador</option>
+                <option value="Supervisor">Supervisor</option>
               </select>
               <label 
                 className={`absolute left-3 transition-all duration-200 pointer-events-none px-2 ${

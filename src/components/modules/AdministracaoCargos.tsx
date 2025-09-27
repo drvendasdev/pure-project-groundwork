@@ -80,7 +80,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
     setIsAddModalOpen(true);
   };
 
-  const handleConfirmAddCargo = async (newCargoData: { nome: string; tipo: string; funcao: string }) => {
+  const handleConfirmAddCargo = async (newCargoData: { nome: string; tipo: string; funcao?: string; permissions?: Record<string, any> }) => {
     const result = await createCargo(newCargoData);
     if (!result.error) {
       await loadCargos(); // Recarregar a lista
@@ -89,7 +89,7 @@ export function AdministracaoCargos({ onBack }: AdministracaoCargosProps) {
     setIsAddModalOpen(false);
   };
 
-  const handleConfirmEditCargo = async (cargoData: { nome: string; tipo: string; funcao: string }) => {
+  const handleConfirmEditCargo = async (cargoData: { nome: string; tipo: string; funcao?: string; permissions?: Record<string, any> }) => {
     if (!selectedCargo) return;
     
     const result = await updateCargo({

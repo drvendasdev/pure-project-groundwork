@@ -209,6 +209,42 @@ export type Database = {
         }
         Relationships: []
       }
+      cargos: {
+        Row: {
+          created_at: string
+          funcao: string | null
+          id: string
+          is_active: boolean | null
+          nome: string
+          permissions: Json | null
+          tipo: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          funcao?: string | null
+          id?: string
+          is_active?: boolean | null
+          nome: string
+          permissions?: Json | null
+          tipo: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          funcao?: string | null
+          id?: string
+          is_active?: boolean | null
+          nome?: string
+          permissions?: Json | null
+          tipo?: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: []
+      }
       clientes: {
         Row: {
           cep: string | null
