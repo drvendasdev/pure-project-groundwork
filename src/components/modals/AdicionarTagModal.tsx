@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTags } from "@/hooks/useTags";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,38 +15,21 @@ interface AdicionarTagModalProps {
   onAddTag: (tag: string) => void;
   isDarkMode?: boolean;
   contactId?: string;
+  triggerRef?: React.RefObject<HTMLButtonElement>;
 }
 
 export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = false, contactId }: AdicionarTagModalProps) {
   const [newTag, setNewTag] = useState("");
-  const [suggestions, setSuggestions] = useState<Array<{id: string, name: string, color: string}>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { tags } = useTags();
   const { toast } = useToast();
   const { selectedWorkspace } = useWorkspace();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus no input quando o modal abrir
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-    }
-  }, [isOpen]);
-
-  // Mostrar todas as tags por padrão, filtrar quando digitar
-  useEffect(() => {
-    if (newTag.trim().length > 0) {
-      const filtered = tags.filter(tag => 
-        tag.name.toLowerCase().includes(newTag.toLowerCase())
-      );
-      setSuggestions(filtered);
-    } else {
-      // Mostrar todas as tags disponíveis quando não há filtro
-      setSuggestions(tags);
-    }
-  }, [newTag, tags]);
+  // Filtrar tags conforme digitação
+  const filteredTags = newTag.trim().length > 0 
+    ? tags.filter(tag => tag.name.toLowerCase().includes(newTag.toLowerCase()))
+    : tags;
 
   const handleAddTag = async (tagName: string, tagId?: string) => {
     if (!contactId) {
@@ -126,126 +108,85 @@ export function AdicionarTagModal({ isOpen, onClose, onAddTag, isDarkMode = fals
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={cn(
-        "max-w-lg",
-        isDarkMode 
-          ? "bg-gray-800 border-gray-600 text-white" 
-          : "bg-white border-gray-200 text-gray-900"
-      )}>
-        <DialogHeader>
-          <DialogTitle className={cn(
-            "text-lg font-semibold",
-            isDarkMode ? "text-white" : "text-gray-900"
-          )}>
-            Adicionar Tag
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Campo de entrada de nova tag */}
-          <div>
-            <Label htmlFor="newTag" className={cn(
-              "text-sm font-medium",
-              isDarkMode ? "text-gray-200" : "text-gray-700"
-            )}>
-              Pesquisar ou criar nova tag
-            </Label>
+    <Popover open={isOpen} onOpenChange={onClose}>
+      <PopoverContent 
+        className="w-80 p-4 bg-white border rounded-lg shadow-lg"
+        align="start"
+        sideOffset={5}
+      >
+        {/* Campo de entrada autocomplete */}
+        <div className="relative">
+          <div className="relative">
             <Input
               ref={inputRef}
-              id="newTag"
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
-              placeholder="Digite para pesquisar ou criar uma nova tag..."
-              className={cn(
-                "mt-1",
-                isDarkMode 
-                  ? "bg-gray-700 border-gray-600 text-white placeholder:text-gray-400" 
-                  : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"
-              )}
+              placeholder="Digite o nome da tag"
+              className="pr-8 text-sm"
+              autoFocus
             />
-          </div>
-
-          {/* Lista de tags */}
-          <div>
-            <Label className={cn(
-              "text-sm font-medium mb-2 block",
-              isDarkMode ? "text-gray-200" : "text-gray-700"
-            )}>
-              {newTag.trim() ? "Tags encontradas" : "Tags disponíveis"}
-            </Label>
-            <div className="border rounded-lg p-3 max-h-64 overflow-y-auto bg-gray-50/50">
-              {suggestions.length > 0 ? (
-                <div className="space-y-2">
-                  {suggestions.map((tag) => (
-                    <div
-                      key={tag.id}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-gray-100 cursor-pointer transition-colors group"
-                      onClick={() => handleAddTag(tag.name, tag.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-4 h-4 rounded-full border-2" 
-                          style={{ 
-                            backgroundColor: tag.color,
-                            borderColor: tag.color 
-                          }}
-                        />
-                        <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                          {tag.name}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        Adicionar
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <p className="text-sm">Nenhuma tag encontrada</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Opção de criar nova tag */}
-          {newTag.trim() && !suggestions.some(tag => tag.name.toLowerCase() === newTag.toLowerCase()) && (
-            <div>
-              <Button
-                variant="outline"
-                onClick={handleCreateNew}
-                disabled={isLoading}
-                className={cn(
-                  "w-full",
-                  isDarkMode 
-                    ? "border-gray-600 text-gray-300 hover:bg-gray-700" 
-                    : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                )}
+            {newTag && (
+              <button
+                onClick={() => setNewTag("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
               >
-                {isLoading ? "Criando..." : `Criar "${newTag}"`}
-              </Button>
-            </div>
-          )}
-
-          {/* Botões de ação */}
-          <div className="flex gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1"
-              disabled={isLoading}
-            >
-              Cancelar
-            </Button>
+                <X className="h-3 w-3 text-gray-400" />
+              </button>
+            )}
           </div>
         </div>
 
-      </DialogContent>
-    </Dialog>
+        {/* Lista de tags */}
+        {filteredTags.length > 0 && (
+          <div className="mt-2 max-h-40 overflow-y-auto border-t pt-2">
+            {filteredTags.map((tag) => (
+              <div
+                key={tag.id}
+                onClick={() => handleAddTag(tag.name, tag.id)}
+                className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer rounded text-sm"
+              >
+                <div 
+                  className="w-3 h-3 rounded-full" 
+                  style={{ backgroundColor: tag.color }}
+                />
+                <span>{tag.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Opção de criar nova tag se não existir */}
+        {newTag.trim() && !filteredTags.some(tag => tag.name.toLowerCase() === newTag.toLowerCase()) && (
+          <div className="mt-2 border-t pt-2">
+            <div
+              onClick={handleCreateNew}
+              className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer rounded text-sm text-blue-600"
+            >
+              <span>+ Criar "{newTag}"</span>
+            </div>
+          </div>
+        )}
+
+        {/* Botões de ação */}
+        <div className="flex gap-2 mt-4">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1 text-sm h-8"
+            disabled={isLoading}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleCreateNew}
+            className="flex-1 text-sm h-8"
+            disabled={!newTag.trim() || isLoading}
+          >
+            Adicionar
+          </Button>
+        </div>
+
+      </PopoverContent>
+    </Popover>
   );
 }
