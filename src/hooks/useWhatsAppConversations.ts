@@ -62,7 +62,7 @@ export const useWhatsAppConversations = () => {
   const { user, logout } = useAuth();
 
   const fetchConversations = async () => {
-    const DEBUG_CONVERSATIONS = false; // Mudar para true para debug
+    const DEBUG_CONVERSATIONS = true; // Ativado para debug
     
     try {
       setLoading(true);

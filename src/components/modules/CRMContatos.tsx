@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTags } from "@/hooks/useTags";
 import { format } from "date-fns";
 import { DeletarTicketModal } from "@/components/modals/DeletarTicketModal";
+import { AdicionarTagModal } from "@/components/modals/AdicionarTagModal";
 import { useToast } from "@/components/ui/use-toast";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 interface Contact {
@@ -51,6 +52,8 @@ export function CRMContatos() {
   const [isCreateMode, setIsCreateMode] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
   const [debugContact, setDebugContact] = useState<Contact | null>(null);
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+  const [selectedContactForTag, setSelectedContactForTag] = useState<string | null>(null);
   const headerCheckboxRef = useRef<HTMLButtonElement>(null);
   const {
     tags
@@ -400,6 +403,13 @@ export function CRMContatos() {
   const removeCustomField = (index: number) => {
     setCustomFields(prev => prev.filter((_, i) => i !== index));
   };
+
+  const handleAddTagToContact = () => {
+    // Refetch contacts to show updated tags
+    fetchContacts();
+    setIsTagModalOpen(false);
+    setSelectedContactForTag(null);
+  };
   return <div className="p-6 bg-white rounded-lg shadow-lg border border-border/20 m-4 animate-fade-in">
       {/* Header */}
       <div className="flex items-center mb-6">
@@ -497,7 +507,16 @@ export function CRMContatos() {
                     </Avatar>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{contact.name}</span>
-                      <Button variant="outline" size="sm" className="h-6 w-6 p-0 border-dashed border-muted-foreground/30 rounded-full hover:border-muted-foreground/50" aria-label="Adicionar">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-6 w-6 p-0 border-dashed border-muted-foreground/30 rounded-full hover:border-muted-foreground/50" 
+                        aria-label="Adicionar tag"
+                        onClick={() => {
+                          setSelectedContactForTag(contact.id);
+                          setIsTagModalOpen(true);
+                        }}
+                      >
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
@@ -640,5 +659,16 @@ export function CRMContatos() {
             <ProfileImageDebug contactId={debugContact.id} contactName={debugContact.name} contactPhone={debugContact.phone || ''} workspaceId={selectedWorkspace.workspace_id} currentImageUrl={debugContact.profile_image_url || undefined} />
           </DialogContent>
         </Dialog>}
+
+      {/* Tag Modal */}
+      <AdicionarTagModal
+        isOpen={isTagModalOpen}
+        onClose={() => {
+          setIsTagModalOpen(false);
+          setSelectedContactForTag(null);
+        }}
+        onAddTag={handleAddTagToContact}
+        contactId={selectedContactForTag || undefined}
+      />
     </div>;
 }
