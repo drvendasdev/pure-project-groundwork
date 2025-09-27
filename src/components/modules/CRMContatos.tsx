@@ -518,9 +518,7 @@ export function CRMContatos() {
                 <TableCell>
                   <div className="flex justify-center gap-1">
                     
-                    <Button variant="ghost" size="sm">
-                      <Phone className="h-4 w-4" />
-                    </Button>
+                    
                     <Button variant="ghost" size="sm" onClick={() => handleEditContact(contact)}>
                       <Edit className="h-4 w-4" />
                     </Button>
