@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, ChevronLeft, MoreVertical } from "lucide-rea
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { ModuleType } from "@/types/modules";
+import { ModuleType } from "./TezeusCRM";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { NotificationTooltip } from "@/components/NotificationTooltip";
